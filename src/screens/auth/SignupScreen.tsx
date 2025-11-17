@@ -7,6 +7,8 @@ import { signUp } from '../../store/slices/authSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/AppNavigator';
+import { ErrorHandler } from '../../utils/errorHandler';
+import { useToast } from '../../hooks/useToast';
 
 type SignupScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Signup'>;
 
@@ -27,6 +29,7 @@ export default function SignupScreen({ navigation }: Props) {
     password: '',
     confirmPassword: '',
   });
+  const { showToast } = useToast();
 
   const dispatch = useAppDispatch();
   const { loading, error } = useAuth();
@@ -85,8 +88,10 @@ export default function SignupScreen({ navigation }: Props) {
         full_name: fullName.trim() 
       })).unwrap();
       // Navigation happens automatically via AppNavigator
+       showToast('Account created successfully!', 'success');
     } catch (err) {
       console.error('Signup failed:', err);
+       ErrorHandler.handleError(err, showToast, 'Signup');
     }
   };
 

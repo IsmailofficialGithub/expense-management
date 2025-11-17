@@ -7,7 +7,10 @@ import { signIn } from '../../store/slices/authSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/AppNavigator';
-
+import { ErrorHandler } from '../../utils/errorHandler';
+import { useToast } from '../../hooks/useToast';
+import LoadingOverlay from '../../components/LoadingOverlay';
+import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 interface Props {
@@ -18,8 +21,11 @@ export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
 
+  const { showToast } = useToast();
+  const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
   const { loading, error } = useAuth();
 
@@ -31,6 +37,12 @@ export default function LoginScreen({ navigation }: Props) {
   const handleLogin = async () => {
     // Reset errors
     setErrors({ email: '', password: '' });
+
+
+     if (!isOnline) {
+      showToast('No internet connection. Please check your network.', 'error');
+      return;
+    }
 
     // Validation
     let hasError = false;
@@ -50,15 +62,19 @@ export default function LoginScreen({ navigation }: Props) {
       hasError = true;
     }
 
-    if (hasError) return;
+       if (hasError) return;
+
+    // Show loading overlay
+    setShowLoadingOverlay(true);
 
     // Dispatch login action
     try {
       await dispatch(signIn({ email, password })).unwrap();
+       showToast('Welcome back!', 'success');
       // Navigation happens automatically via AppNavigator when isAuthenticated becomes true
     } catch (err) {
       // Error is handled by Redux state
-      console.error('Login failed:', err);
+     ErrorHandler.handleError(err, showToast, 'Login');
     }
   };
 
@@ -166,6 +182,10 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
         </View>
       </ScrollView>
+       <LoadingOverlay 
+        visible={showLoadingOverlay} 
+        message="Signing in..." 
+      />
     </KeyboardAvoidingView>
   );
 }

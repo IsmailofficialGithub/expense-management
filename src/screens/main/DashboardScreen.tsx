@@ -1,5 +1,5 @@
 // src/screens/main/DashboardScreen.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Text, Card, Avatar, Button, Divider, IconButton } from 'react-native-paper';
 import { useAuth } from '../../hooks/useAuth';
@@ -9,12 +9,25 @@ import { useAppDispatch } from '../../store';
 import { fetchGroups } from '../../store/slices/groupsSlice';
 import { fetchExpenses } from '../../store/slices/expensesSlice';
 import { format } from 'date-fns';
+import { ErrorHandler } from '../../utils/errorHandler';
+import { useToast } from '../../hooks/useToast';
+import { useNetworkCheck } from '../../hooks/useNetworkCheck';
+import LoadingOverlay from '../../components/LoadingOverlay';
 
 export default function DashboardScreen({ navigation }: any) {
   const { profile } = useAuth();
   const { groups, loading: groupsLoading } = useGroups();
   const { expenses, loading: expensesLoading } = useExpenses();
+   const [isLoading, setIsLoading] = useState(false);
   const dispatch = useAppDispatch();
+    const { showToast } = useToast();
+  const { isOnline } = useNetworkCheck({
+    showToast: true,
+    onOnline: () => {
+      // Reload data when connection restored
+      loadData();
+    },
+  });
 
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -23,16 +36,33 @@ export default function DashboardScreen({ navigation }: any) {
   }, []);
 
   const loadData = async () => {
-    await Promise.all([
-      dispatch(fetchGroups()),
-      dispatch(fetchExpenses()),
-    ]);
+     if (!isOnline) {
+      showToast('Unable to load data. No internet connection.', 'error');
+      return;
+    }
+
+    setIsLoading(true);
+      try {
+      await Promise.all([
+        dispatch(fetchGroups()).unwrap(),
+        dispatch(fetchExpenses()).unwrap(),
+      ]);
+    } catch (error) {
+      ErrorHandler.handleError(error, showToast, 'Dashboard');
+    }finally {
+      setIsLoading(false);
+    }
   };
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
+     setRefreshing(true);
+    try {
+      await loadData();
+    } catch (error) {
+      ErrorHandler.handleError(error, showToast, 'Dashboard Refresh');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // Calculate statistics
@@ -261,6 +291,10 @@ export default function DashboardScreen({ navigation }: any) {
           Settle Up
         </Button>
       </View>
+       <LoadingOverlay 
+        visible={isLoading && !refreshing} 
+        message="Loading your expenses..." 
+      />
     </ScrollView>
   );
 }

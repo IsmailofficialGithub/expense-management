@@ -1,8 +1,11 @@
+// src/store/Provider.tsx
 import React, { useEffect } from 'react';
 import { Provider } from 'react-redux';
 import { store } from './index';
 import { initializeAuth, setUser } from './slices/authSlice';
 import { supabase } from '../services/supabase';
+import { setOnlineStatus } from './slices/uiSlice';
+import NetInfo from '@react-native-community/netinfo';
 
 interface ReduxProviderProps {
   children: React.ReactNode;
@@ -10,8 +13,10 @@ interface ReduxProviderProps {
 
 export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
   useEffect(() => {
+    // Initialize auth state
     store.dispatch(initializeAuth());
 
+    // Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
@@ -24,8 +29,14 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
       }
     );
 
+    // Monitor network status
+    const unsubscribeNetwork = NetInfo.addEventListener((state) => {
+      store.dispatch(setOnlineStatus(state.isConnected ?? false));
+    });
+
     return () => {
       subscription.unsubscribe();
+      unsubscribeNetwork();
     };
   }, []);
 
