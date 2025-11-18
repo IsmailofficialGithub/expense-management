@@ -70,6 +70,52 @@ export interface Database {
 // CORE TYPES
 // ============================================
 
+// Personal Finance Types
+export interface PersonalTransaction {
+  id: string;
+  user_id: string;
+  type: 'income' | 'expense';
+  category: string;
+  amount: number;
+  description: string;
+  date: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonalCategory {
+  id: string;
+  name: string;
+  type: 'income' | 'expense';
+  icon: string;
+  color: string;
+  is_default: boolean;
+}
+
+export interface PersonalTransactionWithCategory extends PersonalTransaction {
+  category_details: PersonalCategory;
+}
+
+export interface CreatePersonalTransactionRequest {
+  type: 'income' | 'expense';
+  category: string;
+  amount: number;
+  description: string;
+  date?: string;
+  notes?: string;
+}
+
+export interface UserCompleteBalance {
+  user_id: string;
+  total_income: number;
+  total_personal_expenses: number;
+  total_group_paid: number;
+  total_group_owe: number;
+  total_group_owed_to_them: number;
+  net_balance: number;
+}
+
 export interface Profile {
   id: string
   email: string

@@ -5,22 +5,24 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  TouchableOpacity,
+  Alert,
 } from "react-native";
 import {
   Text,
   Card,
   Avatar,
   Button,
-  Divider,
   IconButton,
+  Divider,
 } from "react-native-paper";
 import { useAuth } from "../../hooks/useAuth";
 import { useGroups } from "../../hooks/useGroups";
 import { useExpenses } from "../../hooks/useExpenses";
+import { usePersonalFinance } from "../../hooks/usePersonalFinance";
 import { useAppDispatch } from "../../store";
 import { fetchGroups } from "../../store/slices/groupsSlice";
 import { fetchExpenses } from "../../store/slices/expensesSlice";
+import { fetchPersonalTransactions, fetchCompleteBalance } from "../../store/slices/personalFinanceSlice";
 import { format } from "date-fns";
 import { ErrorHandler } from "../../utils/errorHandler";
 import { useToast } from "../../hooks/useToast";
@@ -29,23 +31,25 @@ import LoadingOverlay from "../../components/LoadingOverlay";
 
 export default function DashboardScreen({ navigation }: any) {
   const { profile } = useAuth();
-  const { groups, loading: groupsLoading } = useGroups();
-  const { expenses, loading: expensesLoading } = useExpenses();
+  
+  const { groups } = useGroups();
+  const { expenses } = useExpenses();
+  const { transactions, completeBalance } = usePersonalFinance();
   const [isLoading, setIsLoading] = useState(false);
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck({
     showToast: true,
     onOnline: () => {
-      // Reload data when connection restored
       loadData();
     },
   });
 
-  const [refreshing, setRefreshing] = React.useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadData();
+
   }, []);
 
   const loadData = async () => {
@@ -59,6 +63,8 @@ export default function DashboardScreen({ navigation }: any) {
       await Promise.all([
         dispatch(fetchGroups()).unwrap(),
         dispatch(fetchExpenses()).unwrap(),
+        dispatch(fetchPersonalTransactions()).unwrap(),
+        dispatch(fetchCompleteBalance()).unwrap(),
       ]);
     } catch (error) {
       ErrorHandler.handleError(error, showToast, "Dashboard");
@@ -77,57 +83,68 @@ export default function DashboardScreen({ navigation }: any) {
       setRefreshing(false);
     }
   };
-  // Helper function to calculate net balance for a specific user
-const calculateUserBalance = (
-  expenses: any[],
-  userId: string
-): {
-  totalPaid: number;
-  totalOwed: number;
-  totalOwedToYou: number;
-  netBalance: number;
-} => {
-  let totalPaid = 0;
-  let totalOwed = 0;
-  let totalOwedToYou = 0;
 
-  expenses.forEach((expense) => {
-    const isPaidByUser = expense.paid_by === userId;
-    const userSplit = expense.splits?.find((s: any) => s.user_id === userId);
-    const userSplitAmount = userSplit ? Number(userSplit.amount) : 0;
+  // Calculate personal finance
+  const personalIncome = transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
-    if (isPaidByUser) {
-      // User paid this expense
-      totalPaid += Number(expense.amount);
-      
-      // Calculate how much others owe this user for this expense
-      const othersOwe = expense.splits
-        ?.filter((s: any) => s.user_id !== userId && !s.is_settled)
-        .reduce((sum: number, split: any) => sum + Number(split.amount), 0) || 0;
-      
-      totalOwedToYou += othersOwe;
-    } else if (userSplit && !userSplit.is_settled) {
-      // User owes their share of this expense
-      totalOwed += userSplitAmount;
+  const personalExpenses = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  // Calculate group expenses balance
+  const myExpenses = expenses.filter((exp) => exp.paid_by === profile?.id);
+  const totalPaidByMe = myExpenses.reduce(
+    (sum, exp) => sum + Number(exp.amount),
+    0,
+  );
+
+  const totalIOwe = expenses.reduce((sum, exp) => {
+    if (exp.paid_by !== profile?.id) {
+      const mySplit = exp.splits?.find((s) => s.user_id === profile?.id);
+      if (mySplit && !mySplit.is_settled) {
+        return sum + Number(mySplit.amount);
+      }
     }
-  });
+    return sum;
+  }, 0);
 
-  const netBalance = totalOwedToYou - totalOwed;
+  const totalOwedToMe = myExpenses.reduce((sum, exp) => {
+    const othersOweMeForThisExpense =
+      exp.splits
+        ?.filter((s) => s.user_id !== profile?.id && !s.is_settled)
+        .reduce((splitSum, split) => splitSum + Number(split.amount), 0) || 0;
+    return sum + othersOweMeForThisExpense;
+  }, 0);
 
-  return {
-    totalPaid,
-    totalOwed,
-    totalOwedToYou,
-    netBalance,
-  };
-};
+  const groupNetBalance = totalOwedToMe - totalIOwe;
 
-  // Calculate statistics
- // Calculate proper balance using helper function
-  const balanceData = calculateUserBalance(expenses, profile?.id || '');
-  const { totalPaid, totalOwed, totalOwedToYou, netBalance } = balanceData;
+  // Overall balance (Income - Personal Expenses - Group Debts + Group Credits)
+  const overallBalance = personalIncome - personalExpenses - totalIOwe + totalOwedToMe;
+
   // Get recent expenses (last 5)
   const recentExpenses = expenses.slice(0, 5);
+
+  // Get recent personal transactions (last 5)
+  const recentPersonalTransactions = transactions.slice(0, 5);
+
+  const showBalanceInfo = () => {
+    Alert.alert(
+      'Balance Breakdown',
+      `Personal Finance:\n` +
+      `• Income: ₹${personalIncome.toFixed(2)}\n` +
+      `• Expenses: ₹${personalExpenses.toFixed(2)}\n` +
+      `• Personal Balance: ₹${(personalIncome - personalExpenses).toFixed(2)}\n\n` +
+      `Group Expenses:\n` +
+      `• You Paid: ₹${totalPaidByMe.toFixed(2)}\n` +
+      `• You Owe: ₹${totalIOwe.toFixed(2)}\n` +
+      `• Owed to You: ₹${totalOwedToMe.toFixed(2)}\n` +
+      `• Group Balance: ₹${groupNetBalance.toFixed(2)}\n\n` +
+      `Overall Balance: ₹${overallBalance.toFixed(2)}`,
+      [{ text: 'OK' }]
+    );
+  };
 
   return (
     <ScrollView
@@ -146,66 +163,159 @@ const calculateUserBalance = (
               {profile?.full_name || "User"} 👋
             </Text>
           </View>
-          <Avatar.Text
-            size={48}
-            label={profile?.full_name?.substring(0, 2).toUpperCase() || "U"}
-            style={styles.avatar}
-          />
+      {profile?.avatar_url ? (
+  <Avatar.Image
+    size={48}
+    source={{ uri: profile.avatar_url }}
+    style={styles.avatar}
+  />
+) : (
+  <Avatar.Text
+    size={48}
+    label={profile?.full_name?.substring(0, 2).toUpperCase() || "U"}
+    style={styles.avatar}
+  />
+)}
         </View>
       </View>
 
-      {/* Balance Overview Card */}
-      <Card style={styles.balanceCard}>
+      {/* Overall Balance Card */}
+      <Card style={styles.overallBalanceCard}>
         <Card.Content>
-          <Text style={styles.balanceLabel}>Net Balance</Text>
+          <View style={styles.balanceHeader}>
+            <Text style={styles.balanceLabel}>Overall Balance</Text>
+            <IconButton
+              icon="information"
+              size={20}
+              iconColor="#fff"
+              onPress={showBalanceInfo}
+            />
+          </View>
           <Text
             style={[
               styles.balanceAmount,
-              netBalance > 0
+              overallBalance > 0
                 ? styles.positiveBalance
-                : netBalance < 0
+                : overallBalance < 0
                 ? styles.negativeBalance
                 : styles.neutralBalance,
             ]}
           >
-            {netBalance > 0 ? "+" : ""} ₹{Math.abs(netBalance).toFixed(2)}
+            ₹{overallBalance.toFixed(2)}
           </Text>
           <Text style={styles.balanceDescription}>
-            {netBalance > 0
-              ? "You're owed money overall"
-              : netBalance < 0
-              ? "You owe money overall"
-              : "You're all settled up!"}
+            {overallBalance > 0
+              ? "You're in good shape! 💪"
+              : overallBalance < 0
+              ? "You're spending more than earning"
+              : "You're breaking even"}
           </Text>
         </Card.Content>
       </Card>
 
-    {/* Quick Stats */}
-      <View style={styles.statsContainer}>
-        <Card style={styles.statCard}>
-          <Card.Content style={styles.statContent}>
-            <IconButton icon="cash" size={24} iconColor="#4CAF50" />
-            <Text style={styles.statValue}>₹{totalPaid.toFixed(0)}</Text>
-            <Text style={styles.statLabel}>You Paid</Text>
-          </Card.Content>
-        </Card>
+      {/* Personal Finance Summary */}
+      <Card style={styles.summaryCard}>
+        <Card.Content>
+          <View style={styles.summaryHeader}>
+            <Text style={styles.summaryTitle}>Personal Finance</Text>
+            <Button
+              mode="text"
+              onPress={() => navigation.navigate("PersonalFinance")}
+              compact
+            >
+              Manage
+            </Button>
+          </View>
 
-        <Card style={styles.statCard}>
-          <Card.Content style={styles.statContent}>
-            <IconButton icon="arrow-up" size={24} iconColor="#F44336" />
-            <Text style={styles.statValue}>₹{totalOwed.toFixed(0)}</Text>
-            <Text style={styles.statLabel}>You Owe</Text>
-          </Card.Content>
-        </Card>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <IconButton icon="arrow-down-circle" size={24} iconColor="#4CAF50" />
+              <Text style={styles.summaryLabel}>Income</Text>
+              <Text style={[styles.summaryValue, styles.incomeText]}>
+                ₹{personalIncome.toFixed(0)}
+              </Text>
+            </View>
 
-        <Card style={styles.statCard}>
-          <Card.Content style={styles.statContent}>
-            <IconButton icon="arrow-down" size={24} iconColor="#2196F3" />
-            <Text style={styles.statValue}>₹{totalOwedToYou.toFixed(0)}</Text>
-            <Text style={styles.statLabel}>Owed to You</Text>
-          </Card.Content>
-        </Card>
-      </View>
+            <Divider style={styles.verticalDivider} />
+
+            <View style={styles.summaryItem}>
+              <IconButton icon="arrow-up-circle" size={24} iconColor="#F44336" />
+              <Text style={styles.summaryLabel}>Expenses</Text>
+              <Text style={[styles.summaryValue, styles.expenseText]}>
+                ₹{personalExpenses.toFixed(0)}
+              </Text>
+            </View>
+
+            <Divider style={styles.verticalDivider} />
+
+            <View style={styles.summaryItem}>
+              <IconButton icon="wallet" size={24} iconColor="#2196F3" />
+              <Text style={styles.summaryLabel}>Savings</Text>
+              <Text style={[styles.summaryValue, styles.savingsText]}>
+                ₹{(personalIncome - personalExpenses).toFixed(0)}
+              </Text>
+            </View>
+          </View>
+        </Card.Content>
+      </Card>
+
+      {/* Group Expenses Summary */}
+      <Card style={styles.summaryCard}>
+        <Card.Content>
+          <View style={styles.summaryHeader}>
+            <Text style={styles.summaryTitle}>Group Expenses</Text>
+            <Button
+              mode="text"
+              onPress={() => navigation.navigate("Expenses")}
+              compact
+            >
+              View All
+            </Button>
+          </View>
+
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <IconButton icon="cash" size={24} iconColor="#4CAF50" />
+              <Text style={styles.summaryLabel}>You Paid</Text>
+              <Text style={styles.summaryValue}>₹{totalPaidByMe.toFixed(0)}</Text>
+            </View>
+
+            <Divider style={styles.verticalDivider} />
+
+            <View style={styles.summaryItem}>
+              <IconButton icon="arrow-up" size={24} iconColor="#F44336" />
+              <Text style={styles.summaryLabel}>You Owe</Text>
+              <Text style={styles.summaryValue}>₹{totalIOwe.toFixed(0)}</Text>
+            </View>
+
+            <Divider style={styles.verticalDivider} />
+
+            <View style={styles.summaryItem}>
+              <IconButton icon="arrow-down" size={24} iconColor="#2196F3" />
+              <Text style={styles.summaryLabel}>Owed to You</Text>
+              <Text style={styles.summaryValue}>₹{totalOwedToMe.toFixed(0)}</Text>
+            </View>
+          </View>
+
+          <Divider style={styles.divider} />
+
+          <View style={styles.groupBalanceRow}>
+            <Text style={styles.groupBalanceLabel}>Group Net Balance</Text>
+            <Text
+              style={[
+                styles.groupBalanceValue,
+                groupNetBalance > 0
+                  ? styles.positiveBalance
+                  : groupNetBalance < 0
+                  ? styles.negativeBalance
+                  : styles.neutralBalance,
+              ]}
+            >
+              {groupNetBalance > 0 ? '+' : ''}₹{groupNetBalance.toFixed(2)}
+            </Text>
+          </View>
+        </Card.Content>
+      </Card>
 
       {/* My Groups Section */}
       <View style={styles.section}>
@@ -236,13 +346,13 @@ const calculateUserBalance = (
           </Card>
         ) : (
           groups.slice(0, 3).map((group) => (
-              <Card
-                key={group.id}
-                style={styles.groupCard}
-                onPress={() => {
-                  navigation.navigate("GroupDetails", { groupId: group.id });
-                }}
-              >
+            <Card
+              key={group.id}
+              style={styles.groupCard}
+              onPress={() => {
+                navigation.navigate("GroupDetails", { groupId: group.id });
+              }}
+            >
               <Card.Content style={styles.groupContent}>
                 <View style={styles.groupInfo}>
                   <Avatar.Text
@@ -263,31 +373,74 @@ const calculateUserBalance = (
         )}
       </View>
 
-      {/* Recent Activity */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <Button
-            mode="text"
-            onPress={() => navigation.navigate("Expenses")}
-            compact
-          >
-            View All
-          </Button>
-        </View>
+      {/* Recent Personal Transactions */}
+      {recentPersonalTransactions.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Personal Transactions</Text>
+            <Button
+              mode="text"
+              onPress={() => navigation.navigate("PersonalFinance")}
+              compact
+            >
+              View All
+            </Button>
+          </View>
 
-        {recentExpenses.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Card.Content style={styles.emptyContent}>
-              <IconButton icon="receipt" size={48} iconColor="#999" />
-              <Text style={styles.emptyText}>No expenses yet</Text>
-              <Text style={styles.emptySubtext}>
-                Start tracking your expenses with your groups
-              </Text>
-            </Card.Content>
-          </Card>
-        ) : (
-          recentExpenses.map((expense) => (
+          {recentPersonalTransactions.map((transaction) => (
+            <Card
+              key={transaction.id}
+              style={styles.transactionCard}
+              onPress={() => {
+                // TODO: Navigate to transaction details
+                console.log('View transaction:', transaction.id);
+              }}
+            >
+              <Card.Content style={styles.transactionContent}>
+                <View style={styles.transactionLeft}>
+                  <IconButton
+                    icon={transaction.type === 'income' ? 'arrow-down-circle' : 'arrow-up-circle'}
+                    size={32}
+                    iconColor={transaction.type === 'income' ? '#4CAF50' : '#F44336'}
+                  />
+                  <View style={styles.transactionInfo}>
+                    <Text style={styles.transactionDescription}>
+                      {transaction.description}
+                    </Text>
+                    <Text style={styles.transactionDate}>
+                      {format(new Date(transaction.date), "MMM dd, yyyy")} • {transaction.category}
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.transactionAmount,
+                    transaction.type === 'income' ? styles.incomeText : styles.expenseText,
+                  ]}
+                >
+                  {transaction.type === 'income' ? '+' : '-'}₹{transaction.amount}
+                </Text>
+              </Card.Content>
+            </Card>
+          ))}
+        </View>
+      )}
+
+      {/* Recent Group Expenses */}
+      {recentExpenses.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Group Expenses</Text>
+            <Button
+              mode="text"
+              onPress={() => navigation.navigate("Expenses")}
+              compact
+            >
+              View All
+            </Button>
+          </View>
+
+          {recentExpenses.map((expense) => (
             <Card
               key={expense.id}
               style={styles.expenseCard}
@@ -321,9 +474,9 @@ const calculateUserBalance = (
                 </View>
               </Card.Content>
             </Card>
-          ))
-        )}
-      </View>
+          ))}
+        </View>
+      )}
 
       {/* Quick Actions */}
       <View style={styles.quickActions}>
@@ -331,27 +484,27 @@ const calculateUserBalance = (
           mode="contained"
           icon="plus"
           onPress={() => {
-            // This navigates to the 'AddExpense' screen
+            navigation.navigate("AddPersonalTransaction");
+          }}
+          style={styles.actionButton}
+        >
+          Add Income/Expense
+        </Button>
+        <Button
+          mode="contained"
+          icon="account-group"
+          onPress={() => {
             navigation.navigate("AddExpense");
           }}
           style={styles.actionButton}
         >
-          Add Expense
-        </Button>
-        <Button
-          mode="outlined"
-          icon="cash-multiple"
-          onPress={() => {
-            /* Navigate to settle up */
-          }}
-          style={styles.actionButton}
-        >
-          Settle Up
+          Add Group Expense
         </Button>
       </View>
+
       <LoadingOverlay
         visible={isLoading && !refreshing}
-        message="Loading your expenses..."
+        message="Loading your data..."
       />
     </ScrollView>
   );
@@ -386,9 +539,15 @@ const styles = StyleSheet.create({
   avatar: {
     backgroundColor: "#6200EE",
   },
-  balanceCard: {
+  overallBalanceCard: {
     marginBottom: 16,
     backgroundColor: "#6200EE",
+    elevation: 4,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   balanceLabel: {
     fontSize: 14,
@@ -414,29 +573,71 @@ const styles = StyleSheet.create({
     color: "#fff",
     opacity: 0.8,
   },
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 24,
-    gap: 8,
+  summaryCard: {
+    marginBottom: 16,
+    backgroundColor: "#fff",
+    elevation: 2,
   },
-  statCard: {
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  summaryItem: {
     flex: 1,
+    alignItems: 'center',
   },
-  statContent: {
-    alignItems: "center",
-    padding: 8,
+  summaryLabel: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 4,
   },
-  statValue: {
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 4,
+  },
+  incomeText: {
+    color: '#4CAF50',
+  },
+  expenseText: {
+    color: '#F44336',
+  },
+  savingsText: {
+    color: '#2196F3',
+  },
+  verticalDivider: {
+    width: 1,
+    height: 40,
+  },
+  divider: {
+    marginVertical: 12,
+  },
+  groupBalanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  groupBalanceLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  groupBalanceValue: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginTop: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
+    fontWeight: 'bold',
   },
   section: {
     marginBottom: 24,
@@ -464,12 +665,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#666",
     marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#999",
-    textAlign: "center",
-    marginBottom: 16,
   },
   emptyButton: {
     marginTop: 8,
@@ -501,6 +696,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     marginTop: 2,
+  },
+  transactionCard: {
+    marginBottom: 8,
+    backgroundColor: "#fff",
+  },
+  transactionContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  transactionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  transactionInfo: {
+    flex: 1,
+  },
+  transactionDescription: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#333",
+  },
+  transactionDate: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  transactionAmount: {
+    fontSize: 18,
+    fontWeight: "bold",
   },
   expenseCard: {
     marginBottom: 8,
@@ -549,6 +775,7 @@ const styles = StyleSheet.create({
   quickActions: {
     flexDirection: "row",
     gap: 8,
+    marginTop: 8,
   },
   actionButton: {
     flex: 1,

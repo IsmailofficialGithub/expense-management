@@ -16,6 +16,10 @@ import {
   GroupWithMembers,
   ExpenseFilters,
   UserGroupBalance,
+  PersonalTransaction,
+  UserCompleteBalance,
+  PersonalCategory,
+  CreatePersonalTransactionRequest,
 } from '../types/database.types';
 
 // ============================================
@@ -95,26 +99,87 @@ export const profileService = {
     if (error) throw error;
     return data;
   },
+uploadAvatar: async (imageUri: string): Promise<string> => {
+  const user = await authService.getCurrentUser();
+  if (!user) throw new Error('Not authenticated');
 
-  uploadAvatar: async (userId: string, file: File) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${userId}.${fileExt}`;
-    const filePath = `avatars/${fileName}`;
+  // Get current profile to check for existing avatar
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('avatar_url')
+    .eq('id', user.id)
+    .single();
 
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, { upsert: true });
+  // Delete old avatar if exists
+  if (profile?.avatar_url) {
+    try {
+      const urlParts = profile.avatar_url.split('/avatars/');
+      if (urlParts.length > 1) {
+        const oldFileName = urlParts[1];
+        
+        const { error: deleteError } = await supabase.storage
+          .from('avatars')
+          .remove([oldFileName]);
 
-    if (uploadError) throw uploadError;
+        if (deleteError) {
+          console.warn('Failed to delete old avatar:', deleteError);
+        } else {
+          console.log('Old avatar deleted successfully');
+        }
+      }
+    } catch (error) {
+      console.warn('Error processing old avatar:', error);
+    }
+  }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(filePath);
+  // Generate unique filename
+  const fileExt = 'jpg';
+  const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+  
+  // Fetch image and convert to Uint8Array
+  const response = await fetch(imageUri);
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch image');
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
 
-    await profileService.updateProfile(userId, { avatar_url: publicUrl });
-    return publicUrl;
-  },
+  // Upload to Supabase Storage (no 'avatars/' prefix in path)
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(fileName, uint8Array, {
+      contentType: 'image/jpeg',
+      cacheControl: '3600',
+      upsert: false,
+    });
 
+  if (uploadError) {
+    console.error('Avatar upload error:', uploadError);
+    throw uploadError;
+  }
+
+  // Get public URL
+  const { data: { publicUrl } } = supabase.storage
+    .from('avatars')
+    .getPublicUrl(fileName);
+
+  console.log('Generated public URL:', publicUrl);
+
+  // Update profile with new avatar URL
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({ avatar_url: publicUrl })
+    .eq('id', user.id);
+
+  if (updateError) {
+    console.error('Profile update error:', updateError);
+    throw updateError;
+  }
+
+  return publicUrl;
+},
   searchProfiles: async (query: string): Promise<Profile[]> => {
     const { data, error } = await supabase
       .from('profiles')
@@ -123,6 +188,158 @@ export const profileService = {
       .limit(10);
     if (error) throw error;
     return data;
+  },
+};
+
+
+// ============================================
+// PERSONAL FINANCE
+// ============================================
+
+export const personalFinanceService = {
+  // Get all personal transactions
+  getTransactions: async (): Promise<PersonalTransaction[]> => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('personal_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Create personal transaction
+  createTransaction: async (
+    request: CreatePersonalTransactionRequest
+  ): Promise<PersonalTransaction> => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('personal_transactions')
+      .insert({
+        user_id: user.id,
+        type: request.type,
+        category: request.category,
+        amount: request.amount,
+        description: request.description,
+        date: request.date || new Date().toISOString().split('T')[0],
+        notes: request.notes,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Update personal transaction
+  updateTransaction: async (
+    transactionId: string,
+    updates: Partial<PersonalTransaction>
+  ): Promise<PersonalTransaction> => {
+    const { data, error } = await supabase
+      .from('personal_transactions')
+      .update(updates)
+      .eq('id', transactionId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Delete personal transaction
+  deleteTransaction: async (transactionId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('personal_transactions')
+      .delete()
+      .eq('id', transactionId);
+
+    if (error) throw error;
+  },
+
+  // Get personal categories
+  getCategories: async (): Promise<PersonalCategory[]> => {
+    const { data, error } = await supabase
+      .from('personal_categories')
+      .select('*')
+      .order('name');
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Get complete user balance
+  getCompleteBalance: async (): Promise<UserCompleteBalance> => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('user_complete_balance')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Get transactions by date range
+  getTransactionsByDateRange: async (
+    startDate: string,
+    endDate: string
+  ): Promise<PersonalTransaction[]> => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('personal_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Get monthly summary
+  getMonthlySummary: async (year: number, month: number) => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+
+    const { data, error } = await supabase
+      .from('personal_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    if (error) throw error;
+
+    const income = data
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    const expenses = data
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    return {
+      income,
+      expenses,
+      balance: income - expenses,
+      transactions: data,
+    };
   },
 };
 

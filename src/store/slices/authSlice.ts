@@ -102,13 +102,9 @@ export const updateProfile = createAsyncThunk(
 
 export const uploadAvatar = createAsyncThunk(
   'auth/uploadAvatar',
-  async (file: File, { getState, rejectWithValue }) => {
+  async (imageUri: string, { rejectWithValue }) => {
     try {
-      const state = getState() as { auth: AuthState };
-      if (!state.auth.user) throw new Error('Not authenticated');
-      
-      const avatarUrl = await profileService.uploadAvatar(state.auth.user.id, file);
-      return avatarUrl;
+      return await profileService.uploadAvatar(imageUri);
     } catch (error: any) {
       return rejectWithValue(error.message);
     }

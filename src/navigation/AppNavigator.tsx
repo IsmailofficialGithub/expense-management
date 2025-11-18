@@ -181,6 +181,9 @@ import ExpenseDetailsScreen from '../screens/details/ExpenseDetailsScreen';
 import SettleUpScreen from '../screens/details/SettleUpScreen';
 import AddExpenseScreen from '../screens/forms/AddExpenseScreen';
 import EditExpenseScreen from '../screens/forms/EditExpenseScreen';
+import PersonalFinanceScreen from '../screens/main/PersonalFinanceScreen';
+import AddPersonalTransactionScreen from '../screens/forms/AddPersonalTransactionScreen';
+import EditPersonalTransactionScreen from '../screens/forms/EditPersonalTransactionScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -204,6 +207,9 @@ export type RootStackParamList = {
   SettleUp: { groupId?: string; userId?: string; amount?: string };
   AddExpense: { groupId?: string };
   EditExpense: { expenseId: string };
+  PersonalFinance: undefined;
+  AddPersonalTransaction: undefined;
+  EditPersonalTransaction: { transactionId: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -300,6 +306,26 @@ export default function AppNavigator() {
             name="ExpenseDetails"
             component={ExpenseDetailsScreen}
             options={{ headerShown: true, title: 'Expense Details' }}
+          />
+          <RootStack.Screen
+            name="PersonalFinance"
+            component={PersonalFinanceScreen}
+            options={{ headerShown: true, title: 'Personal Finance' }}
+          />
+          {/* <RootStack.Screen
+            name="PersonalFinance"
+            component={PersonalFinanceScreen}
+            options={{ headerShown: true, title: 'Personal Finance' }}
+          /> */}
+          <RootStack.Screen
+            name="AddPersonalTransaction"
+            component={AddPersonalTransactionScreen}
+            options={{ headerShown: true, title: 'Add Transaction' }}
+          />
+          <RootStack.Screen
+            name="EditPersonalTransaction"
+            component={EditPersonalTransactionScreen}
+            options={{ headerShown: true, title: 'Edit Transaction' }}
           />
           <RootStack.Screen
             name="SettleUp"

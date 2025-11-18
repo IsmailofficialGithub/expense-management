@@ -8,6 +8,7 @@ import groupsReducer from './slices/groupsSlice';
 import expensesReducer from './slices/expensesSlice';
 import notificationsReducer from './slices/notificationsSlice';
 import uiReducer from './slices/uiSlice';
+import personalFinanceReducer from './slices/personalFinanceSlice';
 
 export const store = configureStore({
   reducer: {
@@ -16,6 +17,7 @@ export const store = configureStore({
     expenses: expensesReducer,
     notifications: notificationsReducer,
     ui: uiReducer,
+      personalFinance: personalFinanceReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -29,6 +31,7 @@ export const store = configureStore({
       },
     }),
 });
+
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
