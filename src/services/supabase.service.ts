@@ -254,61 +254,86 @@ export const groupService = {
 // ============================================
 
 export const expenseService = {
-  createExpense: async (request: CreateExpenseRequest): Promise<Expense> => {
-    // Upload receipt if provided
-    let receiptUrl = null;
-    if (request.receipt) {
-      const fileName = `${Date.now()}_${request.receipt.name}`;
+
+createExpense: async (request: CreateExpenseRequest): Promise<Expense> => {
+  // Upload receipt if provided
+  let receiptUrl = null;
+  if (request.receipt) {
+    try {
+      const fileName = `${Date.now()}_${request.receipt.name || 'receipt.jpg'}`;
+      
+      // Simpler method - use fetch with arrayBuffer
+      const response = await fetch(request.receipt.uri);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch image');
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      // Upload to Supabase storage
       const { error: uploadError } = await supabase.storage
         .from('receipts')
-        .upload(fileName, request.receipt);
+        .upload(fileName, uint8Array, {
+          contentType: request.receipt.type || 'image/jpeg',
+          cacheControl: '3600',
+          upsert: false
+        });
       
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Receipt upload error:', uploadError);
+        throw uploadError;
+      }
 
+      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('receipts')
         .getPublicUrl(fileName);
       
       receiptUrl = publicUrl;
+    } catch (error) {
+      console.error('Failed to process receipt:', error);
+      receiptUrl = null;
     }
+  }
 
-    // Create expense
-    const { data: expense, error: expenseError } = await supabase
-      .from('expenses')
-      .insert({
-        group_id: request.group_id,
-        category_id: request.category_id,
-        description: request.description,
-        amount: request.amount,
-        paid_by: request.paid_by,
-        date: request.date || new Date().toISOString().split('T')[0],
-        notes: request.notes,
-        receipt_url: receiptUrl,
-        split_type: request.split_type,
-      })
-      .select()
-      .single();
+  // Create expense
+  const { data: expense, error: expenseError } = await supabase
+    .from('expenses')
+    .insert({
+      group_id: request.group_id,
+      category_id: request.category_id,
+      description: request.description,
+      amount: request.amount,
+      paid_by: request.paid_by,
+      date: request.date || new Date().toISOString().split('T')[0],
+      notes: request.notes,
+      receipt_url: receiptUrl,
+      split_type: request.split_type,
+    })
+    .select()
+    .single();
 
-    if (expenseError) throw expenseError;
+  if (expenseError) throw expenseError;
 
-    // Create splits
-    const splits = request.splits.map(split => ({
-      expense_id: expense.id,
-      user_id: split.user_id,
-      amount: split.amount || 0,
-      percentage: split.percentage,
-      shares: split.shares,
-    }));
+  // Create splits
+  const splits = request.splits.map(split => ({
+    expense_id: expense.id,
+    user_id: split.user_id,
+    amount: split.amount || 0,
+    percentage: split.percentage,
+    shares: split.shares,
+  }));
 
-    const { error: splitsError } = await supabase
-      .from('expense_splits')
-      .insert(splits);
+  const { error: splitsError } = await supabase
+    .from('expense_splits')
+    .insert(splits);
 
-    if (splitsError) throw splitsError;
+  if (splitsError) throw splitsError;
 
-    return expense;
-  },
-
+  return expense;
+},
   getExpenses: async (filters?: ExpenseFilters): Promise<ExpenseWithDetails[]> => {
     let query = supabase
       .from('expenses')
@@ -382,7 +407,34 @@ export const expenseService = {
     if (error) throw error;
     return data;
   },
+  async uploadReceipt(filePath: string, file: File) {
+  return await supabase.storage
+    .from("receipts")
+    .upload(filePath, file, { upsert: true });
+},
+getReceiptUrl(filePath: string) {
+  return supabase.storage.from("receipts").getPublicUrl(filePath).data.publicUrl;
+}
+,
+async replaceSplits(expenseId: string, splits: { user_id: string; amount: number }[]) {
+  // Delete old splits
+  await supabase
+    .from("expense_splits")
+    .delete()
+    .eq("expense_id", expenseId);
 
+  // Insert new splits
+  if (splits.length > 0) {
+    await supabase.from("expense_splits").insert(
+      splits.map((s) => ({
+        expense_id: expenseId,
+        user_id: s.user_id,
+        amount: s.amount,
+      }))
+    );
+  }
+}
+,
   deleteExpense: async (expenseId: string) => {
     const { error } = await supabase
       .from('expenses')
@@ -391,6 +443,8 @@ export const expenseService = {
     if (error) throw error;
   },
 };
+
+
 
 // ============================================
 // SETTLEMENTS

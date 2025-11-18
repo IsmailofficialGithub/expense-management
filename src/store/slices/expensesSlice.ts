@@ -47,14 +47,59 @@ export const createExpense = createAsyncThunk('expenses/createExpense', async (r
   }
 });
 
-export const updateExpense = createAsyncThunk('expenses/updateExpense', async ({ expenseId, updates }: { expenseId: string; updates: Partial<Expense> }, { rejectWithValue }) => {
-  try {
-    await expenseService.updateExpense(expenseId, updates);
-    return await expenseService.getExpense(expenseId);
-  } catch (error: any) {
-    return rejectWithValue(error.message);
+export const updateExpense = createAsyncThunk(
+  "expenses/updateExpense",
+  async (
+    {
+      expenseId,
+      updates,
+      splits,
+      receipt,
+    }: {
+      expenseId: string;
+      updates: Partial<Expense>;
+      splits: { user_id: string; amount: number }[];
+      receipt?: File | null;
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      // 1️⃣ If a new receipt file was uploaded
+      let receipt_url: string | null | undefined = undefined;
+
+      if (receipt) {
+        const fileExt = receipt.name.split(".").pop();
+        const filePath = `receipts/${expenseId}.${fileExt}`;
+
+        // Upload to Supabase Storage
+        const upload = await expenseService.uploadReceipt(filePath, receipt);
+
+        if (upload.error) throw upload.error;
+
+        // Get public URL
+        const publicUrl = expenseService.getReceiptUrl(filePath);
+        receipt_url = publicUrl;
+      }
+
+      // 2️⃣ Update expense main data (add receipt_url if replaced)
+      const updatedExpense = await expenseService.updateExpense(expenseId, {
+        ...updates,
+        ...(receipt_url ? { receipt_url } : {}),
+      });
+
+      // 3️⃣ Update splits (delete old + insert new)
+      await expenseService.replaceSplits(expenseId, splits);
+
+      // 4️⃣ Return fresh expense with details
+      return await expenseService.getExpense(expenseId);
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
   }
-});
+);
+
+
+
 
 export const deleteExpense = createAsyncThunk('expenses/deleteExpense', async (expenseId: string, { rejectWithValue }) => {
   try {

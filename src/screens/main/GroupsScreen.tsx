@@ -90,13 +90,13 @@ export default function GroupsScreen({ navigation }: any) {
     const isCreator = item.created_by === profile?.id;
 
     return (
-      <Card 
-        style={styles.groupCard}
-        onPress={() => {
-          // TODO: Navigate to GroupDetailsScreen
-          console.log('Navigate to group:', item.id);
-        }}
-      >
+     <Card
+  style={styles.groupCard}
+  onPress={() => {
+    // This is the navigation call
+    navigation.navigate('GroupDetails', { groupId: item.id });
+  }}
+>
         <Card.Content style={styles.cardContent}>
           <View style={styles.groupHeader}>
             <Avatar.Text 

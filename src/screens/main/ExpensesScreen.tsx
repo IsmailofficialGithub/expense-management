@@ -92,14 +92,13 @@ export default function ExpensesScreen({ navigation }: any) {
     const myShare = mySplit ? Number(mySplit.amount) : 0;
 
     return (
-      <Card 
-        key={expense.id}
-        style={styles.expenseCard}
-        onPress={() => {
-          // TODO: Navigate to ExpenseDetailsScreen
-          console.log('Navigate to expense:', expense.id);
-        }}
-      >
+     <Card
+  key={expense.id}
+  style={styles.expenseCard}
+  onPress={() => {
+    navigation.navigate('ExpenseDetails', { expenseId: expense.id });
+  }}
+>
         <Card.Content style={styles.cardContent}>
           <View style={styles.expenseHeader}>
             <View style={styles.expenseLeft}>
@@ -247,8 +246,7 @@ export default function ExpensesScreen({ navigation }: any) {
         icon="plus"
         style={styles.fab}
         onPress={() => {
-          // TODO: Navigate to AddExpenseScreen
-          console.log('Add expense');
+        navigation.navigate('AddExpense' );
         }}
         label="Add Expense"
       />

@@ -214,23 +214,26 @@ export interface PersonalDebtWithUsers extends PersonalDebt {
 // ============================================
 
 export interface CreateExpenseRequest {
-  group_id: string
-  category_id: string
-  description: string
-  amount: number
-  paid_by: string
-  date?: string
-  notes?: string
-  split_type: SplitType
+  group_id: string;
+  category_id: string;
+  description: string;
+  amount: number;
+  paid_by: string;
+  date?: string;
+  notes?: string;
+  split_type: SplitType;
   splits: {
-    user_id: string
-    amount?: number
-    percentage?: number
-    shares?: number
-  }[]
-  receipt?: File
+    user_id: string;
+    amount?: number;
+    percentage?: number;
+    shares?: number;
+  }[];
+  receipt?: {
+    uri: string;
+    name: string;
+    type: string;
+  }; // Updated to match React Native format
 }
-
 export interface CreateGroupRequest {
   name: string
   description?: string
