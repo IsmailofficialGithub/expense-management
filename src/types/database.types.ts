@@ -154,18 +154,21 @@ export interface ExpenseCategory {
 export type SplitType = 'equal' | 'unequal' | 'percentage' | 'shares'
 
 export interface Expense {
-  id: string
-  group_id: string
-  category_id: string
-  description: string
-  amount: number
-  paid_by: string
-  date: string
-  notes: string | null
-  receipt_url: string | null
-  split_type: SplitType
-  created_at: string
-  updated_at: string
+  id: string;
+  group_id: string;
+  category_id: string;
+  description: string;
+  amount: number;
+  paid_by: string;
+  date: string;
+  notes: string | null;
+  receipt_url: string | null;
+  split_type: SplitType;
+  payment_method_id: string | null;  // NEW
+  payment_method_type: string | null; // NEW
+  hotel_id: string | null;            // NEW
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ExpenseSplit {
@@ -231,13 +234,171 @@ export interface UserGroupBalance {
 }
 
 // ============================================
+// HOTELS & MENU SYSTEM
+// ============================================
+
+export interface Hotel {
+  id: string;
+  name: string;
+  location: string | null;
+  phone: string | null;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HotelMenuItem {
+  id: string;
+  hotel_id: string;
+  item_name: string;
+  category: string;
+  price: number;
+  description: string | null;
+  is_available: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HotelWithMenu extends Hotel {
+  menu_items: HotelMenuItem[];
+}
+
+export interface ExpenseFoodItem {
+  id: string;
+  expense_id: string;
+  hotel_id: string | null;
+  menu_item_id: string | null;
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  created_at: string;
+}
+
+// ============================================
+// PAYMENT METHODS
+// ============================================
+
+export type PaymentMethodType = 'cash' | 'bank' | 'jazzcash' | 'easypaisa' | 'card' | 'other';
+
+export interface UserPaymentMethod {
+  id: string;
+  user_id: string;
+  method_type: PaymentMethodType;
+  is_default: boolean;
+  
+  // Bank details
+  bank_name: string | null;
+  account_title: string | null;
+  account_number: string | null;
+  iban: string | null;
+  
+  // Mobile wallet
+  phone_number: string | null;
+  
+  // Card details
+  card_last_four: string | null;
+  
+  // Other
+  custom_name: string | null;
+  notes: string | null;
+  
+  // Privacy
+  is_visible_to_groups: boolean;
+  
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================
+// GROUP INVITATIONS
+// ============================================
+
+export type InvitationStatus = 'pending' | 'accepted' | 'expired';
+
+export interface GroupInvitation {
+  id: string;
+  group_id: string;
+  invited_by: string;
+  invited_email: string;
+  invitation_token: string;
+  status: InvitationStatus;
+  auto_created_user_id: string | null;
+  temporary_password: string | null;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface GroupInvitationWithDetails extends GroupInvitation {
+  group: Group;
+  inviter: Profile;
+}
+
+// ============================================
+// REQUEST TYPES
+// ============================================
+
+export interface CreateHotelRequest {
+  name: string;
+  location?: string;
+  phone?: string;
+}
+
+export interface CreateMenuItemRequest {
+  hotel_id: string;
+  item_name: string;
+  category: string;
+  price: number;
+  description?: string;
+}
+
+export interface CreatePaymentMethodRequest {
+  method_type: PaymentMethodType;
+  is_default?: boolean;
+  bank_name?: string;
+  account_title?: string;
+  account_number?: string;
+  iban?: string;
+  phone_number?: string;
+  card_last_four?: string;
+  custom_name?: string;
+  notes?: string;
+  is_visible_to_groups?: boolean;
+}
+
+export interface InviteUserRequest {
+  group_id: string;
+  invited_email: string;
+}
+
+export interface FoodItemInput {
+  hotel_id: string;
+  menu_item_id: string | null;
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface CreateFoodExpenseRequest extends Omit<CreateExpenseRequest, 'amount'> {
+  hotel_id: string;
+  food_items: FoodItemInput[];
+  payment_method_id?: string;
+}
+
+// ============================================
 // EXTENDED TYPES (with relations)
 // ============================================
 
 export interface ExpenseWithDetails extends Expense {
-  category: ExpenseCategory
-  paid_by_user: Profile
-  splits: (ExpenseSplit & { user: Profile })[]
+  category?: ExpenseCategory;
+  paid_by_user?: Profile;
+  group?: Group;
+  splits?: ExpenseSplit[];
+  hotel?: Hotel;                      // NEW
+  food_items?: ExpenseFoodItem[];     // NEW
+  payment_method?: UserPaymentMethod; // NEW
 }
 
 export interface GroupWithMembers extends Group {

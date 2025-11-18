@@ -9,6 +9,8 @@ import expensesReducer from './slices/expensesSlice';
 import notificationsReducer from './slices/notificationsSlice';
 import uiReducer from './slices/uiSlice';
 import personalFinanceReducer from './slices/personalFinanceSlice';
+import paymentMethodsReducer from './slices/paymentMethodsSlice';
+import hotelsReducer from './slices/hotelsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -16,6 +18,8 @@ export const store = configureStore({
     groups: groupsReducer,
     expenses: expensesReducer,
     notifications: notificationsReducer,
+     paymentMethods: paymentMethodsReducer,
+      hotels: hotelsReducer,
     ui: uiReducer,
       personalFinance: personalFinanceReducer,
   },

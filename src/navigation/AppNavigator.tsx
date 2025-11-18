@@ -184,6 +184,12 @@ import EditExpenseScreen from '../screens/forms/EditExpenseScreen';
 import PersonalFinanceScreen from '../screens/main/PersonalFinanceScreen';
 import AddPersonalTransactionScreen from '../screens/forms/AddPersonalTransactionScreen';
 import EditPersonalTransactionScreen from '../screens/forms/EditPersonalTransactionScreen';
+import InviteUserScreen from '../screens/details/InviteUserScreen';
+import AddFoodExpenseScreen from '../screens/forms/AddFoodExpenseScreen';
+import PaymentMethodsScreen from '../screens/main/PaymentMethodsScreen';
+import AddPaymentMethodScreen from '../screens/forms/AddPaymentMethodScreen';
+// import EditPaymentMethodScreen from '../screens/forms/EditPaymentMethodScreen';
+import ManageHotelScreen from '../screens/admin/ManageHotelScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -210,6 +216,12 @@ export type RootStackParamList = {
   PersonalFinance: undefined;
   AddPersonalTransaction: undefined;
   EditPersonalTransaction: { transactionId: string };
+  InviteUser: { groupId: string; groupName: string };
+  AddFoodExpense: { groupId?: string };
+  PaymentMethods: undefined;
+  AddPaymentMethod: undefined;
+  EditPaymentMethod: { methodId: string };
+  ManageHotel: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -342,6 +354,36 @@ export default function AppNavigator() {
             component={EditExpenseScreen}
             options={{ headerShown: true, title: 'Edit Expense' }}
           />
+          <RootStack.Screen
+      name="InviteUser"
+      component={InviteUserScreen}
+      options={{ headerShown: true, title: 'Invite Users' }}
+    />
+    <RootStack.Screen
+      name="AddFoodExpense"
+      component={AddFoodExpenseScreen}
+      options={{ headerShown: true, title: 'Add Food Expense' }}
+    />
+    <RootStack.Screen
+      name="PaymentMethods"
+      component={PaymentMethodsScreen}
+      options={{ headerShown: true, title: 'Payment Methods' }}
+    />
+    <RootStack.Screen
+      name="AddPaymentMethod"
+      component={AddPaymentMethodScreen}
+      options={{ headerShown: true, title: 'Add Payment Method' }}
+    />
+    {/* <RootStack.Screen
+      name="EditPaymentMethod"
+      component={EditPaymentMethodScreen}
+      options={{ headerShown: true, title: 'Edit Payment Method' }}
+    /> */}
+    <RootStack.Screen
+      name="ManageHotel"
+      component={ManageHotelScreen}
+      options={{ headerShown: true, title: 'Manage Hotels' }}
+    />
         </>
       ) : (
         // User is Logged Out: Show Auth screens
