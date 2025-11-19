@@ -11,8 +11,10 @@ import { fetchCategories } from '../../store/slices/expensesSlice';
 import { format } from 'date-fns';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
+import { useTheme } from 'react-native-paper';
 
 export default function ExpensesScreen({ navigation }: any) {
+  const theme = useTheme();
   const { expenses, categories, filters, loading } = useExpenses();
   const { groups } = useGroups();
   const { profile } = useAuth();
@@ -104,7 +106,7 @@ export default function ExpensesScreen({ navigation }: any) {
             <View style={styles.expenseLeft}>
               <Text style={styles.categoryIcon}>{expense.category?.icon || '💰'}</Text>
               <View style={styles.expenseInfo}>
-                <Text style={styles.expenseDescription}>{expense.description}</Text>
+                <Text style={[styles.expenseDescription, { color: theme.colors.onSurface }]}>{expense.description}</Text>
                 <View style={styles.expenseMeta}>
                   <Chip 
                     mode="flat" 
@@ -113,7 +115,7 @@ export default function ExpensesScreen({ navigation }: any) {
                   >
                     {expense.category?.name || 'Other'}
                   </Chip>
-                  <Text style={styles.expenseGroup}>
+                  <Text style={[styles.expenseGroup, { color: theme.colors.onSurfaceVariant }]}>
                     • {groups.find(g => g.id === expense.group_id)?.name || 'Unknown Group'}
                   </Text>
                 </View>
@@ -126,8 +128,8 @@ export default function ExpensesScreen({ navigation }: any) {
 
           <View style={styles.expenseFooter}>
             <View style={styles.amountContainer}>
-              <Text style={styles.totalAmount}>₹{expense.amount}</Text>
-              <Text style={styles.amountLabel}>Total</Text>
+              <Text style={[styles.totalAmount, { color: theme.colors.onSurface }]}>₹{expense.amount}</Text>
+              <Text style={[styles.amountLabel, { color: theme.colors.onSurfaceVariant }]}>Total</Text>
             </View>
 
             <View style={styles.splitContainer}>
@@ -136,20 +138,20 @@ export default function ExpensesScreen({ navigation }: any) {
                   <Text style={[styles.splitAmount, styles.positiveAmount]}>
                     +₹{(Number(expense.amount) - myShare).toFixed(2)}
                   </Text>
-                  <Text style={styles.splitLabel}>You lent</Text>
+                  <Text style={[styles.splitLabel, { color: theme.colors.onSurfaceVariant }]}>You lent</Text>
                 </>
               ) : (
                 <>
                   <Text style={[styles.splitAmount, styles.negativeAmount]}>
                     -₹{myShare.toFixed(2)}
                   </Text>
-                  <Text style={styles.splitLabel}>You owe</Text>
+                  <Text style={[styles.splitLabel, { color: theme.colors.onSurfaceVariant }]}>You owe</Text>
                 </>
               )}
             </View>
 
             <View style={styles.paidByContainer}>
-              <Text style={styles.paidByLabel}>
+              <Text style={[styles.paidByLabel, { color: theme.colors.onSurfaceVariant }]}>
                 {isPaidByMe ? 'You paid' : `${expense.paid_by_user?.full_name || 'Someone'} paid`}
               </Text>
             </View>
@@ -164,7 +166,7 @@ export default function ExpensesScreen({ navigation }: any) {
     
     return (
       <View style={styles.section}>
-        <Text style={styles.sectionHeader}>{date}</Text>
+        <Text style={[styles.sectionHeader, { color: theme.colors.onSurfaceVariant }]}>{date}</Text>
         {expensesList.map(renderExpenseCard)}
       </View>
     );
@@ -172,9 +174,9 @@ export default function ExpensesScreen({ navigation }: any) {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <IconButton icon="receipt-text-outline" size={80} iconColor="#ccc" />
-      <Text style={styles.emptyTitle}>No Expenses Yet</Text>
-      <Text style={styles.emptyText}>
+      <IconButton icon="receipt-text-outline" size={80} iconColor={theme.colors.onSurfaceDisabled} />
+      <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>No Expenses Yet</Text>
+      <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
         Start adding expenses to track your spending
       </Text>
     </View>
@@ -183,7 +185,7 @@ export default function ExpensesScreen({ navigation }: any) {
   const sectionsData = Object.entries(groupedExpenses);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Searchbar
@@ -241,15 +243,25 @@ export default function ExpensesScreen({ navigation }: any) {
         }
       />
 
-      {/* Floating Action Button */}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => {
-        navigation.navigate('AddExpense' );
-        }}
-        label="Add Expense"
-      />
+      {/* Floating Action Buttons */}
+      <View style={styles.fabContainer}>
+        <FAB
+          icon="food"
+          style={[styles.fab, styles.fabSecondary, styles.fabSpacing]}
+          onPress={() => {
+            navigation.navigate('AddFoodExpense');
+          }}
+          size="small"
+        />
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => {
+            navigation.navigate('AddExpense');
+          }}
+          size="small"
+        />
+      </View>
     </View>
   );
 }
@@ -257,7 +269,6 @@ export default function ExpensesScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -285,14 +296,12 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   expenseCard: {
     marginBottom: 12,
-    backgroundColor: '#fff',
     elevation: 2,
   },
   cardContent: {
@@ -318,7 +327,6 @@ const styles = StyleSheet.create({
   expenseDescription: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginBottom: 4,
   },
   expenseMeta: {
@@ -336,7 +344,6 @@ const styles = StyleSheet.create({
   },
   expenseGroup: {
     fontSize: 12,
-    color: '#666',
     marginLeft: 8,
   },
   chevron: {
@@ -356,11 +363,9 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
   },
   amountLabel: {
     fontSize: 11,
-    color: '#666',
     marginTop: 2,
   },
   splitContainer: {
@@ -378,7 +383,6 @@ const styles = StyleSheet.create({
   },
   splitLabel: {
     fontSize: 11,
-    color: '#666',
     marginTop: 2,
   },
   paidByContainer: {
@@ -386,7 +390,6 @@ const styles = StyleSheet.create({
   },
   paidByLabel: {
     fontSize: 12,
-    color: '#666',
   },
   emptyContainer: {
     flex: 1,
@@ -398,20 +401,26 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
     textAlign: 'center',
   },
-  fab: {
+  fabContainer: {
     position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
+    right: 16,
+    bottom: 16,
+    alignItems: 'flex-end',
+  },
+  fab: {
     backgroundColor: '#6200EE',
+  },
+  fabSecondary: {
+    backgroundColor: '#4CAF50',
+  },
+  fabSpacing: {
+    marginBottom: 12,
   },
 });

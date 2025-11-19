@@ -28,10 +28,12 @@ import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import * as ImagePicker from 'expo-image-picker';
+import { useTheme } from 'react-native-paper';
 
 export default function ProfileScreen({ navigation }: any) {
   const { profile, loading } = useAuth();
-  const { theme } = useUI();
+  const { theme: userTheme } = useUI();
+  const theme = useTheme();
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
@@ -68,8 +70,6 @@ export default function ProfileScreen({ navigation }: any) {
 
   const [saving, setSaving] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  const isDarkMode = theme === 'dark';
 
   // Open edit modal
   const handleEditProfile = () => {
@@ -309,10 +309,18 @@ const handleRemoveAvatar = () => {
     }
   };
 
-  // Handle theme toggle
+  // Handle theme toggle - cycle through: light -> dark -> auto -> light
   const handleThemeToggle = () => {
-    dispatch(setTheme(isDarkMode ? 'light' : 'dark'));
-    showToast(`${isDarkMode ? 'Light' : 'Dark'} mode enabled`, 'success');
+    let newTheme: 'light' | 'dark' | 'auto';
+    if (userTheme === 'light') {
+      newTheme = 'dark';
+    } else if (userTheme === 'dark') {
+      newTheme = 'auto';
+    } else {
+      newTheme = 'light';
+    }
+    dispatch(setTheme(newTheme));
+    showToast(`${newTheme === 'auto' ? 'Auto' : newTheme === 'dark' ? 'Dark' : 'Light'} mode enabled`, 'success');
   };
 
   // Handle sign out
@@ -346,7 +354,7 @@ const handleRemoveAvatar = () => {
   }
 
   return (
-    <SafeScrollView contentContainerStyle={{ padding: 16 }}>
+    <SafeScrollView contentContainerStyle={[{ padding: 16 }, { backgroundColor: theme.colors.background }]}>
       {/* Profile Header */}
       <Card style={styles.headerCard}>
         <Card.Content style={styles.headerContent}>
@@ -382,8 +390,8 @@ const handleRemoveAvatar = () => {
 </View>
 
           <View style={styles.headerText}>
-            <Text style={styles.userName}>{profile.full_name}</Text>
-            <Text style={styles.userEmail}>{profile.email}</Text>
+            <Text style={[styles.userName, { color: theme.colors.onSurface }]}>{profile.full_name}</Text>
+            <Text style={[styles.userEmail, { color: theme.colors.onSurfaceVariant }]}>{profile.email}</Text>
             <Button
               mode="outlined"
               onPress={handleEditProfile}
@@ -399,7 +407,7 @@ const handleRemoveAvatar = () => {
 
       {/* Account Information */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account Information</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Account Information</Text>
         <Card style={styles.card}>
           <List.Item
             title="Full Name"
@@ -441,15 +449,49 @@ const handleRemoveAvatar = () => {
         </Card>
       </View>
 
-      {/* Preferences */}
+      {/* Payment & Settings */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferences</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Payment & Settings</Text>
         <Card style={styles.card}>
           <List.Item
-            title="Dark Mode"
-            description={isDarkMode ? 'Enabled' : 'Disabled'}
+            title="Payment Methods"
+            description="Manage your payment methods"
+            left={(props) => <List.Icon {...props} icon="credit-card" />}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+            onPress={() => navigation.navigate('PaymentMethods')}
+          />
+          <Divider />
+          <List.Item
+            title="Manage Hotels"
+            description="Add and manage hotels/restaurants"
+            left={(props) => <List.Icon {...props} icon="store" />}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+            onPress={() => navigation.navigate('ManageHotel')}
+          />
+        </Card>
+      </View>
+
+      {/* Preferences */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Preferences</Text>
+        <Card style={styles.card}>
+          <List.Item
+            title="Theme"
+            description={
+              userTheme === 'auto' ? 'Auto (System)' :
+              userTheme === 'dark' ? 'Dark Mode' :
+              'Light Mode'
+            }
             left={(props) => <List.Icon {...props} icon="theme-light-dark" />}
-            right={() => <Switch value={isDarkMode} onValueChange={handleThemeToggle} />}
+            right={() => (
+              <Button
+                mode="outlined"
+                onPress={handleThemeToggle}
+                compact
+              >
+                {userTheme === 'auto' ? 'Auto' : userTheme === 'dark' ? 'Dark' : 'Light'}
+              </Button>
+            )}
           />
           <Divider />
           <List.Item
@@ -472,7 +514,7 @@ const handleRemoveAvatar = () => {
 
       {/* Data & Privacy */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Data & Privacy</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Data & Privacy</Text>
         <Card style={styles.card}>
           <List.Item
             title="Export Data"
@@ -502,7 +544,7 @@ const handleRemoveAvatar = () => {
 
       {/* About */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>About</Text>
         <Card style={styles.card}>
           <List.Item
             title="App Version"
@@ -536,9 +578,9 @@ const handleRemoveAvatar = () => {
         <Modal
           visible={editModalVisible}
           onDismiss={() => setEditModalVisible(false)}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>Edit Profile</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Edit Profile</Text>
 
           <TextInput
             label="Full Name *"
@@ -617,9 +659,9 @@ const handleRemoveAvatar = () => {
             setAvatarModalVisible(false);
             setSelectedImageUri(null);
           }}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>Upload Avatar</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Upload Avatar</Text>
 
           {selectedImageUri && (
             <View style={styles.avatarPreview}>
@@ -657,9 +699,9 @@ const handleRemoveAvatar = () => {
         <Modal
           visible={changePasswordModalVisible}
           onDismiss={() => setChangePasswordModalVisible(false)}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>Change Password</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Change Password</Text>
 
           <TextInput
             label="Current Password *"
@@ -768,7 +810,6 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     marginBottom: 16,
-    backgroundColor: '#fff',
     elevation: 4,
   },
   headerContent: {
@@ -794,12 +835,10 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 4,
   },
   userEmail: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 12,
   },
   editButton: {
@@ -811,13 +850,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#666',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   card: {
-    backgroundColor: '#fff',
     elevation: 2,
   },
   signOutButton: {
@@ -825,7 +862,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalContent: {
-    backgroundColor: 'white',
     padding: 24,
     margin: 20,
     borderRadius: 12,
@@ -834,7 +870,6 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 20,
   },
   input: {

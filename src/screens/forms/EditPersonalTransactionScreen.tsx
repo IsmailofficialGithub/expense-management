@@ -227,7 +227,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
   };
 
   return (
-    <SafeScrollView contentContainerStyle={{ padding: 16 }}>
+    <SafeScrollView contentContainerStyle={{ padding: 16 }} hasTabBar={false}>
       {/* Original Transaction Info */}
       <Card style={styles.originalCard}>
         <Card.Content>

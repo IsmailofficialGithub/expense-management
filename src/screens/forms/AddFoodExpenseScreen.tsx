@@ -1,10 +1,12 @@
 // src/screens/forms/AddFoodExpenseScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import SafeScrollView from '../../components/SafeScrollView';
 import { Text, TextInput, Button, SegmentedButtons, Chip, Divider, HelperText, Card, IconButton, Portal, Modal, List, Searchbar } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
 import { useHotels } from '../../hooks/useHotels';
 import { usePaymentMethods } from '../../hooks/usePaymentMethods';
+import { useExpenses } from '../../hooks/useExpenses';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
@@ -37,6 +39,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   const { groups } = useGroups();
   const { hotels } = useHotels();
   const { paymentMethods, defaultMethod } = usePaymentMethods();
+  const { categories } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
@@ -302,8 +305,24 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
 
     try {
-      // Find food category
-      const foodCategoryId = 'your-food-category-id'; // You'll need to fetch this from categories
+      // Find food category - look for "Food" or "Restaurant" category, otherwise use first available
+      let foodCategoryId = categories.find(cat => 
+        cat.name.toLowerCase().includes('food') || 
+        cat.name.toLowerCase().includes('restaurant') ||
+        cat.name.toLowerCase().includes('dining')
+      )?.id;
+
+      // If no food category found, use the first available category
+      if (!foodCategoryId && categories.length > 0) {
+        foodCategoryId = categories[0].id;
+      }
+
+      // If still no category, show error
+      if (!foodCategoryId) {
+        showToast('No expense category available. Please contact support.', 'error');
+        setIsSubmitting(false);
+        return;
+      }
 
       // Prepare splits
       const splits = selectedMembers.map(userId => {
@@ -359,7 +378,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.content}>
+      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
         {/* Description */}
         <Text style={styles.sectionTitle}>What did you eat?</Text>
         <TextInput
@@ -645,7 +664,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         >
           Add Food Expense
         </Button>
-      </ScrollView>
+      </SafeScrollView>
 
       {/* Menu Items Modal */}
       <Portal>

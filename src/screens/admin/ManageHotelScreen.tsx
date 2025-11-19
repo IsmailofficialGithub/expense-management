@@ -1,7 +1,7 @@
 // src/screens/admin/ManageHotelScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
-import { Text, Card, FAB, IconButton, Portal, Modal, TextInput, Button, HelperText, Divider, List, Chip } from 'react-native-paper';
+import { Text, Card, FAB, IconButton, Portal, Modal, TextInput, Button, HelperText, Divider, List, Chip, useTheme } from 'react-native-paper';
 import { useHotels } from '../../hooks/useHotels';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
@@ -12,6 +12,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { HotelMenuItem } from '../../types/database.types';
 
 export default function ManageHotelScreen({ navigation }: any) {
+  const theme = useTheme();
   const { hotels, loading } = useHotels();
   const { profile } = useAuth();
   const { showToast } = useToast();
@@ -235,10 +236,12 @@ export default function ManageHotelScreen({ navigation }: any) {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <IconButton icon="store-outline" size={80} iconColor="#ccc" />
-      <Text style={styles.emptyTitle}>No Hotels Yet</Text>
-      <Text style={styles.emptyText}>
-        Add hotels/restaurants to use in food expenses
+      <View style={styles.emptyIconContainer}>
+        <IconButton icon="store-outline" size={64} iconColor="#6200EE" />
+      </View>
+      <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>No Hotels Yet</Text>
+      <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+        Add hotels or restaurants to manage their menu items for food expenses
       </Text>
       <Button
         mode="contained"
@@ -266,7 +269,7 @@ export default function ManageHotelScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -274,10 +277,11 @@ export default function ManageHotelScreen({ navigation }: any) {
         }
       >
         {/* Info Card */}
-        <Card style={styles.infoCard}>
-          <Card.Content>
+        <Card style={styles.infoCard} mode="contained">
+          <Card.Content style={styles.infoContent}>
+            <IconButton icon="information" size={20} iconColor="#6200EE" style={styles.infoIcon} />
             <Text style={styles.infoText}>
-              🏪 Manage hotels, restaurants, and their menu items. These will be available when creating food expenses.
+              Manage hotels, restaurants, and their menu items. These will be available when creating food expenses.
             </Text>
           </Card.Content>
         </Card>
@@ -291,44 +295,60 @@ export default function ManageHotelScreen({ navigation }: any) {
             const groupedItems = groupMenuItemsByCategory(hotel.menu_items || []);
 
             return (
-              <Card key={hotel.id} style={styles.hotelCard}>
+              <Card key={hotel.id} style={styles.hotelCard} mode="elevated">
                 <Card.Content>
                   {/* Hotel Header */}
                   <View style={styles.hotelHeader}>
-                    <View style={styles.hotelInfo}>
-                      <Text style={styles.hotelName}>{hotel.name}</Text>
-                      {hotel.location && (
-                        <Text style={styles.hotelLocation}>📍 {hotel.location}</Text>
-                      )}
-                      {hotel.phone && (
-                        <Text style={styles.hotelPhone}>📞 {hotel.phone}</Text>
-                      )}
-                      <View style={styles.hotelMeta}>
-                        <Chip
-                          icon="food"
-                          style={styles.menuCountChip}
-                          textStyle={styles.menuCountText}
-                          compact
-                        >
-                          {hotel.menu_items?.length || 0} items
-                        </Chip>
-                        {isCreatedByMe && (
-                          <Chip
-                            icon="crown"
-                            style={styles.ownerChip}
-                            textStyle={styles.ownerChipText}
-                            compact
-                          >
-                            Your Hotel
-                          </Chip>
-                        )}
+                    <View style={styles.hotelTitleRow}>
+                      <View style={styles.hotelIconContainer}>
+                        <IconButton icon="store" size={24} iconColor="#fff" style={styles.hotelIcon} />
+                      </View>
+                      <View style={styles.hotelInfo}>
+                        <Text style={[styles.hotelName, { color: theme.colors.onSurface }]}>{hotel.name}</Text>
+                        <View style={styles.hotelMetaRow}>
+                          {hotel.location && (
+                            <View style={styles.metaItem}>
+                              <IconButton icon="map-marker" size={14} iconColor="#666" style={styles.metaIcon} />
+                              <Text style={[styles.hotelLocation, { color: theme.colors.onSurfaceVariant }]}>{hotel.location}</Text>
+                            </View>
+                          )}
+                          {hotel.phone && (
+                            <View style={styles.metaItem}>
+                              <IconButton icon="phone" size={14} iconColor="#666" style={styles.metaIcon} />
+                              <Text style={[styles.hotelPhone, { color: theme.colors.onSurfaceVariant }]}>{hotel.phone}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                     </View>
                     <IconButton
                       icon={isExpanded ? 'chevron-up' : 'chevron-down'}
                       size={24}
                       onPress={() => toggleHotelExpanded(hotel.id)}
+                      iconColor={theme.colors.primary}
                     />
+                  </View>
+
+                  {/* Chips Row */}
+                  <View style={styles.chipsRow}>
+                    <Chip
+                      icon="food"
+                      style={styles.menuCountChip}
+                      textStyle={styles.chipText}
+                      compact
+                    >
+                      {hotel.menu_items?.length || 0} items
+                    </Chip>
+                    {isCreatedByMe && (
+                      <Chip
+                        icon="crown"
+                        style={styles.ownerChip}
+                        textStyle={styles.ownerChipText}
+                        compact
+                      >
+                        Your Hotel
+                      </Chip>
+                    )}
                   </View>
 
                   {/* Expanded Menu Items */}
@@ -339,10 +359,11 @@ export default function ManageHotelScreen({ navigation }: any) {
                       {/* Add Item Button */}
                       {isCreatedByMe && (
                         <Button
-                          mode="outlined"
+                          mode="contained-tonal"
                           icon="plus"
                           onPress={() => handleOpenMenuItemModal(hotel.id)}
                           style={styles.addMenuItemButton}
+                          compact
                         >
                           Add Menu Item
                         </Button>
@@ -350,34 +371,58 @@ export default function ManageHotelScreen({ navigation }: any) {
 
                       {/* Menu Items by Category */}
                       {Object.entries(groupedItems).length === 0 ? (
-                        <Text style={styles.noItemsText}>No menu items yet</Text>
+                        <View style={styles.noItemsContainer}>
+                          <IconButton icon="food-off" size={32} iconColor="#ccc" />
+                          <Text style={[styles.noItemsText, { color: theme.colors.onSurfaceVariant }]}>
+                            No menu items yet
+                          </Text>
+                        </View>
                       ) : (
                         Object.entries(groupedItems).map(([category, items]) => (
                           <View key={category} style={styles.categorySection}>
-                            <Text style={styles.categoryTitle}>{category}</Text>
-                            {items.map((item) => (
-                              <View key={item.id} style={styles.menuItem}>
+                            <View style={styles.categoryHeader}>
+                              <IconButton icon="food-variant" size={16} iconColor="#6200EE" style={styles.categoryIcon} />
+                              <Text style={styles.categoryTitle}>{category}</Text>
+                              <View style={styles.categoryBadge}>
+                                <Text style={styles.categoryBadgeText}>{items.length}</Text>
+                              </View>
+                            </View>
+                            {items.map((item, index) => (
+                              <View 
+                                key={item.id} 
+                                style={[
+                                  styles.menuItem,
+                                  index === items.length - 1 && styles.menuItemLast
+                                ]}
+                              >
                                 <View style={styles.menuItemInfo}>
-                                  <Text style={styles.menuItemName}>{item.item_name}</Text>
+                                  <Text style={[styles.menuItemName, { color: theme.colors.onSurface }]}>
+                                    {item.item_name}
+                                  </Text>
                                   {item.description && (
-                                    <Text style={styles.menuItemDescription}>
+                                    <Text style={[styles.menuItemDescription, { color: theme.colors.onSurfaceVariant }]}>
                                       {item.description}
                                     </Text>
                                   )}
-                                  <Text style={styles.menuItemPrice}>₹{item.price}</Text>
+                                  <View style={styles.priceContainer}>
+                                    <Text style={styles.menuItemPrice}>₹{item.price}</Text>
+                                  </View>
                                 </View>
                                 {isCreatedByMe && (
                                   <View style={styles.menuItemActions}>
                                     <IconButton
-                                      icon="pencil"
-                                      size={20}
+                                      icon="pencil-outline"
+                                      size={18}
+                                      iconColor="#6200EE"
                                       onPress={() => handleOpenMenuItemModal(hotel.id, item)}
+                                      style={styles.actionButton}
                                     />
                                     <IconButton
-                                      icon="delete"
-                                      size={20}
+                                      icon="delete-outline"
+                                      size={18}
                                       iconColor="#F44336"
                                       onPress={() => handleDeleteMenuItem(item.id, item.item_name)}
+                                      style={styles.actionButton}
                                     />
                                   </View>
                                 )}
@@ -408,9 +453,12 @@ export default function ManageHotelScreen({ navigation }: any) {
         <Modal
           visible={hotelModalVisible}
           onDismiss={() => setHotelModalVisible(false)}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>Add Hotel/Restaurant</Text>
+          <View style={styles.modalHeader}>
+            <IconButton icon="store" size={28} iconColor="#6200EE" style={styles.modalIcon} />
+            <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Add Hotel/Restaurant</Text>
+          </View>
 
           <TextInput
             label="Hotel Name *"
@@ -432,6 +480,7 @@ export default function ManageHotelScreen({ navigation }: any) {
             mode="outlined"
             style={styles.input}
             placeholder="e.g., F-7 Markaz, Islamabad"
+            left={<TextInput.Icon icon="map-marker" />}
           />
 
           <TextInput
@@ -442,6 +491,7 @@ export default function ManageHotelScreen({ navigation }: any) {
             keyboardType="phone-pad"
             style={styles.input}
             placeholder="051-1234567"
+            left={<TextInput.Icon icon="phone" />}
           />
 
           <View style={styles.modalActions}>
@@ -471,11 +521,14 @@ export default function ManageHotelScreen({ navigation }: any) {
         <Modal
           visible={menuItemModalVisible}
           onDismiss={() => setMenuItemModalVisible(false)}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>
-            {editingMenuItem ? 'Edit Menu Item' : 'Add Menu Item'}
-          </Text>
+          <View style={styles.modalHeader}>
+            <IconButton icon="food" size={28} iconColor="#6200EE" style={styles.modalIcon} />
+            <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
+              {editingMenuItem ? 'Edit Menu Item' : 'Add Menu Item'}
+            </Text>
+          </View>
 
           <TextInput
             label="Item Name *"
@@ -498,6 +551,7 @@ export default function ManageHotelScreen({ navigation }: any) {
             error={!!menuItemErrors.category}
             style={styles.input}
             placeholder="e.g., Main Course, Beverages, Desserts"
+            left={<TextInput.Icon icon="tag" />}
           />
           {menuItemErrors.category ? (
             <HelperText type="error">{menuItemErrors.category}</HelperText>
@@ -559,141 +613,229 @@ export default function ManageHotelScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   content: {
     padding: 16,
-    paddingBottom: 80,
+    paddingBottom: 100,
   },
   infoCard: {
     marginBottom: 16,
-    backgroundColor: '#E8DEF8',
+    backgroundColor: '#F3E5F5',
+    elevation: 0,
+  },
+  infoContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoIcon: {
+    margin: 0,
+    marginRight: 4,
   },
   infoText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#333',
-    lineHeight: 20,
+    lineHeight: 18,
+    flex: 1,
   },
   hotelCard: {
     marginBottom: 12,
-    backgroundColor: '#fff',
+    elevation: 2,
   },
   hotelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  hotelTitleRow: {
+    flexDirection: 'row',
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  hotelIconContainer: {
+    backgroundColor: '#6200EE',
+    borderRadius: 8,
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  hotelIcon: {
+    margin: 0,
+  },
   hotelInfo: {
     flex: 1,
   },
   hotelName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 4,
   },
+  hotelMetaRow: {
+    flexDirection: 'column',
+    gap: 2,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: -8,
+  },
+  metaIcon: {
+    margin: 0,
+    padding: 0,
+  },
   hotelLocation: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 2,
+    fontSize: 12,
+    marginLeft: -4,
   },
   hotelPhone: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 8,
+    fontSize: 12,
+    marginLeft: -4,
   },
-  hotelMeta: {
+  chipsRow: {
     flexDirection: 'row',
     gap: 8,
+    marginTop: 12,
+    marginLeft: 60,
   },
   menuCountChip: {
-    height: 24,
+    height: 28,
     backgroundColor: '#E8DEF8',
   },
-  menuCountText: {
+  chipText: {
     fontSize: 11,
     color: '#6200EE',
+    fontWeight: '600',
   },
   ownerChip: {
-    height: 24,
+    height: 28,
     backgroundColor: '#FFE082',
   },
   ownerChipText: {
     fontSize: 11,
-    color: '#333',
+    color: '#F57C00',
+    fontWeight: '600',
   },
   divider: {
-    marginVertical: 12,
+    marginVertical: 16,
   },
   addMenuItemButton: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   categorySection: {
     marginBottom: 16,
   },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: '#F3E5F5',
+    padding: 8,
+    borderRadius: 8,
+  },
+  categoryIcon: {
+    margin: 0,
+    marginRight: 4,
+  },
   categoryTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#6200EE',
-    marginBottom: 8,
     textTransform: 'uppercase',
+    flex: 1,
+    letterSpacing: 0.5,
+  },
+  categoryBadge: {
+    backgroundColor: '#6200EE',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  categoryBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   menuItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
   menuItemInfo: {
     flex: 1,
+    paddingRight: 8,
   },
   menuItemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   menuItemDescription: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+    lineHeight: 16,
+    marginBottom: 6,
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   menuItemPrice: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#6200EE',
-    marginTop: 4,
+    color: '#4CAF50',
   },
   menuItemActions: {
     flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
+    margin: 0,
+  },
+  noItemsContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
   },
   noItemsText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
     textAlign: 'center',
     fontStyle: 'italic',
-    paddingVertical: 16,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingTop: 80,
+    paddingTop: 60,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F3E5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
-    marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
     textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 20,
   },
   emptyButton: {
     paddingHorizontal: 16,
@@ -706,17 +848,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#6200EE',
   },
   modalContent: {
-    backgroundColor: 'white',
     padding: 24,
     margin: 20,
-    borderRadius: 8,
-    maxHeight: '80%',
+    borderRadius: 12,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalIcon: {
+    margin: 0,
+    marginRight: 8,
+    backgroundColor: '#F3E5F5',
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
   },
   input: {
     marginBottom: 8,

@@ -162,7 +162,7 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
   };
 
   return (
-    <SafeScrollView contentContainerStyle={{ padding: 16 }}>
+    <SafeScrollView contentContainerStyle={{ padding: 16 }} hasTabBar={false}>
       {/* Type Selector */}
       <Text style={styles.sectionTitle}>Transaction Type</Text>
       <SegmentedButtons

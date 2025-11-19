@@ -192,7 +192,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeScrollView contentContainerStyle={styles.content}>
+      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
         {/* Info Card */}
         <Card style={styles.infoCard}>
           <Card.Content>

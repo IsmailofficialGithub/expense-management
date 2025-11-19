@@ -1,22 +1,31 @@
-// src/screens/forms/AddPaymentMethodScreen.tsx
-import React, { useState } from 'react';
+// src/screens/forms/EditPaymentMethodScreen.tsx
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import SafeScrollView from '../../components/SafeScrollView';
-import { Text, TextInput, Button, SegmentedButtons, Card, Switch, HelperText, Divider } from 'react-native-paper';
+import { Text, TextInput, Button, Card, Switch, HelperText, Divider } from 'react-native-paper';
+import { usePaymentMethods } from '../../hooks/usePaymentMethods';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
-import { createPaymentMethod } from '../../store/slices/paymentMethodsSlice';
-import { PaymentMethodType } from '../../types/database.types';
+import { updatePaymentMethod } from '../../store/slices/paymentMethodsSlice';
 import LoadingOverlay from '../../components/LoadingOverlay';
 
-export default function AddPaymentMethodScreen({ navigation }: any) {
+interface Props {
+  navigation: any;
+  route: {
+    params: {
+      methodId: string;
+    };
+  };
+}
+
+export default function EditPaymentMethodScreen({ navigation, route }: Props) {
+  const { methodId } = route.params;
+  const { paymentMethods } = usePaymentMethods();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
 
-  // Form state
-  const [methodType, setMethodType] = useState<PaymentMethodType>('cash');
   const [isDefault, setIsDefault] = useState(false);
   const [isVisibleToGroups, setIsVisibleToGroups] = useState(false);
 
@@ -47,8 +56,41 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<any>(null);
+
+  useEffect(() => {
+    // Find the payment method
+    const method = paymentMethods.find(m => m.id === methodId);
+    if (method) {
+      setPaymentMethod(method);
+      
+      // Populate form
+      setIsDefault(method.is_default);
+      setIsVisibleToGroups(method.is_visible_to_groups);
+      setNotes(method.notes || '');
+
+      // Type-specific fields
+      if (method.method_type === 'bank') {
+        setBankName(method.bank_name || '');
+        setAccountTitle(method.account_title || '');
+        setAccountNumber(method.account_number || '');
+        setIban(method.iban || '');
+      } else if (method.method_type === 'jazzcash' || method.method_type === 'easypaisa') {
+        setPhoneNumber(method.phone_number || '');
+      } else if (method.method_type === 'card') {
+        setCardLastFour(method.card_last_four || '');
+      } else if (method.method_type === 'other') {
+        setCustomName(method.custom_name || '');
+      }
+    } else {
+      showToast('Payment method not found', 'error');
+      navigation.goBack();
+    }
+  }, [methodId, paymentMethods]);
 
   const validateForm = (): boolean => {
+    if (!paymentMethod) return false;
+
     const newErrors = {
       bankName: '',
       accountTitle: '',
@@ -60,7 +102,7 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
 
     let isValid = true;
 
-    if (methodType === 'bank') {
+    if (paymentMethod.method_type === 'bank') {
       if (!bankName.trim()) {
         newErrors.bankName = 'Bank name is required';
         isValid = false;
@@ -75,7 +117,7 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
       }
     }
 
-    if (methodType === 'jazzcash' || methodType === 'easypaisa') {
+    if (paymentMethod.method_type === 'jazzcash' || paymentMethod.method_type === 'easypaisa') {
       if (!phoneNumber.trim()) {
         newErrors.phoneNumber = 'Phone number is required';
         isValid = false;
@@ -85,14 +127,14 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
       }
     }
 
-    if (methodType === 'card') {
+    if (paymentMethod.method_type === 'card') {
       if (cardLastFour && !/^\d{4}$/.test(cardLastFour)) {
         newErrors.cardLastFour = 'Must be 4 digits';
         isValid = false;
       }
     }
 
-    if (methodType === 'other' && !customName.trim()) {
+    if (paymentMethod.method_type === 'other' && !customName.trim()) {
       newErrors.customName = 'Name is required for custom payment method';
       isValid = false;
     }
@@ -105,45 +147,51 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
     if (!validateForm()) return;
 
     if (!isOnline) {
-      showToast('Cannot add payment method. No internet connection.', 'error');
+      showToast('Cannot update payment method. No internet connection.', 'error');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const payload: any = {
-        method_type: methodType,
+      const updates: any = {
         is_default: isDefault,
         is_visible_to_groups: isVisibleToGroups,
         notes: notes.trim() || undefined,
       };
 
       // Add type-specific fields
-      if (methodType === 'bank') {
-        payload.bank_name = bankName.trim();
-        payload.account_title = accountTitle.trim();
-        payload.account_number = accountNumber.trim();
-        payload.iban = iban.trim() || undefined;
-      } else if (methodType === 'jazzcash' || methodType === 'easypaisa') {
-        payload.phone_number = phoneNumber.trim();
-      } else if (methodType === 'card') {
-        payload.card_last_four = cardLastFour.trim() || undefined;
-      } else if (methodType === 'other') {
-        payload.custom_name = customName.trim();
+      if (paymentMethod.method_type === 'bank') {
+        updates.bank_name = bankName.trim();
+        updates.account_title = accountTitle.trim();
+        updates.account_number = accountNumber.trim();
+        updates.iban = iban.trim() || undefined;
+      } else if (paymentMethod.method_type === 'jazzcash' || paymentMethod.method_type === 'easypaisa') {
+        updates.phone_number = phoneNumber.trim();
+      } else if (paymentMethod.method_type === 'card') {
+        updates.card_last_four = cardLastFour.trim() || undefined;
+      } else if (paymentMethod.method_type === 'other') {
+        updates.custom_name = customName.trim();
       }
 
-      await dispatch(createPaymentMethod(payload)).unwrap();
+      await dispatch(updatePaymentMethod({
+        methodId,
+        updates
+      })).unwrap();
 
-      showToast('Payment method added successfully!', 'success');
+      showToast('Payment method updated successfully!', 'success');
       navigation.goBack();
     } catch (error: any) {
-      console.error('Create payment method error:', error);
-      showToast(error.message || 'Failed to add payment method', 'error');
+      console.error('Update payment method error:', error);
+      showToast(error.message || 'Failed to update payment method', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (!paymentMethod) {
+    return <LoadingOverlay visible={true} message="Loading..." />;
+  }
 
   const renderBankFields = () => (
     <>
@@ -256,61 +304,54 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
     </>
   );
 
+  const getMethodTypeName = () => {
+    switch (paymentMethod.method_type) {
+      case 'cash':
+        return 'Cash';
+      case 'bank':
+        return 'Bank Transfer';
+      case 'jazzcash':
+        return 'JazzCash';
+      case 'easypaisa':
+        return 'EasyPaisa';
+      case 'card':
+        return 'Card';
+      case 'other':
+        return 'Other';
+      default:
+        return paymentMethod.method_type;
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
-        {/* Info Card */}
+        {/* Method Type Info */}
         <Card style={styles.infoCard}>
           <Card.Content>
-            <Text style={styles.infoText}>
-              💡 Add your payment methods to track how you pay for expenses. You can choose to share details with group members for easy settlements.
-            </Text>
+            <Text style={styles.infoLabel}>Payment Method Type</Text>
+            <Text style={styles.infoValue}>{getMethodTypeName()}</Text>
           </Card.Content>
         </Card>
 
-        {/* Payment Method Type */}
-        <Text style={styles.sectionTitle}>Payment Method Type *</Text>
-        <SegmentedButtons
-          value={methodType}
-          onValueChange={(value) => setMethodType(value as PaymentMethodType)}
-          buttons={[
-            { value: 'cash', label: 'Cash', icon: 'cash' },
-            { value: 'bank', label: 'Bank', icon: 'bank' },
-            { value: 'jazzcash', label: 'JazzCash', icon: 'cellphone' },
-          ]}
-          style={styles.segmentedButtons}
-        />
-        <SegmentedButtons
-          value={methodType}
-          onValueChange={(value) => setMethodType(value as PaymentMethodType)}
-          buttons={[
-            { value: 'easypaisa', label: 'EasyPaisa', icon: 'cellphone' },
-            { value: 'card', label: 'Card', icon: 'credit-card' },
-            { value: 'other', label: 'Other', icon: 'dots-horizontal' },
-          ]}
-          style={styles.segmentedButtons}
-        />
-
-        <Divider style={styles.divider} />
-
         {/* Type-specific Fields */}
         <Text style={styles.sectionTitle}>Payment Details</Text>
-        {methodType === 'cash' && (
+        {paymentMethod.method_type === 'cash' && (
           <Card style={styles.messageCard}>
             <Card.Content>
               <Text style={styles.messageText}>
-                💵 Cash payments don't require additional details. Just mark this as your payment method when creating expenses.
+                💵 Cash payments don't require additional details.
               </Text>
             </Card.Content>
           </Card>
         )}
-        {methodType === 'bank' && renderBankFields()}
-        {(methodType === 'jazzcash' || methodType === 'easypaisa') && renderMobileWalletFields()}
-        {methodType === 'card' && renderCardFields()}
-        {methodType === 'other' && renderOtherFields()}
+        {paymentMethod.method_type === 'bank' && renderBankFields()}
+        {(paymentMethod.method_type === 'jazzcash' || paymentMethod.method_type === 'easypaisa') && renderMobileWalletFields()}
+        {paymentMethod.method_type === 'card' && renderCardFields()}
+        {paymentMethod.method_type === 'other' && renderOtherFields()}
 
         <Divider style={styles.divider} />
 
@@ -364,14 +405,14 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
         </Card>
 
         {/* Privacy Notice */}
-        {isVisibleToGroups && methodType !== 'cash' && (
+        {isVisibleToGroups && paymentMethod.method_type !== 'cash' && (
           <Card style={styles.warningCard}>
             <Card.Content>
               <Text style={styles.warningText}>
                 ⚠️ When visible to groups, members will see your {
-                  methodType === 'bank' ? 'bank account details' :
-                  methodType === 'jazzcash' || methodType === 'easypaisa' ? 'phone number' :
-                  methodType === 'card' ? 'card last 4 digits' :
+                  paymentMethod.method_type === 'bank' ? 'bank account details' :
+                  paymentMethod.method_type === 'jazzcash' || paymentMethod.method_type === 'easypaisa' ? 'phone number' :
+                  paymentMethod.method_type === 'card' ? 'card last 4 digits' :
                   'payment information'
                 } for easy settlements.
               </Text>
@@ -388,11 +429,11 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
           style={styles.submitButton}
           contentStyle={styles.submitButtonContent}
         >
-          Add Payment Method
+          Update Payment Method
         </Button>
       </SafeScrollView>
 
-      <LoadingOverlay visible={isSubmitting} message="Adding payment method..." />
+      <LoadingOverlay visible={isSubmitting} message="Updating payment method..." />
     </KeyboardAvoidingView>
   );
 }
@@ -410,10 +451,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: '#E8DEF8',
   },
-  infoText: {
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 20,
+  infoLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6200EE',
   },
   sectionTitle: {
     fontSize: 16,
@@ -421,9 +467,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginTop: 16,
     marginBottom: 12,
-  },
-  segmentedButtons: {
-    marginBottom: 8,
   },
   input: {
     marginBottom: 8,

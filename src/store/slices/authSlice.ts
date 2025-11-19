@@ -27,7 +27,7 @@ export const signUp = createAsyncThunk(
   'auth/signUp',
   async (data: SignUpData, { rejectWithValue }) => {
     try {
-      const result = await authService.signUp(data.email, data.password, data.full_name);
+      const result = await authService.signUp(data.email, data.password, data.full_name, data.invitationToken);
       if (result.user) {
         const profile = await profileService.getProfile(result.user.id);
         return { user: result.user, profile };

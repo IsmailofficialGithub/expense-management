@@ -184,12 +184,14 @@ import EditExpenseScreen from '../screens/forms/EditExpenseScreen';
 import PersonalFinanceScreen from '../screens/main/PersonalFinanceScreen';
 import AddPersonalTransactionScreen from '../screens/forms/AddPersonalTransactionScreen';
 import EditPersonalTransactionScreen from '../screens/forms/EditPersonalTransactionScreen';
+
+
 import InviteUserScreen from '../screens/details/InviteUserScreen';
 import AddFoodExpenseScreen from '../screens/forms/AddFoodExpenseScreen';
 import PaymentMethodsScreen from '../screens/main/PaymentMethodsScreen';
 import AddPaymentMethodScreen from '../screens/forms/AddPaymentMethodScreen';
-// import EditPaymentMethodScreen from '../screens/forms/EditPaymentMethodScreen';
 import ManageHotelScreen from '../screens/admin/ManageHotelScreen';
+import EditPaymentMethodScreen from '../screens/forms/EditPaymentMethodScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -302,6 +304,18 @@ export default function AppNavigator() {
     return <LoadingScreen />;
   }
 
+  // Screen options for detail and form screens
+  const detailScreenOptions = {
+    headerShown: true,
+    headerStyle: {
+      backgroundColor: '#6200EE',
+    },
+    headerTintColor: '#fff',
+    headerTitleStyle: {
+      fontWeight: 'bold' as const,
+    },
+  };
+
   // Now, we return ONE stack, and let IT manage auth
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
@@ -312,78 +326,73 @@ export default function AppNavigator() {
           <RootStack.Screen
             name="GroupDetails"
             component={GroupDetailsScreen}
-            options={{ headerShown: true, title: 'Group Details' }} // Show header on detail screens
+            options={{ ...detailScreenOptions, title: 'Group Details' }}
           />
           <RootStack.Screen
             name="ExpenseDetails"
             component={ExpenseDetailsScreen}
-            options={{ headerShown: true, title: 'Expense Details' }}
+            options={{ ...detailScreenOptions, title: 'Expense Details' }}
           />
           <RootStack.Screen
             name="PersonalFinance"
             component={PersonalFinanceScreen}
-            options={{ headerShown: true, title: 'Personal Finance' }}
+            options={{ ...detailScreenOptions, title: 'Personal Finance' }}
           />
-          {/* <RootStack.Screen
-            name="PersonalFinance"
-            component={PersonalFinanceScreen}
-            options={{ headerShown: true, title: 'Personal Finance' }}
-          /> */}
           <RootStack.Screen
             name="AddPersonalTransaction"
             component={AddPersonalTransactionScreen}
-            options={{ headerShown: true, title: 'Add Transaction' }}
+            options={{ ...detailScreenOptions, title: 'Add Transaction' }}
           />
           <RootStack.Screen
             name="EditPersonalTransaction"
             component={EditPersonalTransactionScreen}
-            options={{ headerShown: true, title: 'Edit Transaction' }}
+            options={{ ...detailScreenOptions, title: 'Edit Transaction' }}
           />
           <RootStack.Screen
             name="SettleUp"
             component={SettleUpScreen}
-            options={{ headerShown: true, title: 'Settle Up' }}
+            options={{ ...detailScreenOptions, title: 'Settle Up' }}
           />
           <RootStack.Screen
             name="AddExpense"
             component={AddExpenseScreen}
-            options={{ headerShown: true, title: 'Add Expense' }}
+            options={{ ...detailScreenOptions, title: 'Add Expense' }}
           />
           <RootStack.Screen
             name="EditExpense"
             component={EditExpenseScreen}
-            options={{ headerShown: true, title: 'Edit Expense' }}
+            options={{ ...detailScreenOptions, title: 'Edit Expense' }}
           />
           <RootStack.Screen
-      name="InviteUser"
-      component={InviteUserScreen}
-      options={{ headerShown: true, title: 'Invite Users' }}
-    />
-    <RootStack.Screen
-      name="AddFoodExpense"
-      component={AddFoodExpenseScreen}
-      options={{ headerShown: true, title: 'Add Food Expense' }}
-    />
-    <RootStack.Screen
-      name="PaymentMethods"
-      component={PaymentMethodsScreen}
-      options={{ headerShown: true, title: 'Payment Methods' }}
-    />
-    <RootStack.Screen
-      name="AddPaymentMethod"
-      component={AddPaymentMethodScreen}
-      options={{ headerShown: true, title: 'Add Payment Method' }}
-    />
-    {/* <RootStack.Screen
-      name="EditPaymentMethod"
-      component={EditPaymentMethodScreen}
-      options={{ headerShown: true, title: 'Edit Payment Method' }}
-    /> */}
-    <RootStack.Screen
-      name="ManageHotel"
-      component={ManageHotelScreen}
-      options={{ headerShown: true, title: 'Manage Hotels' }}
-    />
+            name="InviteUser"
+            component={InviteUserScreen}
+            options={{ ...detailScreenOptions, title: 'Invite Users' }}
+          />
+          <RootStack.Screen
+            name="AddFoodExpense"
+            component={AddFoodExpenseScreen}
+            options={{ ...detailScreenOptions, title: 'Add Food Expense' }}
+          />
+          <RootStack.Screen
+            name="PaymentMethods"
+            component={PaymentMethodsScreen}
+            options={{ ...detailScreenOptions, title: 'Payment Methods' }}
+          />
+          <RootStack.Screen
+            name="AddPaymentMethod"
+            component={AddPaymentMethodScreen}
+            options={{ ...detailScreenOptions, title: 'Add Payment Method' }}
+          />
+          <RootStack.Screen
+            name="EditPaymentMethod"
+            component={EditPaymentMethodScreen}
+            options={{ ...detailScreenOptions, title: 'Edit Payment Method' }}
+          />
+          <RootStack.Screen
+            name="ManageHotel"
+            component={ManageHotelScreen}
+            options={{ ...detailScreenOptions, title: 'Manage Hotels' }}
+          />
         </>
       ) : (
         // User is Logged Out: Show Auth screens

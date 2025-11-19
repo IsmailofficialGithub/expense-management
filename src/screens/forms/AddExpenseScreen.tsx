@@ -321,6 +321,7 @@ if (receiptUri) {
       <SafeScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        hasTabBar={false}
       >
         {/* === CARD 1: Main Details === */}
         <Card style={styles.card}>

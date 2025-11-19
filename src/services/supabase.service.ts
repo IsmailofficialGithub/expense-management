@@ -38,7 +38,7 @@ import {
 // ============================================
 
 export const authService = {
-  signUp: async (email: string, password: string, fullName: string) => {
+  signUp: async (email: string, password: string, fullName: string, invitationToken?: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -49,6 +49,48 @@ export const authService = {
       },
     });
     if (error) throw error;
+
+    // If user signed up, check for pending invitations and auto-add to groups
+    if (data.user) {
+      try {
+        // Check for invitations by token or email
+        let invitationsQuery = supabase
+          .from('group_invitations')
+          .select('*, group:groups(*)')
+          .eq('invited_email', email.toLowerCase())
+          .eq('status', 'pending');
+
+        if (invitationToken) {
+          invitationsQuery = invitationsQuery.eq('invitation_token', invitationToken);
+        }
+
+        const { data: invitations } = await invitationsQuery;
+
+        if (invitations && invitations.length > 0) {
+          // Add user to all groups they were invited to
+          const memberInserts = invitations.map(inv => ({
+            group_id: inv.group_id,
+            user_id: data.user!.id,
+            role: 'member' as const,
+          }));
+
+          await supabase
+            .from('group_members')
+            .insert(memberInserts);
+
+          // Update all invitations to accepted
+          const invitationIds = invitations.map(inv => inv.id);
+          await supabase
+            .from('group_invitations')
+            .update({ status: 'accepted' })
+            .in('id', invitationIds);
+        }
+      } catch (inviteError) {
+        // Don't fail signup if invitation processing fails
+        console.error('Failed to process invitations:', inviteError);
+      }
+    }
+
     return data;
   },
 
@@ -465,151 +507,224 @@ export const invitationService = {
   },
 
   /**
-   * Send invitation email via Nodemailer
+   * Send invitation email via Supabase Edge Function
    */
   async sendInvitationEmail(
     recipientEmail: string,
     inviterName: string,
     groupName: string,
-    password: string,
-    appLink: string
+    signupLink: string,
+    invitationToken: string
   ): Promise<void> {
-    // This will be called from your backend/edge function
-    // For now, we'll create the email template structure
-    const emailTemplate = {
-      to: recipientEmail,
-      subject: `You're invited to join "${groupName}" on Flatmates Expense Tracker`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #6200EE;">🎉 You've been invited!</h2>
-          
-          <p>Hi there,</p>
-          
-          <p><strong>${inviterName}</strong> has invited you to join the group <strong>"${groupName}"</strong> on Flatmates Expense Tracker.</p>
-          
-          <p>An account has been created for you with these credentials:</p>
-          
-          <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Email:</strong> ${recipientEmail}</p>
-            <p style="margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background-color: #e0e0e0; padding: 2px 6px; border-radius: 3px;">${password}</code></p>
-          </div>
-          
-          <p style="color: #F44336;"><strong>⚠️ Important:</strong> Please change your password after your first login for security.</p>
-          
-          <a href="${appLink}" style="display: inline-block; background-color: #6200EE; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0;">
-            Open App & Login
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #6200EE;">🎉 You've been invited!</h2>
+        
+        <p>Hi there,</p>
+        
+        <p><strong>${inviterName}</strong> has invited you to join the group <strong>"${groupName}"</strong> on Flatmates Expense Tracker.</p>
+        
+        <p>Click the button below to create your account and join the group:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${signupLink}" style="display: inline-block; background-color: #6200EE; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            Create Account & Join Group
           </a>
-          
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            If you didn't expect this invitation, you can safely ignore this email.
-          </p>
         </div>
-      `,
-    };
+        
+        <p style="color: #666; font-size: 14px; margin-top: 20px;">
+          Or copy this link: <br/>
+          <code style="background-color: #f5f5f5; padding: 8px; border-radius: 3px; word-break: break-all; display: block; margin-top: 8px;">${signupLink}</code>
+        </p>
+        
+        <p style="color: #666; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+          If you didn't expect this invitation, you can safely ignore this email.
+        </p>
+      </div>
+    `;
 
-    // TODO: Send via Nodemailer from backend
-    console.log('Email to send:', emailTemplate);
-    
-    // For now, just log it
-    // In production, you'll make API call to your backend that uses nodemailer
+    try {
+      // Call Supabase Edge Function to send email
+      const { data, error } = await supabase.functions.invoke('send-invitation-email', {
+        body: {
+          to: recipientEmail,
+          subject: `You're invited to join "${groupName}" on Flatmates Expense Tracker`,
+          html: emailHtml,
+        },
+      });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        // Try to get more details from the error
+        const errorMessage = error.message || 'Failed to send invitation email';
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        throw new Error(errorMessage);
+      }
+
+      // Check if response indicates an error
+      if (data && data.error) {
+        console.error('Edge function returned error:', data.error);
+        throw new Error(data.error || 'Failed to send invitation email');
+      }
+
+      console.log('Email sent successfully:', data);
+    } catch (error: any) {
+      console.error('Email sending failed:', error);
+      // Log the full error for debugging
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+      
+      // Don't throw - invitation is still created even if email fails
+      // This allows the invitation to work even if email service is down
+      // But we still log it for debugging
+      throw error;
+    }
   },
 
   /**
    * Invite user to group
    */
-  async inviteUser(request: InviteUserRequest): Promise<GroupInvitation> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
 
-    // Check if user is group admin
-    const { data: group } = await supabase
-      .from('groups')
-      .select('*')
-      .eq('id', request.group_id)
-      .eq('created_by', user.id)
-      .single();
+ async inviteUser(request: InviteUserRequest): Promise<GroupInvitation> {
+    const logContext = {
+      action: "inviteUser",
+      groupId: request.group_id,
+      invitedEmail: request.invited_email,
+      timestamp: new Date().toISOString(),
+    };
 
-    if (!group) throw new Error('Only group admin can invite users');
+    try {
+      // Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    // Check if email already exists
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', request.invited_email)
-      .single();
+      if (authError) {
+        console.error("Auth error:", { ...logContext, authError });
+        throw new Error("Authentication failed. Please log in again.");
+      }
 
-    if (existingProfile) {
-      // User already exists, just add to group
-      const { error: memberError } = await supabase
-        .from('group_members')
+      if (!user) {
+        console.warn("Unauthorized access attempt:", logContext);
+        throw new Error("Not authenticated.");
+      }
+
+      // Check admin permission
+      const { data: group, error: groupError } = await supabase
+        .from("groups")
+        .select("*")
+        .eq("id", request.group_id)
+        .eq("created_by", user.id)
+        .single();
+
+      if (groupError || !group) {
+        console.warn("Permission denied:", { ...logContext, groupError });
+        throw new Error("Only the group admin can invite users.");
+      }
+
+      // Check if user already exists
+      const { data: existingProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", request.invited_email)
+        .single();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Profile lookup failed:", { ...logContext, profileError });
+        throw new Error("Failed to check existing user profile.");
+      }
+
+      // If user exists already
+      if (existingProfile) {
+        console.log("User exists, adding to group:", logContext);
+
+        const { error: memberError } = await supabase
+          .from("group_members")
+          .insert({
+            group_id: request.group_id,
+            user_id: existingProfile.id,
+            role: "member",
+          });
+
+
+        if (memberError) {
+          console.error("Failed to add existing user:", { ...logContext, memberError });
+          throw new Error("Failed to add user to group.");
+        }
+
+        return {
+          message: "User already existed and was added to the group.",
+        } as any;
+      }
+
+      // Generate invitation token
+      const token = this.generateInvitationToken();
+
+      // Check if invitation already exists for this email and group
+      const { data: existingInvitation } = await supabase
+        .from("group_invitations")
+        .select("id, status")
+        .eq("group_id", request.group_id)
+        .eq("invited_email", request.invited_email)
+        .single();
+
+      if (existingInvitation) {
+        if (existingInvitation.status === "pending") {
+          throw new Error("Invitation already sent to this email.");
+        }
+        // If expired or rejected, create a new one
+      }
+
+      // Create invitation record (without auto-creating user)
+      // User will sign up themselves and be auto-added to group
+      const { data: invitation, error: invError } = await supabase
+        .from("group_invitations")
         .insert({
           group_id: request.group_id,
-          user_id: existingProfile.id,
-          role: 'member',
-        });
+          invited_by: user.id,
+          invited_email: request.invited_email,
+          invitation_token: token,
+          status: "pending",
+        })
+        .select()
+        .single();
 
-      if (memberError) throw memberError;
-      
-      throw new Error('User already exists and has been added to the group');
+      if (invError) {
+        console.error("Failed to create invitation record:", { ...logContext, invError });
+        throw new Error("Failed to create invitation.");
+      }
+
+      // Inviter profile
+      const { data: inviterProfile, error: inviterError } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+
+      if (inviterError) {
+        console.warn("Could not fetch inviter profile:", { ...logContext, inviterError });
+      }
+
+      // Send invitation email with signup link
+      try {
+        // Create signup link with invitation token
+        const signupLink = `flatmates://signup?token=${token}&email=${encodeURIComponent(request.invited_email)}&group=${request.group_id}`;
+        
+        await this.sendInvitationEmail(
+          request.invited_email,
+          inviterProfile?.full_name || "Someone",
+          group.name,
+          signupLink,
+          token
+        );
+      } catch (emailError) {
+        console.error("Email sending failed:", { ...logContext, emailError });
+        // Don't fail the invitation if email fails - invitation is still created
+      }
+
+      console.log("Invitation successful:", logContext);
+      return invitation;
+    } catch (err: any) {
+      console.error("Unhandled error in inviteUser:", { ...logContext, error: err });
+      throw new Error(err.message || "Something went wrong while inviting the user.");
     }
-
-    // Generate password and token
-    const password = this.generateRandomPassword();
-    const token = this.generateInvitationToken();
-
-    // Create new user account via Supabase Admin API
-    // Note: This requires service_role key, should be done on backend
-    const { data: newUser, error: signupError } = await supabase.auth.admin.createUser({
-      email: request.invited_email,
-      password: password,
-      email_confirm: true,
-    });
-
-    if (signupError) throw signupError;
-
-    // Create invitation record
-    const { data: invitation, error: invError } = await supabase
-      .from('group_invitations')
-      .insert({
-        group_id: request.group_id,
-        invited_by: user.id,
-        invited_email: request.invited_email,
-        invitation_token: token,
-        auto_created_user_id: newUser.user.id,
-        temporary_password: password, // In production, encrypt this
-        status: 'pending',
-      })
-      .select()
-      .single();
-
-    if (invError) throw invError;
-
-    // Add user to group
-    await supabase
-      .from('group_members')
-      .insert({
-        group_id: request.group_id,
-        user_id: newUser.user.id,
-        role: 'member',
-      });
-
-    // Get inviter profile
-    const { data: inviterProfile } = await supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', user.id)
-      .single();
-
-    // Send email
-    await this.sendInvitationEmail(
-      request.invited_email,
-      inviterProfile?.full_name || 'Someone',
-      group.name,
-      password,
-      'flatmates://login' // Deep link to app
-    );
-
-    return invitation;
   },
 
   /**
@@ -617,20 +732,19 @@ export const invitationService = {
    */
   async getMyInvitations(groupId: string): Promise<GroupInvitation[]> {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    if (!user) throw new Error("Not authenticated");
 
     const { data, error } = await supabase
-      .from('group_invitations')
-      .select('*')
-      .eq('group_id', groupId)
-      .eq('invited_by', user.id)
-      .order('created_at', { ascending: false });
+      .from("group_invitations")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("invited_by", user.id)
+      .order("created_at", { ascending: false });
 
     if (error) throw error;
     return data || [];
   },
 };
-
 // ============================================
 // FOOD EXPENSE SERVICE
 // ============================================

@@ -28,8 +28,10 @@ import { ErrorHandler } from "../../utils/errorHandler";
 import { useToast } from "../../hooks/useToast";
 import { useNetworkCheck } from "../../hooks/useNetworkCheck";
 import LoadingOverlay from "../../components/LoadingOverlay";
+import { useTheme } from "react-native-paper";
 
 export default function DashboardScreen({ navigation }: any) {
+  const theme = useTheme();
   const { profile } = useAuth();
   
   const { groups } = useGroups();
@@ -148,7 +150,7 @@ export default function DashboardScreen({ navigation }: any) {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -158,8 +160,8 @@ export default function DashboardScreen({ navigation }: any) {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.greeting}>Hello,</Text>
-            <Text style={styles.userName}>
+            <Text style={[styles.greeting, { color: theme.colors.onSurfaceVariant }]}>Hello,</Text>
+            <Text style={[styles.userName, { color: theme.colors.onSurface }]}>
               {profile?.full_name || "User"} 👋
             </Text>
           </View>
@@ -217,7 +219,7 @@ export default function DashboardScreen({ navigation }: any) {
       <Card style={styles.summaryCard}>
         <Card.Content>
           <View style={styles.summaryHeader}>
-            <Text style={styles.summaryTitle}>Personal Finance</Text>
+            <Text style={[styles.summaryTitle, { color: theme.colors.onSurface }]}>Personal Finance</Text>
             <Button
               mode="text"
               onPress={() => navigation.navigate("PersonalFinance")}
@@ -230,7 +232,7 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <IconButton icon="arrow-down-circle" size={24} iconColor="#4CAF50" />
-              <Text style={styles.summaryLabel}>Income</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Income</Text>
               <Text style={[styles.summaryValue, styles.incomeText]}>
                 ₹{personalIncome.toFixed(0)}
               </Text>
@@ -240,7 +242,7 @@ export default function DashboardScreen({ navigation }: any) {
 
             <View style={styles.summaryItem}>
               <IconButton icon="arrow-up-circle" size={24} iconColor="#F44336" />
-              <Text style={styles.summaryLabel}>Expenses</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Expenses</Text>
               <Text style={[styles.summaryValue, styles.expenseText]}>
                 ₹{personalExpenses.toFixed(0)}
               </Text>
@@ -250,7 +252,7 @@ export default function DashboardScreen({ navigation }: any) {
 
             <View style={styles.summaryItem}>
               <IconButton icon="wallet" size={24} iconColor="#2196F3" />
-              <Text style={styles.summaryLabel}>Savings</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Savings</Text>
               <Text style={[styles.summaryValue, styles.savingsText]}>
                 ₹{(personalIncome - personalExpenses).toFixed(0)}
               </Text>
@@ -263,7 +265,7 @@ export default function DashboardScreen({ navigation }: any) {
       <Card style={styles.summaryCard}>
         <Card.Content>
           <View style={styles.summaryHeader}>
-            <Text style={styles.summaryTitle}>Group Expenses</Text>
+            <Text style={[styles.summaryTitle, { color: theme.colors.onSurface }]}>Group Expenses</Text>
             <Button
               mode="text"
               onPress={() => navigation.navigate("Expenses")}
@@ -276,24 +278,24 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <IconButton icon="cash" size={24} iconColor="#4CAF50" />
-              <Text style={styles.summaryLabel}>You Paid</Text>
-              <Text style={styles.summaryValue}>₹{totalPaidByMe.toFixed(0)}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>You Paid</Text>
+              <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>₹{totalPaidByMe.toFixed(0)}</Text>
             </View>
 
             <Divider style={styles.verticalDivider} />
 
             <View style={styles.summaryItem}>
               <IconButton icon="arrow-up" size={24} iconColor="#F44336" />
-              <Text style={styles.summaryLabel}>You Owe</Text>
-              <Text style={styles.summaryValue}>₹{totalIOwe.toFixed(0)}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>You Owe</Text>
+              <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>₹{totalIOwe.toFixed(0)}</Text>
             </View>
 
             <Divider style={styles.verticalDivider} />
 
             <View style={styles.summaryItem}>
               <IconButton icon="arrow-down" size={24} iconColor="#2196F3" />
-              <Text style={styles.summaryLabel}>Owed to You</Text>
-              <Text style={styles.summaryValue}>₹{totalOwedToMe.toFixed(0)}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Owed to You</Text>
+              <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>₹{totalOwedToMe.toFixed(0)}</Text>
             </View>
           </View>
 
@@ -320,7 +322,7 @@ export default function DashboardScreen({ navigation }: any) {
       {/* My Groups Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My Groups</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>My Groups</Text>
           <Button
             mode="text"
             onPress={() => navigation.navigate("Groups")}
@@ -334,7 +336,7 @@ export default function DashboardScreen({ navigation }: any) {
           <Card style={styles.emptyCard}>
             <Card.Content style={styles.emptyContent}>
               <IconButton icon="account-group" size={48} iconColor="#999" />
-              <Text style={styles.emptyText}>No groups yet</Text>
+              <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No groups yet</Text>
               <Button
                 mode="contained"
                 onPress={() => navigation.navigate("Groups")}
@@ -360,8 +362,8 @@ export default function DashboardScreen({ navigation }: any) {
                     label={group.name.substring(0, 2).toUpperCase()}
                   />
                   <View style={styles.groupText}>
-                    <Text style={styles.groupName}>{group.name}</Text>
-                    <Text style={styles.groupMembers}>
+                    <Text style={[styles.groupName, { color: theme.colors.onSurface }]}>{group.name}</Text>
+                    <Text style={[styles.groupMembers, { color: theme.colors.onSurfaceVariant }]}>
                       {group.members?.length || 0} members
                     </Text>
                   </View>
@@ -376,8 +378,8 @@ export default function DashboardScreen({ navigation }: any) {
       {/* Recent Personal Transactions */}
       {recentPersonalTransactions.length > 0 && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Personal Transactions</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Recent Personal Transactions</Text>
             <Button
               mode="text"
               onPress={() => navigation.navigate("PersonalFinance")}
@@ -404,10 +406,10 @@ export default function DashboardScreen({ navigation }: any) {
                     iconColor={transaction.type === 'income' ? '#4CAF50' : '#F44336'}
                   />
                   <View style={styles.transactionInfo}>
-                    <Text style={styles.transactionDescription}>
+                    <Text style={[styles.transactionDescription, { color: theme.colors.onSurface }]}>
                       {transaction.description}
                     </Text>
-                    <Text style={styles.transactionDate}>
+                    <Text style={[styles.transactionDate, { color: theme.colors.onSurfaceVariant }]}>
                       {format(new Date(transaction.date), "MMM dd, yyyy")} • {transaction.category}
                     </Text>
                   </View>
@@ -429,8 +431,8 @@ export default function DashboardScreen({ navigation }: any) {
       {/* Recent Group Expenses */}
       {recentExpenses.length > 0 && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Group Expenses</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Recent Group Expenses</Text>
             <Button
               mode="text"
               onPress={() => navigation.navigate("Expenses")}
@@ -456,22 +458,22 @@ export default function DashboardScreen({ navigation }: any) {
                     {expense.category?.icon}
                   </Text>
                   <View style={styles.expenseInfo}>
-                    <Text style={styles.expenseDescription}>
+                    <Text style={[styles.expenseDescription, { color: theme.colors.onSurface }]}>
                       {expense.description}
                     </Text>
-                    <Text style={styles.expenseDate}>
+                    <Text style={[styles.expenseDate, { color: theme.colors.onSurfaceVariant }]}>
                       {format(new Date(expense.date), "MMM dd, yyyy")}
                     </Text>
                   </View>
                 </View>
-                <View style={styles.expenseRight}>
-                  <Text style={styles.expenseAmount}>₹{expense.amount}</Text>
-                  <Text style={styles.expensePaidBy}>
-                    {expense.paid_by === profile?.id
-                      ? "You paid"
-                      : `${expense.paid_by_user?.full_name || "Someone"} paid`}
-                  </Text>
-                </View>
+                  <View style={styles.expenseRight}>
+                    <Text style={[styles.expenseAmount, { color: theme.colors.onSurface }]}>₹{expense.amount}</Text>
+                    <Text style={[styles.expensePaidBy, { color: theme.colors.onSurfaceVariant }]}>
+                      {expense.paid_by === profile?.id
+                        ? "You paid"
+                        : `${expense.paid_by_user?.full_name || "Someone"} paid`}
+                    </Text>
+                  </View>
               </Card.Content>
             </Card>
           ))}
@@ -502,6 +504,31 @@ export default function DashboardScreen({ navigation }: any) {
         </Button>
       </View>
 
+      {/* Settings & Tools */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Settings & Tools</Text>
+        <View style={styles.toolsGrid}>
+          <Card
+            style={[styles.toolCard, styles.toolCardFirst]}
+            onPress={() => navigation.navigate("PaymentMethods")}
+          >
+            <Card.Content style={styles.toolContent}>
+              <IconButton icon="credit-card" size={32} iconColor="#6200EE" />
+              <Text style={[styles.toolLabel, { color: theme.colors.onSurface }]}>Payment Methods</Text>
+            </Card.Content>
+          </Card>
+          <Card
+            style={[styles.toolCard, styles.toolCardLast]}
+            onPress={() => navigation.navigate("ManageHotel")}
+          >
+            <Card.Content style={styles.toolContent}>
+              <IconButton icon="store" size={32} iconColor="#4CAF50" />
+              <Text style={[styles.toolLabel, { color: theme.colors.onSurface }]}>Manage Hotels</Text>
+            </Card.Content>
+          </Card>
+        </View>
+      </View>
+
       <LoadingOverlay
         visible={isLoading && !refreshing}
         message="Loading your data..."
@@ -513,7 +540,6 @@ export default function DashboardScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
   },
   content: {
     padding: 16,
@@ -529,12 +555,10 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 16,
-    color: "#666",
   },
   userName: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#333",
   },
   avatar: {
     backgroundColor: "#6200EE",
@@ -575,7 +599,6 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     marginBottom: 16,
-    backgroundColor: "#fff",
     elevation: 2,
   },
   summaryHeader: {
@@ -587,7 +610,6 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -600,13 +622,11 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 11,
-    color: '#666',
     marginTop: 4,
   },
   summaryValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
     marginTop: 4,
   },
   incomeText: {
@@ -651,10 +671,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#333",
   },
   emptyCard: {
-    backgroundColor: "#fff",
   },
   emptyContent: {
     alignItems: "center",
@@ -663,7 +681,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#666",
     marginBottom: 8,
   },
   emptyButton: {
@@ -671,7 +688,6 @@ const styles = StyleSheet.create({
   },
   groupCard: {
     marginBottom: 8,
-    backgroundColor: "#fff",
   },
   groupContent: {
     flexDirection: "row",
@@ -690,16 +706,13 @@ const styles = StyleSheet.create({
   groupName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
   },
   groupMembers: {
     fontSize: 12,
-    color: "#666",
     marginTop: 2,
   },
   transactionCard: {
     marginBottom: 8,
-    backgroundColor: "#fff",
   },
   transactionContent: {
     flexDirection: "row",
@@ -717,11 +730,9 @@ const styles = StyleSheet.create({
   transactionDescription: {
     fontSize: 16,
     fontWeight: "500",
-    color: "#333",
   },
   transactionDate: {
     fontSize: 12,
-    color: "#666",
     marginTop: 2,
   },
   transactionAmount: {
@@ -730,12 +741,12 @@ const styles = StyleSheet.create({
   },
   expenseCard: {
     marginBottom: 8,
-    backgroundColor: "#fff",
   },
   expenseContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 4,  // Reduced from default padding
   },
   expenseLeft: {
     flexDirection: "row",
@@ -743,41 +754,62 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expenseCategory: {
-    fontSize: 32,
-    marginRight: 12,
+    fontSize: 28,  // Reduced from 32
+    marginRight: 10,  // Reduced from 12
   },
   expenseInfo: {
     flex: 1,
   },
   expenseDescription: {
-    fontSize: 16,
+    fontSize: 15,  // Slightly reduced from 16
     fontWeight: "500",
-    color: "#333",
   },
   expenseDate: {
-    fontSize: 12,
-    color: "#666",
+    fontSize: 11,  // Reduced from 12
     marginTop: 2,
   },
   expenseRight: {
     alignItems: "flex-end",
   },
   expenseAmount: {
-    fontSize: 16,
+    fontSize: 15,  // Reduced from 16
     fontWeight: "bold",
-    color: "#333",
   },
   expensePaidBy: {
-    fontSize: 12,
-    color: "#666",
+    fontSize: 11,  // Reduced from 12
     marginTop: 2,
   },
   quickActions: {
     flexDirection: "row",
     gap: 8,
     marginTop: 8,
+    marginBottom: 24,  // Added margin bottom
   },
   actionButton: {
     flex: 1,
+  },
+  toolsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  toolCard: {
+    flex: 1,
+    elevation: 2,
+  },
+  toolCardFirst: {
+    marginRight: 6,
+  },
+  toolCardLast: {
+    marginLeft: 6,
+  },
+  toolContent: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  toolLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
   },
 });

@@ -9,9 +9,10 @@ import { fetchGroups, createGroup } from '../../store/slices/groupsSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
-
+import { useTheme } from 'react-native-paper';
 
 export default function GroupsScreen({ navigation }: any) {
+  const theme = useTheme();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck({
     showToast: true,
@@ -105,18 +106,18 @@ export default function GroupsScreen({ navigation }: any) {
               style={styles.groupAvatar}
             />
             <View style={styles.groupInfo}>
-              <Text style={styles.groupName}>{item.name}</Text>
+              <Text style={[styles.groupName, { color: theme.colors.onSurface }]}>{item.name}</Text>
               {item.description ? (
-                <Text style={styles.groupDescription} numberOfLines={2}>
+                <Text style={[styles.groupDescription, { color: theme.colors.onSurfaceVariant }]} numberOfLines={2}>
                   {item.description}
                 </Text>
               ) : null}
               <View style={styles.groupMeta}>
                 <IconButton icon="account-group" size={16} style={styles.metaIcon} />
-                <Text style={styles.metaText}>{memberCount} members</Text>
+                <Text style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{memberCount} members</Text>
                 {isCreator && (
                   <>
-                    <Text style={styles.metaDivider}>•</Text>
+                    <Text style={[styles.metaDivider, { color: theme.colors.onSurfaceVariant }]}>•</Text>
                     <Text style={styles.creatorBadge}>Admin</Text>
                   </>
                 )}
@@ -131,9 +132,9 @@ export default function GroupsScreen({ navigation }: any) {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <IconButton icon="account-group-outline" size={80} iconColor="#ccc" />
-      <Text style={styles.emptyTitle}>No Groups Yet</Text>
-      <Text style={styles.emptyText}>
+      <IconButton icon="account-group-outline" size={80} iconColor={theme.colors.onSurfaceDisabled} />
+      <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>No Groups Yet</Text>
+      <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
         Create a group to start tracking expenses with your flatmates
       </Text>
       <Button
@@ -148,7 +149,7 @@ export default function GroupsScreen({ navigation }: any) {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Search Bar */}
       <Searchbar
         placeholder="Search groups"
@@ -184,9 +185,9 @@ export default function GroupsScreen({ navigation }: any) {
         <Modal
           visible={modalVisible}
           onDismiss={() => setModalVisible(false)}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>Create New Group</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Create New Group</Text>
           
           <TextInput
             label="Group Name *"
@@ -242,7 +243,6 @@ export default function GroupsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   searchBar: {
     margin: 16,
@@ -255,7 +255,6 @@ const styles = StyleSheet.create({
   },
   groupCard: {
     marginBottom: 12,
-    backgroundColor: '#fff',
     elevation: 2,
   },
   cardContent: {
@@ -275,12 +274,10 @@ const styles = StyleSheet.create({
   groupName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 4,
   },
   groupDescription: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 8,
   },
   groupMeta: {
@@ -293,12 +290,10 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: '#666',
     marginLeft: -4,
   },
   metaDivider: {
     fontSize: 12,
-    color: '#666',
     marginHorizontal: 8,
   },
   creatorBadge: {
@@ -320,13 +315,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -341,7 +334,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#6200EE',
   },
   modalContent: {
-    backgroundColor: 'white',
     padding: 24,
     margin: 20,
     borderRadius: 8,
@@ -349,7 +341,6 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 20,
   },
   input: {

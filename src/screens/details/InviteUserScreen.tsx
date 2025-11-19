@@ -6,6 +6,7 @@ import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { invitationService } from '../../services/supabase.service';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import SafeScrollView from '../../components/SafeScrollView';
 
 interface Props {
   navigation: any;
@@ -86,8 +87,12 @@ export default function InviteUserScreen({ navigation, route }: Props) {
         console.error(`Failed to invite ${invitedEmail}:`, error.message);
         
         // Show specific error for this email
-        if (error.message.includes('already exists')) {
+        if (error.message.includes('already exists') || error.message.includes('already a member')) {
           showToast(`${invitedEmail} is already a member`, 'warning');
+        } else if (error.message.includes('already sent')) {
+          showToast(`Invitation already sent to ${invitedEmail}`, 'warning');
+        } else {
+          showToast(`Failed to invite ${invitedEmail}: ${error.message}`, 'error');
         }
       }
     }
@@ -120,7 +125,7 @@ export default function InviteUserScreen({ navigation, route }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.content}>
+      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
         {/* Info Card */}
         <Card style={styles.infoCard}>
           <Card.Content>
@@ -205,7 +210,7 @@ export default function InviteUserScreen({ navigation, route }: Props) {
         >
           Send Invitations
         </Button>
-      </ScrollView>
+      </SafeScrollView>
 
       <LoadingOverlay visible={isInviting} message="Sending invitations..." />
     </KeyboardAvoidingView>

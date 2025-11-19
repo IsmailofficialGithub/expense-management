@@ -139,7 +139,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.container}>
-      <SafeScrollView contentContainerStyle={styles.content}>
+      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
         {/* Expense Header */}
         <Card style={styles.headerCard}>
           <Card.Content>
