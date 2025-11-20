@@ -33,6 +33,7 @@ const CombinedDarkTheme = {
 function AppContent() {
   const { theme: userTheme } = useUI();
   const systemTheme = useColorScheme();
+  const navigationRef = React.useRef<any>(null);
   
   // Determine the actual theme to use
   const actualTheme = userTheme === 'auto' 
@@ -41,10 +42,30 @@ function AppContent() {
   
   const paperTheme = actualTheme === 'dark' ? CombinedDarkTheme : CombinedLightTheme;
   const navigationTheme = actualTheme === 'dark' ? NavigationDarkTheme : NavigationDefaultTheme;
+
+  // Setup notifications
+  React.useEffect(() => {
+    const setupNotifications = async () => {
+      const { notificationsService } = await import('./src/services/notifications.service');
+      
+      // Request permissions
+      await notificationsService.requestPermissions();
+      
+      // Setup listeners for navigation
+      if (navigationRef.current) {
+        notificationsService.setupListeners(navigationRef.current);
+      }
+    };
+
+    setupNotifications();
+  }, []);
   
   return (
     <PaperProvider theme={paperTheme}>
-      <NavigationContainer theme={navigationTheme}>
+      <NavigationContainer 
+        ref={navigationRef}
+        theme={navigationTheme}
+      >
         <OfflineIndicator />
         <AppNavigator />
         <Toast />

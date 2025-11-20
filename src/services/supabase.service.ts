@@ -23,6 +23,7 @@ import {
   ExpenseFoodItem,
   InviteUserRequest,
   GroupInvitation,
+  GroupInvitationWithDetails,
   UserPaymentMethod,
   CreatePaymentMethodRequest,
   HotelMenuItem,
@@ -46,25 +47,41 @@ export const authService = {
         data: {
           full_name: fullName,
         },
+        emailRedirectTo: undefined, // Don't auto-confirm
       },
     });
     if (error) throw error;
 
-    // If user signed up, check for pending invitations and auto-add to groups
+    // Note: Invitation token is already stored in group_invitations table
+    // We don't need to store it in user metadata - we'll look it up by email when user logs in
+    
+    // Sign out immediately after signup to prevent auto-login
+    // User must verify email and then manually log in
+    await supabase.auth.signOut();
+
+    // Note: We don't process invitations here because user needs to verify email first
+    // Invitations will be processed when user logs in after verification
+    // (handled in signIn flow - looks up invitations by email)
+
+    return data;
+  },
+
+  signIn: async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+
+    // After successful login, check for pending invitations and process them
     if (data.user) {
       try {
-        // Check for invitations by token or email
-        let invitationsQuery = supabase
+        // Check for invitations by email (invitation token is stored in group_invitations table)
+        const { data: invitations } = await supabase
           .from('group_invitations')
           .select('*, group:groups(*)')
           .eq('invited_email', email.toLowerCase())
           .eq('status', 'pending');
-
-        if (invitationToken) {
-          invitationsQuery = invitationsQuery.eq('invitation_token', invitationToken);
-        }
-
-        const { data: invitations } = await invitationsQuery;
 
         if (invitations && invitations.length > 0) {
           // Add user to all groups they were invited to
@@ -86,20 +103,11 @@ export const authService = {
             .in('id', invitationIds);
         }
       } catch (inviteError) {
-        // Don't fail signup if invitation processing fails
+        // Don't fail login if invitation processing fails
         console.error('Failed to process invitations:', inviteError);
       }
     }
 
-    return data;
-  },
-
-  signIn: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) throw error;
     return data;
   },
 
@@ -132,13 +140,22 @@ export const authService = {
 // ============================================
 
 export const profileService = {
-  getProfile: async (userId: string): Promise<Profile> => {
+  getProfile: async (userId: string): Promise<Profile | null> => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
-    if (error) throw error;
+    
+    // Handle case where profile doesn't exist (PGRST116)
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Profile doesn't exist yet - return null instead of throwing
+        console.warn(`Profile not found for user ${userId}. This may happen if the profile trigger hasn't run yet.`);
+        return null;
+      }
+      throw error;
+    }
     return data;
   },
 
@@ -507,67 +524,160 @@ export const invitationService = {
   },
 
   /**
-   * Send invitation email via Supabase Edge Function
+   * Send invitation email via external email API
    */
   async sendInvitationEmail(
     recipientEmail: string,
     inviterName: string,
     groupName: string,
-    signupLink: string,
-    invitationToken: string
+    password: string | null,
+    appLink: string,
+    webLink: string
   ): Promise<void> {
     const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #6200EE;">🎉 You've been invited!</h2>
-        
-        <p>Hi there,</p>
-        
-        <p><strong>${inviterName}</strong> has invited you to join the group <strong>"${groupName}"</strong> on Flatmates Expense Tracker.</p>
-        
-        <p>Click the button below to create your account and join the group:</p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${signupLink}" style="display: inline-block; background-color: #6200EE; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-            Create Account & Join Group
-          </a>
-        </div>
-        
-        <p style="color: #666; font-size: 14px; margin-top: 20px;">
-          Or copy this link: <br/>
-          <code style="background-color: #f5f5f5; padding: 8px; border-radius: 3px; word-break: break-all; display: block; margin-top: 8px;">${signupLink}</code>
-        </p>
-        
-        <p style="color: #666; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
-          If you didn't expect this invitation, you can safely ignore this email.
-        </p>
-      </div>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 40px 20px; text-align: center;">
+              <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <!-- Header -->
+                <tr>
+                  <td style="background-color: #6200EE; padding: 30px 20px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px;">🎉 You've been invited!</h1>
+                  </td>
+                </tr>
+                
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 30px 20px;">
+                    <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Hi there,</p>
+                    
+                    <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                      <strong>${inviterName}</strong> has invited you to join the group <strong>"${groupName}"</strong> on Flatmates Expense Tracker.
+                    </p>
+                    
+                    ${password ? `
+                    <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                      Use the credentials below to create your account and join the group:
+                    </p>
+                    
+                    <!-- Credentials Box -->
+                    <table role="presentation" style="width: 100%; background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin: 0 0 30px 0; border: 1px solid #e0e0e0;">
+                      <tr>
+                        <td style="padding: 0 0 10px 0;">
+                          <p style="color: #666666; font-size: 14px; margin: 0; font-weight: bold;">Email:</p>
+                          <p style="color: #333333; font-size: 16px; margin: 5px 0 0 0; font-family: monospace;">${recipientEmail}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 10px 0 0 0;">
+                          <p style="color: #666666; font-size: 14px; margin: 0; font-weight: bold;">Password:</p>
+                          <p style="color: #333333; font-size: 18px; margin: 5px 0 0 0; font-family: monospace; font-weight: bold; letter-spacing: 2px;">${password}</p>
+                        </td>
+                      </tr>
+                    </table>
+                    ` : `
+                    <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                      Open the app to view and accept this invitation.
+                    </p>
+                    `}
+                    
+                    <!-- Button -->
+                    <table role="presentation" style="width: 100%; margin: 0 0 20px 0;">
+                      <tr>
+                        <td style="text-align: center; padding: 0;">
+                          <a href="${appLink}" style="display: inline-block; background-color: #6200EE; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: bold; font-size: 16px; text-align: center; min-width: 200px;">
+                            ${password ? 'Open App & Sign Up' : 'Open App & View Invitation'}
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    ${password ? `
+                    <!-- Instructions for New Users -->
+                    <div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                      <p style="color: #1565c0; font-size: 14px; margin: 0 0 10px 0; line-height: 1.6; font-weight: bold;">
+                        📱 How to Sign Up:
+                      </p>
+                      <ol style="color: #1565c0; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
+                        <li>Click the button above to open the app (or install it if needed)</li>
+                        <li>Go to the Sign Up screen and use the email and password shown above</li>
+                        <li>You'll automatically be added to the group &quot;${groupName}&quot; after signup</li>
+                      </ol>
+                    </div>
+                    
+                    <!-- Manual Sign Up Option -->
+                    <div style="background-color: #f5f5f5; border: 1px solid #e0e0e0; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                      <p style="color: #666666; font-size: 13px; margin: 0 0 8px 0; font-weight: bold;">
+                        Can't open the app? Sign up manually:
+                      </p>
+                      <p style="color: #333333; font-size: 13px; margin: 0; line-height: 1.6;">
+                        Open the Flatmates Expense Tracker app and sign up with these credentials:<br/>
+                        <strong>Email:</strong> ${recipientEmail}<br/>
+                        <strong>Password:</strong> ${password}<br/>
+                        <em style="color: #666;">(You'll be automatically added to the group after signup)</em>
+                      </p>
+                    </div>
+                    ` : `
+                    <!-- Instructions for Existing Users -->
+                    <div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                      <p style="color: #1565c0; font-size: 14px; margin: 0 0 10px 0; line-height: 1.6; font-weight: bold;">
+                        📱 How to Accept:
+                      </p>
+                      <ol style="color: #1565c0; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
+                        <li>Click the button above to open the app</li>
+                        <li>Go to Profile → Group Invitations</li>
+                        <li>Accept the invitation to join &quot;${groupName}&quot;</li>
+                      </ol>
+                    </div>
+                    `}
+                  </td>
+                </tr>
+                
+                <!-- Footer -->
+                <tr>
+                  <td style="padding: 20px; text-align: center; border-top: 1px solid #eeeeee;">
+                    <p style="color: #999999; font-size: 12px; margin: 0;">
+                      If you didn't expect this invitation, you can safely ignore this email.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
     try {
-      // Call Supabase Edge Function to send email
-      const { data, error } = await supabase.functions.invoke('send-invitation-email', {
-        body: {
+      // Call external email API directly
+      const response = await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           to: recipientEmail,
           subject: `You're invited to join "${groupName}" on Flatmates Expense Tracker`,
           html: emailHtml,
-        },
+        }),
       });
 
-      if (error) {
-        console.error('Edge function error:', error);
-        // Try to get more details from the error
-        const errorMessage = error.message || 'Failed to send invitation email';
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        throw new Error(errorMessage);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Email API error response:', errorText);
+        throw new Error(`Email API returned status ${response.status}: ${errorText}`);
       }
 
-      // Check if response indicates an error
-      if (data && data.error) {
-        console.error('Edge function returned error:', data.error);
-        throw new Error(data.error || 'Failed to send invitation email');
-      }
-
-      console.log('Email sent successfully:', data);
+      const result = await response.json();
+      console.log('Email sent successfully:', result);
     } catch (error: any) {
       console.error('Email sending failed:', error);
       // Log the full error for debugging
@@ -618,109 +728,107 @@ export const invitationService = {
         console.warn("Permission denied:", { ...logContext, groupError });
         throw new Error("Only the group admin can invite users.");
       }
-
+      console.log("request.invited_email", request.invited_email);
       // Check if user already exists
       const { data: existingProfile, error: profileError } = await supabase
         .from("profiles")
         .select("id")
         .eq("email", request.invited_email)
+        // .maybeSingle();
         .single();
+        console.log("existingProfile", existingProfile);
+        console.log("profileError", profileError);
 
       if (profileError && profileError.code !== "PGRST116") {
         console.error("Profile lookup failed:", { ...logContext, profileError });
         throw new Error("Failed to check existing user profile.");
       }
 
-      // If user exists already
+      // If user exists already, just create invitation (no password, no user creation)
       if (existingProfile) {
-        console.log("User exists, adding to group:", logContext);
-
-        const { error: memberError } = await supabase
+        console.log("User exists, creating simple invitation:", logContext);
+        
+        // Check if user is already a member
+        const { data: existingMember } = await supabase
           .from("group_members")
+          .select("id")
+          .eq("group_id", request.group_id)
+          .eq("user_id", existingProfile.id)
+          .single();
+
+        if (existingMember) {
+          throw new Error("User is already a member of this group.");
+        }
+
+        // Check if invitation already exists
+        const { data: existingInvitation } = await supabase
+          .from("group_invitations")
+          .select("id, status")
+          .eq("group_id", request.group_id)
+          .eq("invited_email", request.invited_email)
+          .single();
+
+        if (existingInvitation) {
+          if (existingInvitation.status === "pending") {
+            throw new Error("Invitation already sent to this user.");
+          }
+          // If expired or rejected, create a new one
+        }
+
+        // Generate invitation token
+        const token = this.generateInvitationToken();
+
+        // Create invitation for existing user (no password field)
+        const { data: invitation, error: invError } = await supabase
+          .from("group_invitations")
           .insert({
             group_id: request.group_id,
-            user_id: existingProfile.id,
-            role: "member",
-          });
+            invited_by: user.id,
+            invited_email: request.invited_email,
+            invitation_token: token,
+            status: "pending",
+          })
+          .select()
+          .single();
 
-
-        if (memberError) {
-          console.error("Failed to add existing user:", { ...logContext, memberError });
-          throw new Error("Failed to add user to group.");
+        if (invError) {
+          console.error("Failed to create invitation for existing user:", { ...logContext, invError });
+          throw new Error("Failed to create invitation.");
         }
 
-        return {
-          message: "User already existed and was added to the group.",
-        } as any;
-      }
+        // Get inviter profile for email
+        const { data: inviterProfile, error: inviterError } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
 
-      // Generate invitation token
-      const token = this.generateInvitationToken();
-
-      // Check if invitation already exists for this email and group
-      const { data: existingInvitation } = await supabase
-        .from("group_invitations")
-        .select("id, status")
-        .eq("group_id", request.group_id)
-        .eq("invited_email", request.invited_email)
-        .single();
-
-      if (existingInvitation) {
-        if (existingInvitation.status === "pending") {
-          throw new Error("Invitation already sent to this email.");
+        if (inviterError) {
+          console.warn("Could not fetch inviter profile:", { ...logContext, inviterError });
         }
-        // If expired or rejected, create a new one
+
+        // Send simple invitation email (no password, no credentials)
+        try {
+          const appLink = `flatmates://invitations`;
+          
+          await this.sendInvitationEmail(
+            request.invited_email,
+            inviterProfile?.full_name || "Someone",
+            group.name,
+            null, // No password for existing users
+            appLink,
+            appLink
+          );
+        } catch (emailError) {
+          console.error("Email sending failed for existing user:", { ...logContext, emailError });
+          // Don't fail invitation if email fails
+        }
+
+        return invitation;
       }
 
-      // Create invitation record (without auto-creating user)
-      // User will sign up themselves and be auto-added to group
-      const { data: invitation, error: invError } = await supabase
-        .from("group_invitations")
-        .insert({
-          group_id: request.group_id,
-          invited_by: user.id,
-          invited_email: request.invited_email,
-          invitation_token: token,
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      if (invError) {
-        console.error("Failed to create invitation record:", { ...logContext, invError });
-        throw new Error("Failed to create invitation.");
-      }
-
-      // Inviter profile
-      const { data: inviterProfile, error: inviterError } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .single();
-
-      if (inviterError) {
-        console.warn("Could not fetch inviter profile:", { ...logContext, inviterError });
-      }
-
-      // Send invitation email with signup link
-      try {
-        // Create signup link with invitation token
-        const signupLink = `flatmates://signup?token=${token}&email=${encodeURIComponent(request.invited_email)}&group=${request.group_id}`;
-        
-        await this.sendInvitationEmail(
-          request.invited_email,
-          inviterProfile?.full_name || "Someone",
-          group.name,
-          signupLink,
-          token
-        );
-      } catch (emailError) {
-        console.error("Email sending failed:", { ...logContext, emailError });
-        // Don't fail the invitation if email fails - invitation is still created
-      }
-
-      console.log("Invitation successful:", logContext);
-      return invitation;
+      // User doesn't exist - don't create account, just show error
+      throw new Error("User does not exist. User must have an account to be invited.");
     } catch (err: any) {
       console.error("Unhandled error in inviteUser:", { ...logContext, error: err });
       throw new Error(err.message || "Something went wrong while inviting the user.");
@@ -728,7 +836,7 @@ export const invitationService = {
   },
 
   /**
-   * Get invitations sent by user
+   * Get invitations sent by user (for a specific group)
    */
   async getMyInvitations(groupId: string): Promise<GroupInvitation[]> {
     const { data: { user } } = await supabase.auth.getUser();
@@ -743,6 +851,117 @@ export const invitationService = {
 
     if (error) throw error;
     return data || [];
+  },
+
+  /**
+   * Get pending invitations for current user (invitations received)
+   */
+  async getPendingInvitations(): Promise<GroupInvitationWithDetails[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    // Get user's email
+    const userEmail = user.email?.toLowerCase();
+    if (!userEmail) throw new Error("User email not found");
+
+    const { data, error } = await supabase
+      .from("group_invitations")
+      .select(`
+        *,
+        group:groups(*)
+      `)
+      .eq("invited_email", userEmail)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as GroupInvitationWithDetails[];
+  },
+
+  /**
+   * Accept a group invitation
+   */
+  async acceptInvitation(invitationId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    // Get the invitation
+    const { data: invitation, error: invError } = await supabase
+      .from("group_invitations")
+      .select("*")
+      .eq("id", invitationId)
+      .eq("status", "pending")
+      .single();
+
+    if (invError || !invitation) {
+      throw new Error("Invitation not found or already processed");
+    }
+
+    // Verify the invitation is for this user
+    const userEmail = user.email?.toLowerCase();
+    if (invitation.invited_email.toLowerCase() !== userEmail) {
+      throw new Error("This invitation is not for you");
+    }
+
+    // Add user to group
+    const { error: memberError } = await supabase
+      .from("group_members")
+      .insert({
+        group_id: invitation.group_id,
+        user_id: user.id,
+        role: "member",
+      });
+
+    if (memberError) {
+      // Check if already a member
+      if (memberError.code === "23505") {
+        // User is already a member, just update invitation status
+        await supabase
+          .from("group_invitations")
+          .update({ status: "accepted", accepted_at: new Date().toISOString() })
+          .eq("id", invitationId);
+        return;
+      }
+      throw memberError;
+    }
+
+    // Update invitation status
+    await supabase
+      .from("group_invitations")
+      .update({ status: "accepted", accepted_at: new Date().toISOString() })
+      .eq("id", invitationId);
+  },
+
+  /**
+   * Reject a group invitation
+   */
+  async rejectInvitation(invitationId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    // Get the invitation
+    const { data: invitation, error: invError } = await supabase
+      .from("group_invitations")
+      .select("*")
+      .eq("id", invitationId)
+      .eq("status", "pending")
+      .single();
+
+    if (invError || !invitation) {
+      throw new Error("Invitation not found or already processed");
+    }
+
+    // Verify the invitation is for this user
+    const userEmail = user.email?.toLowerCase();
+    if (invitation.invited_email.toLowerCase() !== userEmail) {
+      throw new Error("This invitation is not for you");
+    }
+
+    // Update invitation status to expired (we use expired as rejected)
+    await supabase
+      .from("group_invitations")
+      .update({ status: "expired" })
+      .eq("id", invitationId);
   },
 };
 // ============================================

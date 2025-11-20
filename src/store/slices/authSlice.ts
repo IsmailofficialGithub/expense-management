@@ -28,13 +28,11 @@ export const signUp = createAsyncThunk(
   async (data: SignUpData, { rejectWithValue }) => {
     try {
       const result = await authService.signUp(data.email, data.password, data.full_name, data.invitationToken);
-      if (result.user) {
-        const profile = await profileService.getProfile(result.user.id);
-        return { user: result.user, profile };
-      }
-      throw new Error('Sign up failed');
+      // After signup, user is signed out and must verify email
+      // Return null user to indicate no auto-login
+      return { user: null, profile: null, requiresVerification: true };
     } catch (error: any) {
-      return rejectWithValue(error.message);
+      return rejectWithValue(error.message || 'Sign up failed');
     }
   }
 );
@@ -45,12 +43,20 @@ export const signIn = createAsyncThunk(
     try {
       const result = await authService.signIn(data.email, data.password);
       if (result.user) {
-        const profile = await profileService.getProfile(result.user.id);
+        // Profile might not exist if user was created manually
+        // Try to get profile, but don't fail if it doesn't exist
+        let profile: Profile | null = null;
+        try {
+          profile = await profileService.getProfile(result.user.id);
+        } catch (profileError: any) {
+          // If profile doesn't exist, that's okay - user can still log in
+          console.warn('Profile not found for user, they may need to complete profile setup:', profileError.message);
+        }
         return { user: result.user, profile };
       }
       throw new Error('Sign in failed');
     } catch (error: any) {
-      return rejectWithValue(error.message);
+      return rejectWithValue(error.message || 'Sign in failed');
     }
   }
 );
@@ -72,12 +78,19 @@ export const initializeAuth = createAsyncThunk(
     try {
       const user = await authService.getCurrentUser();
       if (user) {
-        const profile = await profileService.getProfile(user.id);
+        // Profile might not exist - handle gracefully
+        let profile: Profile | null = null;
+        try {
+          profile = await profileService.getProfile(user.id);
+        } catch (profileError: any) {
+          // Profile doesn't exist - that's okay, user can still use app
+          console.warn('Profile not found during initialization:', profileError.message);
+        }
         return { user, profile };
       }
       return { user: null, profile: null };
     } catch (error: any) {
-      return rejectWithValue(error.message);
+      return rejectWithValue(error.message || 'Failed to initialize auth');
     }
   }
 );
@@ -133,9 +146,14 @@ const authSlice = createSlice({
     });
     builder.addCase(signUp.fulfilled, (state, action) => {
       state.loading = false;
-      state.user = action.payload.user;
-      state.profile = action.payload.profile;
-      state.isAuthenticated = true;
+      // Don't set user - user must verify email and log in manually
+      state.user = null;
+      state.profile = null;
+      state.isAuthenticated = false;
+      // Store verification message in error field (will be shown as success message)
+      state.error = action.payload.requiresVerification 
+        ? 'VERIFICATION_REQUIRED' 
+        : null;
     });
     builder.addCase(signUp.rejected, (state, action) => {
       state.loading = false;

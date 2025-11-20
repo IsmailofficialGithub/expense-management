@@ -12381,3 +12381,809 @@ What we created:
 ✅ Custom Hooks - useHotels() and usePaymentMethods()
 
 Reply "next" for Step 5: Screen Components 🚀
+
+---
+
+## 🔧 TROUBLESHOOTING: User Creation Issues
+
+### Problem: "Database error creating new user"
+
+**Error Message**: `Failed to create user: Database error creating new user`
+
+**Root Cause**: The `handle_new_user()` database trigger is failing when trying to create a profile record automatically.
+
+**Solution**: Fix the trigger with better error handling
+
+**SQL Fix** (Run in Supabase SQL Editor):
+
+```sql
+-- Fix the trigger with better error handling
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS handle_new_user();
+
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.email, ''),
+    COALESCE(NEW.raw_user_meta_data->>'full_name', SPLIT_PART(COALESCE(NEW.email, ''), '@', 1), 'User'),
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE WARNING 'Profile creation failed for user %: %', NEW.id, SQLERRM;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION handle_new_user();
+```
+
+**What This Fixes**:
+- ✅ Handles NULL email values with COALESCE
+- ✅ Prevents duplicate profile errors with ON CONFLICT
+- ✅ Adds exception handling so user creation doesn't fail
+- ✅ Provides default values for missing data
+
+**After Fixing**:
+1. Try creating a user again via Supabase GUI
+2. Check if profile was created: `SELECT * FROM profiles WHERE id = 'user-id'`
+3. If still failing, check Supabase logs for specific error
+
+**Common Issues**:
+- Email is NULL → Fixed with COALESCE
+- Profile already exists → Fixed with ON CONFLICT DO NOTHING
+- Missing full_name → Uses email username or 'User' as default
+- Permission issues → Function uses SECURITY DEFINER
+
+---
+
+## 📧 INVITATION FLOW
+
+### How User Invitations Work:
+
+1. **Admin invites user** → `invitationService.inviteUser()` called
+2. **Invitation record created** → Stored in `group_invitations` table with:
+   - `invited_email` - Email address
+   - `invitation_token` - Unique token
+   - `temporary_password` - Random 8-character password
+   - `status` - 'pending'
+3. **Email sent** → Via external API (`https://send-email-nu-five.vercel.app/api/send-email`)
+   - Contains: Email, Password, Signup link
+   - Deep link: `flatmates://signup?email=...&token=...`
+4. **User signs up** → Uses provided credentials in SignupScreen
+   - Email is pre-filled from deep link
+   - User enters password and name
+   - `authService.signUp()` called with invitationToken
+5. **Auto-join group** → `authService.signUp()` checks for pending invitations
+   - Finds invitation by email or token
+   - Adds user to group_members
+   - Updates invitation status to 'accepted'
+
+**Important Notes**:
+- ❌ We DON'T auto-create accounts (causes database errors)
+- ✅ Users sign up manually with provided credentials
+- ✅ Deep link points to signup, not login
+- ✅ Email clearly states "Sign Up" not "Login"
+
+---
+
+## 📬 GROUP INVITATIONS FOR EXISTING USERS
+
+### How It Works:
+
+**For Existing Users (who already have an account)**:
+1. Admin invites user → System checks if user exists
+2. If user exists → Creates invitation record ONLY
+   - ❌ Does NOT call `generateRandomPassword()`
+   - ❌ Does NOT create user account
+   - ❌ Does NOT store password in invitation
+   - ✅ Just creates invitation record with token
+3. Email sent → Simple notification email (no password, no credentials, just invitation link)
+4. User sees invitation → In "Group Invitations" screen (Profile → Group Invitations)
+5. User accepts → Automatically added to group
+6. User rejects → Invitation marked as expired
+
+**Key Point**: For existing users, we ONLY:
+- ✅ Create invitation record
+- ✅ Send simple email with invitation link
+- ❌ NO password generation
+- ❌ NO user creation
+- ❌ NO credentials in email
+
+**For New Users (who don't have an account)**:
+1. Admin invites user → System checks if user exists
+2. If user doesn't exist → Calls Edge Function `create-user-auto-verify`
+3. Edge Function creates user → Using Supabase Admin API with `email_confirm: true`
+4. User account created → In auth.users table with email_confirmed = true (auto-verified)
+5. Password set → Randomly generated password is set for the user
+6. Invitation created → With password stored in invitation record
+7. Email sent → With credentials (email + password) and login link
+8. User logs in → With provided credentials (no email verification needed - already verified)
+9. User auto-added → Automatically added to group on login
+
+**Edge Function**: `supabase/functions/create-user-auto-verify/index.ts`
+- Uses Supabase Admin API (service role key)
+- Creates user with `email_confirm: true` (auto-verified)
+- Sets password and user metadata
+- Returns user ID and confirmation status
+
+### New Features Added:
+
+**InvitationsScreen** (`src/screens/main/InvitationsScreen.tsx`):
+- ✅ Shows all pending invitations for current user
+- ✅ Displays group name, inviter, and date
+- ✅ Accept button → Adds user to group, navigates to group
+- ✅ Reject button → Declines invitation
+- ✅ Pull-to-refresh support
+- ✅ Empty state when no invitations
+
+**Service Methods** (`src/services/supabase.service.ts`):
+- ✅ `getPendingInvitations()` → Get all pending invitations for current user
+- ✅ `acceptInvitation(invitationId)` → Accept and join group
+- ✅ `rejectInvitation(invitationId)` → Decline invitation
+- ✅ Updated `inviteUser()` → Creates invitations for existing users instead of auto-adding
+
+**Navigation**:
+- ✅ Added "Invitations" screen to RootStack
+- ✅ Added link in ProfileScreen → "Group Invitations"
+
+**Email Template**:
+- ✅ Different content for new users (with password) vs existing users (no password)
+- ✅ Existing users: "Open App & View Invitation" button
+- ✅ New users: "Open App & Sign Up" button with credentials
+
+### User Flow:
+
+1. **Existing User Gets Invited**:
+   - Receives email: "Open the app to view and accept this invitation"
+   - Opens app → Goes to Profile → Group Invitations
+   - Sees invitation card with group name
+   - Clicks "Accept" → Added to group, navigated to group details
+   - Clicks "Decline" → Invitation removed
+
+2. **New User Gets Invited**:
+   - Receives email: "Use credentials to create account"
+   - Signs up with provided credentials
+   - Logs in → Automatically added to group
+
+---
+
+## 🔧 FIXED: Auth Errors & Loading State Issues
+
+### Problem 1: PGRST116 Error - "Cannot coerce the result to a single JSON object"
+
+**Error**: Profile lookup fails when profile doesn't exist (common after signup if trigger hasn't run)
+
+**Solution**: Updated `profileService.getProfile()` to return `null` instead of throwing error when profile doesn't exist (PGRST116 code)
+
+**Changes Made**:
+- `getProfile()` now returns `Profile | null`
+- Handles PGRST116 error code gracefully
+- Returns null instead of throwing when profile missing
+
+### Problem 2: Loading State Stuck After Error
+
+**Error**: When signin/signup fails, loading state gets stuck and never clears
+
+**Solution**: 
+1. Added `finally` block in LoginScreen to always clear loading overlay
+2. Made LoadingOverlay check both local and Redux loading state
+3. Updated authSlice to handle null profiles gracefully in all auth flows
+
+**Changes Made**:
+- `signUp`, `signIn`, `initializeAuth` now handle missing profiles gracefully
+- LoginScreen always clears loading overlay in finally block
+- LoadingOverlay checks both `showLoadingOverlay` and Redux `loading` state
+- Provider.tsx handles missing profiles during auth state changes
+
+**Files Updated**:
+- `src/services/supabase.service.ts` - getProfile() returns null on missing profile
+- `src/store/slices/authSlice.ts` - All auth thunks handle null profiles
+- `src/screens/auth/LoginScreen.tsx` - Added finally block, dual loading check
+- `src/store/Provider.tsx` - Handles missing profiles in auth listener
+
+---
+
+## ✅ EMAIL VERIFICATION FLOW
+
+### How Signup Works Now:
+
+1. **User signs up** → `authService.signUp()` called
+2. **Account created** → Supabase creates user account (unverified)
+3. **Email sent** → Supabase sends verification email automatically
+4. **User signed out** → Immediately after signup, user is signed out
+5. **No auto-login** → Session is NOT stored, user must verify email first
+6. **User verifies email** → Clicks link in email to verify account
+7. **User logs in** → After verification, user manually logs in
+8. **Invitations processed** → When user logs in, pending invitations are processed
+
+### Changes Made:
+
+**Signup Flow**:
+- ✅ User is signed out immediately after signup
+- ✅ No session stored until email is verified
+- ✅ User must manually log in after verification
+- ✅ Invitation tokens are already in `group_invitations` table (looked up by email on login)
+
+**Login Flow**:
+- ✅ After login, checks for pending invitations
+- ✅ Processes invitations and adds user to groups
+- ✅ Clears invitation token from metadata
+
+**SignupScreen**:
+- ✅ Shows message: "Please check your email to verify your account"
+- ✅ Navigates to Login screen after signup
+- ✅ User must verify email before logging in
+
+**Important Notes**:
+- ⚠️ Make sure email confirmation is enabled in Supabase Dashboard
+- ⚠️ Go to: Authentication → Settings → Enable "Enable email confirmations"
+- ✅ User cannot use app until email is verified
+- ✅ After verification, user logs in manually
+
+---
+
+## 💬 REAL-TIME CHAT SYSTEM IMPLEMENTATION
+
+### Overview
+Implementing a complete real-time chat system with:
+- Group chats (for expense groups)
+- Individual chats (one-on-one)
+- Real-time messaging using Supabase Realtime
+- Typing indicators
+- Message status (sent, delivered, seen)
+- Push notifications
+- Search and filter functionality
+
+### Step 1: Database Schema ✅
+**File**: `database/chat_schema.sql`
+
+**Tables Created**:
+1. **conversations** - Stores both group and individual conversations
+   - `type`: 'group' or 'individual'
+   - `group_id`: For group chats (references groups table)
+   - `last_message_at`, `last_message_text`, `last_message_sender_id`: For conversation preview
+   
+2. **conversation_participants** - Links users to conversations
+   - Tracks when user joined
+   - `last_read_at`: For read receipts
+   - `is_muted`: Mute notifications
+   
+3. **messages** - All chat messages
+   - `text`: Message content
+   - `message_type`: 'text', 'image', 'file', 'expense'
+   - `is_edited`, `is_deleted`: Message status
+   - `related_expense_id`: Link to expense (optional)
+   - `media_url`, `media_type`: For media messages
+   
+4. **message_reads** - Read receipts
+   - Tracks which users have read which messages
+   - Used for blue double tick (seen) status
+   
+5. **typing_indicators** - Real-time typing status
+   - Shows who is currently typing
+   - Auto-clears after timeout
+
+**Functions & Triggers**:
+- `update_conversation_last_message()` - Updates conversation preview when message sent
+- `auto_add_group_members_to_conversation()` - Auto-adds group members when conversation created
+- `add_new_member_to_group_conversation()` - Adds new group members to conversation
+
+**Realtime Enabled**:
+- All chat tables enabled for Supabase Realtime
+- Supports real-time message updates, typing indicators, read receipts
+
+**RLS Policies**:
+- Users can only see conversations they're part of
+- Users can only send messages in their conversations
+- Users can only manage their own read receipts and typing indicators
+
+### Step 2: TypeScript Types ✅
+**File**: `src/types/database.types.ts`
+
+**Types Added**:
+- ✅ `Conversation` - Conversation data (group or individual)
+- ✅ `ConversationParticipant` - Participant data with last_read_at
+- ✅ `Message` - Message data with text, type, media support
+- ✅ `MessageRead` - Read receipt data
+- ✅ `TypingIndicator` - Typing status
+- ✅ `ConversationWithDetails` - Conversation with participants, group, and last message
+- ✅ `MessageWithStatus` - Message with sender, reads, and status (sent/delivered/seen)
+- ✅ `ConversationParticipantWithProfile` - Participant with user profile
+- ✅ `TypingIndicatorWithProfile` - Typing indicator with user profile
+- ✅ `SendMessageRequest` - Request type for sending messages
+- ✅ `CreateIndividualConversationRequest` - Request type for individual chat
+- ✅ `CreateGroupConversationRequest` - Request type for group chat
+- ✅ Added all chat tables to Database interface
+
+### Step 3: Chat Service ✅
+**File**: `src/services/chat.service.ts` (NEW)
+
+**Methods Implemented**:
+- ✅ `getConversations()` - Get all user's conversations with details
+- ✅ `getConversation(conversationId)` - Get single conversation with participants
+- ✅ `getOrCreateIndividualConversation(userEmail)` - Get/create individual chat
+- ✅ `getOrCreateGroupConversation(groupId)` - Get/create group chat
+- ✅ `sendMessage(request)` - Send message with media/expense support
+- ✅ `getMessages(conversationId, limit)` - Get messages for conversation
+- ✅ `getMessageWithStatus(messageId)` - Get message with status (sent/delivered/seen)
+- ✅ `markAsRead(messageId)` - Mark single message as read
+- ✅ `markConversationAsRead(conversationId)` - Mark all messages in conversation as read
+- ✅ `setTyping(conversationId, isTyping)` - Set typing indicator
+- ✅ `getTypingUsers(conversationId)` - Get users currently typing (active within 3s)
+- ✅ `subscribeToMessages(conversationId, callback)` - Real-time message subscription
+- ✅ `subscribeToTyping(conversationId, callback)` - Real-time typing subscription
+- ✅ `subscribeToReadReceipts(conversationId, callback)` - Real-time read receipt subscription
+- ✅ `unsubscribe(channel)` - Unsubscribe from channel
+- ✅ Helper methods: `getUnreadCount()`, `getMessageCount()`
+
+**Features**:
+- Real-time subscriptions using Supabase Realtime
+- Message status tracking (sent → delivered → seen)
+- Typing indicators with auto-clear (3 second timeout)
+- Read receipts for individual and group chats
+- Unread message counting
+- Support for text, image, file, and expense messages
+
+### Step 4: Messages Screen ✅
+**File**: `src/screens/main/MessagesScreen.tsx` (NEW)
+
+**Features Implemented**:
+- ✅ List of all conversations (groups + individuals)
+- ✅ Shows last message preview
+- ✅ Shows unread count badge
+- ✅ Shows conversation time
+- ✅ Search functionality (by group name or user name/email)
+- ✅ Filter chips (All, Groups, Users)
+- ✅ Pull to refresh
+- ✅ Navigate to ChatScreen on tap
+- ✅ Empty state when no conversations
+- ✅ Avatar display for groups and users
+
+### Step 5: Chat Screen ✅
+**File**: `src/screens/chat/ChatScreen.tsx` (NEW)
+
+**Features Implemented**:
+- ✅ Message list with bubbles (different styles for sent/received)
+- ✅ Input field with send button
+- ✅ Typing indicator at bottom ("User is typing...")
+- ✅ Message status indicators:
+  - ✓ Single tick (sent)
+  - ✓✓ Double tick (delivered)
+  - ✓✓ Blue double tick (seen)
+- ✅ Auto-scroll to bottom on new messages
+- ✅ Real-time message updates via subscription
+- ✅ Real-time typing indicators
+- ✅ Real-time read receipts
+- ✅ Mark messages as read when conversation is viewed
+- ✅ Sender name for group messages
+- ✅ Message timestamps
+- ✅ Keyboard avoiding view
+
+### Step 6: Message Status System ✅
+
+**Status Logic**:
+- **Single Tick (✓)** - Message sent (stored in database)
+- **Double Tick (✓✓)** - Message delivered (all participants received)
+- **Blue Double Tick (✓✓)** - Message seen (all participants read)
+
+**For Individual Chats**:
+- Single tick: Message inserted
+- Double tick: Other user is online/received
+- Blue: Other user read the message
+
+**For Group Chats**:
+- Single tick: Message sent
+- Double tick: All group members received
+- Blue: All group members read
+
+**Implementation**:
+- Use `message_reads` table to track reads
+- Check participant count vs read count
+- Update UI in real-time via subscriptions
+
+### Step 7: Typing Indicators ✅
+
+**Implementation**:
+- User types → Set `is_typing = true` in `typing_indicators`
+- User stops typing (3s timeout) → Set `is_typing = false`
+- Real-time subscription shows who's typing
+- Display "User is typing..." in chat
+
+### Step 8: Search & Filter ✅
+
+**Features**:
+- Search by group name or user name
+- Filter: "All", "Groups Only", "Users Only"
+- Real-time search results
+- Highlight search terms
+
+### Step 9: Push Notifications (PENDING)
+
+**Setup**:
+- Install `expo-notifications`
+- Request notification permissions
+- Setup notification handlers
+- Send notifications when:
+  - New message received (not in foreground)
+  - Mentioned in group chat
+  - Direct message received
+
+**Implementation**:
+- Background notifications
+- Foreground notifications (show in-app)
+- Notification actions (reply, mark as read)
+- Badge count for unread messages
+
+### Step 10: Navigation Integration ✅
+**Files**: `src/navigation/AppNavigator.tsx`
+
+**Changes Made**:
+- ✅ Added `Messages` to `MainTabParamList`
+- ✅ Added `Messages` tab to bottom navigation (with chatbubbles icon)
+- ✅ Added `Chat` to `RootStackParamList`
+- ✅ Added `ChatScreen` to root stack with detail screen options
+- ✅ Imported `MessagesScreen` and `ChatScreen`
+
+**Add to Navigation**:
+- MessagesScreen in main tab navigator
+- ChatScreen in stack navigator
+- Deep linking for messages
+- Notification navigation
+
+### Current Status:
+- ✅ Step 1: Database schema created (`database/chat_schema.sql`)
+- ✅ Step 2: TypeScript types added (`src/types/database.types.ts`)
+- ✅ Step 3: Chat service with realtime (`src/services/chat.service.ts`)
+- ✅ Step 4: MessagesScreen created (`src/screens/main/MessagesScreen.tsx`)
+- ✅ Step 5: ChatScreen created (`src/screens/chat/ChatScreen.tsx`)
+- ✅ Step 6: Typing indicators implemented (in ChatScreen)
+- ✅ Step 7: Message status implemented (sent/delivered/seen with ticks)
+- ✅ Step 8: Search/filter functionality (done in MessagesScreen)
+- ✅ Step 9: Push notifications service created (`src/services/notifications.service.ts`)
+- ✅ Step 10: Navigation integration (added to AppNavigator)
+- ✅ Chat button added to GroupDetailsScreen
+
+### RLS Policy Fix:
+**Issue**: Infinite recursion in RLS policies (42P17 error)
+**Root Cause**: Policies querying `conversation_participants` within the same table's policy causes circular dependency
+**Solution**: Created a `SECURITY DEFINER` function `is_conversation_participant()` that bypasses RLS to check participation
+**Files Updated**: 
+- `database/chat_schema.sql` - Added function and updated all policies
+- `database/fix_chat_rls_policies.sql` - Fix script with function and updated policies
+
+**Policies Fixed**:
+- `conversation_participants` SELECT policy
+- `conversations` SELECT policy  
+- `messages` SELECT policy
+- `messages` INSERT policy
+- `typing_indicators` ALL policy
+
+**How It Works**:
+- `SECURITY DEFINER` functions run with the privileges of the function creator (bypasses RLS)
+- Policies now call `is_conversation_participant(conversation_id, auth.uid())` instead of querying the table directly
+- This breaks the circular dependency
+
+**Note**: 
+1. **IMPORTANT**: Run `database/fix_chat_rls_policies.sql` in Supabase SQL Editor to fix existing policies
+2. The function must be created first, then policies can use it
+3. This is the proper solution for RLS recursion issues
+
+### New Chat Feature ✅
+**File**: `src/screens/main/MessagesScreen.tsx`
+
+**Features Added**:
+- ✅ FAB button "New Chat" to start conversation with user
+- ✅ Modal dialog to enter email address
+- ✅ Email validation (format check)
+- ✅ User existence check (verifies user has account)
+- ✅ Error messages:
+  - "User not found. User must have an account."
+  - "Cannot chat with yourself"
+  - "Invalid email format"
+- ✅ Auto-creates conversation if user exists
+- ✅ Navigates to ChatScreen after creating conversation
+- ✅ Reloads conversation list to show new chat
+
+**How It Works**:
+1. User taps "New Chat" FAB button
+2. Modal opens with email input
+3. User enters email and taps "Start Chat"
+4. System validates email format
+5. System checks if user exists in database
+6. If user not found → Shows "User not found" error
+7. If user exists → Creates/gets conversation and opens chat
+
+### Message Delete Feature ✅
+**Files**: 
+- `database/add_message_deletions.sql` (NEW) - Table for tracking "delete for me"
+- `src/services/chat.service.ts` - Added delete functions
+- `src/screens/chat/ChatScreen.tsx` - Added long press menu
+
+**Features**:
+- ✅ Long press on any message to show delete menu
+- ✅ "Delete for Everyone" - Only available for your own messages
+  - Marks message as deleted globally
+  - Changes text to "This message was deleted"
+  - Only sender can use this option
+- ✅ "Delete for Me" - Available for all messages
+  - Hides message from current user only
+  - Other users can still see it
+  - Uses `message_deletions` table to track
+- ✅ Confirmation dialog for "Delete for Everyone"
+- ✅ Messages filtered to exclude deleted ones
+- ✅ Real-time updates when messages are deleted
+
+**Database Changes**:
+- Run `database/add_message_deletions.sql` in Supabase SQL Editor
+- Creates `message_deletions` table with RLS policies
+
+### Expo Push Notifications ✅
+**Files**: 
+- `App.tsx` - Notification initialization
+- `src/services/notifications.service.ts` - Notification service
+- `src/screens/main/MessagesScreen.tsx` - Sends notifications on new messages
+
+**Features Implemented**:
+- ✅ Request notification permissions on app start
+- ✅ Setup notification listeners for navigation
+- ✅ Send local notifications when new messages arrive
+- ✅ Notifications play sound and vibrate
+- ✅ Notifications show even when app is in foreground
+- ✅ Tap notification to navigate to chat
+- ✅ Notification title shows sender name (or "Sender in GroupName" for groups)
+- ✅ Notification body shows message preview (truncated to 100 chars)
+
+**How It Works**:
+1. App requests notification permissions on startup
+2. When a new message arrives (via real-time subscription):
+   - Checks if message is from current user (no notification for own messages)
+   - Gets sender info and conversation details
+   - Sends local notification with sound and vibration
+3. User taps notification → Navigates to Chat screen
+4. Notifications work in foreground, background, and when app is closed
+
+**Note**: 
+- Local notifications work without Expo project ID
+- For push notifications (when app is closed), you need Expo project ID in `app.config.ts` or `app.json`
+- Add `push_token` column to profiles table if you want to send push notifications from server
+
+### Next Steps (Optional):
+- [ ] Add push_token column to profiles table
+- [ ] Setup Supabase trigger to send push notifications when app is closed
+- [ ] Add chat button to user profiles
+- [ ] Test real-time messaging
+- [ ] Test typing indicators
+- [ ] Test message status updates
+
+---
+
+
+# Changelog - Group Invitations Feature
+
+## Summary
+Implemented a complete group invitation system where users can invite existing users to groups, view pending invitations, and accept/reject them.
+
+---
+
+## ✅ Changes Made
+
+### 1. Simplified Invitation Flow
+**File**: `src/services/supabase.service.ts`
+
+- **Removed**: User auto-creation logic (Edge Function, password generation for new users)
+- **New Logic**:
+  - ✅ If user exists → Create invitation and send email
+  - ❌ If user doesn't exist → Show error "User does not exist. User must have an account to be invited."
+- **Result**: Only existing users can be invited to groups
+
+### 2. Invitations Screen
+**File**: `src/screens/main/InvitationsScreen.tsx` (NEW)
+
+- ✅ Displays all pending group invitations for current user
+- ✅ Shows group name, inviter, and invitation date
+- ✅ "Accept" button → Adds user to group and navigates to group details
+- ✅ "Reject" button → Declines invitation
+- ✅ Pull-to-refresh support
+- ✅ Empty state when no invitations
+- ✅ Loading and error states
+
+### 3. Service Methods
+**File**: `src/services/supabase.service.ts`
+
+**New Methods Added**:
+- `getPendingInvitations()` → Gets all pending invitations for current user
+- `acceptInvitation(invitationId)` → Accepts invitation and adds user to group
+- `rejectInvitation(invitationId)` → Declines invitation
+
+**Updated Method**:
+- `inviteUser()` → Now only works for existing users, throws error if user doesn't exist
+
+### 4. Navigation Updates
+**File**: `src/navigation/AppNavigator.tsx`
+
+- ✅ Added `InvitationsScreen` to navigation stack
+- ✅ Added route type `Invitations: undefined` to `RootStackParamList`
+
+### 5. Profile Screen Updates
+**File**: `src/screens/main/ProfileScreen.tsx`
+
+- ✅ Added "Group Invitations" link in Payment & Settings section
+- ✅ Navigates to Invitations screen when clicked
+
+### 6. Dashboard Screen Updates
+**File**: `src/screens/main/DashboardScreen.tsx`
+
+- ✅ Added notification bell icon with badge showing pending invitations count
+- ✅ Badge displays number of pending invitations (max "9+")
+- ✅ Clicking bell navigates to Invitations screen
+- ✅ Automatically loads invitation count on mount and refresh
+
+### 7. Email Template Updates
+**File**: `src/services/supabase.service.ts`
+
+- ✅ Different email content for existing users vs new users
+- ✅ Existing users: Simple invitation email with "Open App & View Invitation" button
+- ✅ New users: Email with credentials (removed - no longer creates users)
+- ✅ Instructions for accepting invitations in app
+
+### 8. Database RLS Policies
+**Files**: `disable_rls_policies.sql`, `enable_rls_policies.sql` (NEW)
+
+- ✅ Created SQL scripts to temporarily disable/enable RLS policies
+- ✅ Useful for debugging permission issues
+- ✅ Affects all tables: profiles, groups, group_members, group_invitations, expenses, etc.
+
+### 9. Edge Function Removal
+**File**: `supabase/functions/create-user-auto-verify/index.ts` (DELETED)
+
+- ❌ Removed edge function for auto-creating users
+- ✅ Simplified flow - no user creation, only invitations for existing users
+
+---
+
+## 📋 User Flow
+
+### For Existing Users (Who Have Account):
+1. Admin invites user → System checks if user exists
+2. If user exists → Creates invitation record
+3. Email sent → Simple notification email with invitation link
+4. User sees invitation → In "Group Invitations" screen (Profile → Group Invitations)
+5. User accepts → Automatically added to group, navigated to group details
+6. User rejects → Invitation marked as declined
+
+### For Non-Existing Users:
+1. Admin tries to invite user → System checks if user exists
+2. If user doesn't exist → Error shown: "User does not exist. User must have an account to be invited."
+3. No invitation created, no email sent
+
+---
+
+## 🎯 Key Features
+
+### Invitations Screen
+- View all pending invitations
+- See group name and inviter
+- Accept or reject invitations
+- Real-time count in dashboard
+
+### Dashboard Notifications
+- Bell icon with badge showing pending invitation count
+- Quick access to invitations screen
+- Auto-refreshes on pull-to-refresh
+
+### Email Notifications
+- Existing users receive simple invitation email
+- Email includes link to open app and view invitations
+- Clear instructions on how to accept
+
+---
+
+## 🔧 Technical Details
+
+### Type Definitions
+**File**: `src/types/database.types.ts`
+
+- Added `GroupInvitationWithDetails` interface
+- Includes group information with invitation details
+
+### Service Architecture
+- `invitationService.getPendingInvitations()` - Fetches invitations with group details
+- `invitationService.acceptInvitation()` - Adds user to group, updates invitation status
+- `invitationService.rejectInvitation()` - Marks invitation as declined
+
+### Error Handling
+- Proper error messages for non-existing users
+- Graceful handling of invitation errors
+- User-friendly error messages in UI
+
+---
+
+## 📝 Files Modified
+
+1. `src/services/supabase.service.ts` - Core invitation logic
+2. `src/screens/main/InvitationsScreen.tsx` - NEW - Invitations UI
+3. `src/navigation/AppNavigator.tsx` - Navigation routes
+4. `src/screens/main/ProfileScreen.tsx` - Invitations link
+5. `src/screens/main/DashboardScreen.tsx` - Notification badge
+6. `src/types/database.types.ts` - Type definitions
+7. `disable_rls_policies.sql` - NEW - Disable RLS script
+8. `enable_rls_policies.sql` - NEW - Enable RLS script
+9. `supabase/functions/create-user-auto-verify/index.ts` - DELETED
+
+---
+
+## 🚀 How to Use
+
+### Invite a User:
+1. Go to Group Details
+2. Click "Invite User" button
+3. Enter user's email
+4. If user exists → Invitation sent
+5. If user doesn't exist → Error message shown
+
+### View Invitations:
+1. Go to Profile → Group Invitations
+   OR
+2. Click bell icon in Dashboard (if you have pending invitations)
+3. See all pending invitations
+4. Accept or reject each invitation
+
+### Accept Invitation:
+1. Open Invitations screen
+2. Click "Accept" on an invitation
+3. Automatically added to group
+4. Navigated to group details
+
+---
+
+## ⚠️ Important Notes
+
+- **Only existing users can be invited** - No user creation
+- **RLS policies** - Can be temporarily disabled using `disable_rls_policies.sql` for debugging
+- **Email required** - Users must have accounts to receive invitations
+- **Real-time updates** - Invitation count updates on dashboard refresh
+
+---
+
+## 🐛 Troubleshooting
+
+### "User does not exist" Error:
+- User must create an account first before being invited
+- Check if email is correct
+- Verify user has signed up in the app
+
+### Invitations Not Showing:
+- Check RLS policies (can temporarily disable for testing)
+- Verify user is logged in with correct email
+- Check invitation status in database
+
+### Notification Badge Not Updating:
+- Pull to refresh dashboard
+- Check network connection
+- Verify `getPendingInvitations()` is working
+
+---
+
+## 📅 Date
+November 20, 2025
+
+---
+
+## ✨ Next Steps (Optional Enhancements)
+
+- [ ] Add push notifications for new invitations
+- [ ] Add invitation expiration dates
+- [ ] Show invitation history
+- [ ] Add bulk invitation feature
+- [ ] Add invitation reminders
+

@@ -20,9 +20,15 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
-          const { profileService } = await import('../services/supabase.service');
-          const profile = await profileService.getProfile(session.user.id);
-          store.dispatch(setUser({ user: session.user, profile }));
+          try {
+            const { profileService } = await import('../services/supabase.service');
+            const profile = await profileService.getProfile(session.user.id);
+            store.dispatch(setUser({ user: session.user, profile }));
+          } catch (error) {
+            // If profile doesn't exist, still allow login with null profile
+            console.warn('Profile not found during auth state change:', error);
+            store.dispatch(setUser({ user: session.user, profile: null }));
+          }
         } else {
           store.dispatch(setUser({ user: null, profile: null }));
         }

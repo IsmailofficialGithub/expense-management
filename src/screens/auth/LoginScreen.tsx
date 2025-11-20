@@ -70,11 +70,14 @@ export default function LoginScreen({ navigation }: Props) {
     // Dispatch login action
     try {
       await dispatch(signIn({ email, password })).unwrap();
-       showToast('Welcome back!', 'success');
+      showToast('Welcome back!', 'success');
       // Navigation happens automatically via AppNavigator when isAuthenticated becomes true
     } catch (err) {
       // Error is handled by Redux state
-     ErrorHandler.handleError(err, showToast, 'Login');
+      ErrorHandler.handleError(err, showToast, 'Login');
+    } finally {
+      // Always stop loading, even on error
+      setShowLoadingOverlay(false);
     }
   };
 
@@ -183,7 +186,7 @@ export default function LoginScreen({ navigation }: Props) {
         </View>
       </ScrollView>
        <LoadingOverlay 
-        visible={showLoadingOverlay} 
+        visible={showLoadingOverlay || loading} 
         message="Signing in..." 
       />
     </KeyboardAvoidingView>

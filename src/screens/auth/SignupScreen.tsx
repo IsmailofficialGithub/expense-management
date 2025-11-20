@@ -14,11 +14,21 @@ type SignupScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 
 
 interface Props {
   navigation: SignupScreenNavigationProp;
+  route?: {
+    params?: {
+      email?: string;
+      token?: string;
+    };
+  };
 }
 
-export default function SignupScreen({ navigation }: Props) {
+export default function SignupScreen({ navigation, route }: Props) {
+  // Pre-fill email from deep link if available
+  const initialEmail = route?.params?.email || '';
+  const invitationToken = route?.params?.token;
+  
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -82,17 +92,29 @@ export default function SignupScreen({ navigation }: Props) {
 
     // Dispatch signup action
     try {
-      await dispatch(signUp({ 
+      const result = await dispatch(signUp({ 
         email, 
         password, 
-        full_name: fullName.trim() 
+        full_name: fullName.trim(),
+        invitationToken: invitationToken // Pass invitation token if available
       })).unwrap();
-      // Navigation happens automatically via AppNavigator
-       showToast('Account created successfully!', 'success');
+      
+      // Check if verification is required
+      if (result.requiresVerification) {
+        showToast(
+          'Account created! Please check your email to verify your account before logging in.',
+          'success'
+        );
+        // Navigate back to login screen
+        navigation.navigate('Login');
+      } else {
+        showToast('Account created successfully!', 'success');
+      }
     } catch (err) {
       console.error('Signup failed:', err);
-       ErrorHandler.handleError(err, showToast, 'Signup');
+      ErrorHandler.handleError(err, showToast, 'Signup');
     }
+    // Note: Loading state is handled by Redux, no need for finally block here
   };
 
   return (

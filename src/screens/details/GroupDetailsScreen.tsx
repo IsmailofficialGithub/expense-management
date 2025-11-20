@@ -15,6 +15,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 import SafeScrollView from '../../components/SafeScrollView';
 import { useTheme } from 'react-native-paper';
+import { chatService } from '../../services/chat.service';
 
 interface Props {
   navigation: any;
@@ -323,9 +324,21 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               />
             )}
               <IconButton
-                icon="account-plus"
+                icon="email"
                 size={24}
-                onPress={() => navigation.navigate('InviteUser', { groupId })}
+                onPress={() => navigation.navigate('InviteUser', { groupId, groupName: selectedGroup.name })}
+              />
+              <IconButton
+                icon="chat"
+                size={24}
+                onPress={async () => {
+                  try {
+                    const conversation = await chatService.getOrCreateGroupConversation({ group_id: groupId });
+                    navigation.navigate('Chat', { conversationId: conversation.id });
+                  } catch (error) {
+                    ErrorHandler.handleError(error, showToast, 'Open Chat');
+                  }
+                }}
               />
            </View>
           </View>

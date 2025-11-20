@@ -454,6 +454,14 @@ const handleRemoveAvatar = () => {
         <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Payment & Settings</Text>
         <Card style={styles.card}>
           <List.Item
+            title="Group Invitations"
+            description="View and accept group invitations"
+            left={(props) => <List.Icon {...props} icon="email" />}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+            onPress={() => navigation.navigate('Invitations')}
+          />
+          <Divider />
+          <List.Item
             title="Payment Methods"
             description="Manage your payment methods"
             left={(props) => <List.Icon {...props} icon="credit-card" />}

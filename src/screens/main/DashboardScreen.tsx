@@ -1,5 +1,5 @@
 // src/screens/main/DashboardScreen.tsx
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -29,6 +29,7 @@ import { useToast } from "../../hooks/useToast";
 import { useNetworkCheck } from "../../hooks/useNetworkCheck";
 import LoadingOverlay from "../../components/LoadingOverlay";
 import { useTheme } from "react-native-paper";
+import { invitationService } from "../../services/supabase.service";
 
 export default function DashboardScreen({ navigation }: any) {
   const theme = useTheme();
@@ -48,11 +49,24 @@ export default function DashboardScreen({ navigation }: any) {
   });
 
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingInvitationsCount, setPendingInvitationsCount] = useState(0);
 
   useEffect(() => {
     loadData();
-
+    loadPendingInvitations();
   }, []);
+
+  const loadPendingInvitations = async () => {
+    if (!isOnline || !profile) return;
+    
+    try {
+      const invitations = await invitationService.getPendingInvitations();
+      setPendingInvitationsCount(invitations.length);
+    } catch (error) {
+      // Silently fail - notifications are not critical
+      console.error("Failed to load invitations:", error);
+    }
+  };
 
   const loadData = async () => {
     if (!isOnline) {
@@ -79,6 +93,7 @@ export default function DashboardScreen({ navigation }: any) {
     setRefreshing(true);
     try {
       await loadData();
+      await loadPendingInvitations();
     } catch (error) {
       ErrorHandler.handleError(error, showToast, "Dashboard Refresh");
     } finally {
@@ -165,19 +180,37 @@ export default function DashboardScreen({ navigation }: any) {
               {profile?.full_name || "User"} 👋
             </Text>
           </View>
-      {profile?.avatar_url ? (
-  <Avatar.Image
-    size={48}
-    source={{ uri: profile.avatar_url }}
-    style={styles.avatar}
-  />
-) : (
-  <Avatar.Text
-    size={48}
-    label={profile?.full_name?.substring(0, 2).toUpperCase() || "U"}
-    style={styles.avatar}
-  />
-)}
+          <View style={styles.headerRight}>
+            {pendingInvitationsCount > 0 && (
+              <IconButton
+                icon="bell"
+                size={24}
+                iconColor={theme.colors.primary}
+                onPress={() => navigation.navigate("Invitations")}
+                style={styles.notificationButton}
+              />
+            )}
+            {pendingInvitationsCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {pendingInvitationsCount > 9 ? '9+' : pendingInvitationsCount}
+                </Text>
+              </View>
+            )}
+            {profile?.avatar_url ? (
+              <Avatar.Image
+                size={48}
+                source={{ uri: profile.avatar_url }}
+                style={styles.avatar}
+              />
+            ) : (
+              <Avatar.Text
+                size={48}
+                label={profile?.full_name?.substring(0, 2).toUpperCase() || "U"}
+                style={styles.avatar}
+              />
+            )}
+          </View>
         </View>
       </View>
 
@@ -552,6 +585,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+  },
+  notificationButton: {
+    marginRight: 8,
+  },
+  badge: {
+    position: "absolute",
+    top: 4,
+    right: 40,
+    backgroundColor: "#F44336",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    zIndex: 1,
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
   greeting: {
     fontSize: 16,

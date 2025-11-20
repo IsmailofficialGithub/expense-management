@@ -5340,3 +5340,6 @@ src/screens/details/ExpenseDetailsScreen.tsx
 📱 Responsive Design - Works on all screen sizes
 
 Ready for the next screen? Just say "next"! 😊
+
+
+

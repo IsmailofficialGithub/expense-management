@@ -57,6 +57,31 @@ export interface Database {
         Insert: Omit<Notification, 'id' | 'created_at'>
         Update: Partial<Omit<Notification, 'id' | 'created_at'>>
       }
+      conversations: {
+        Row: Conversation
+        Insert: Omit<Conversation, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Conversation, 'id' | 'created_at'>>
+      }
+      conversation_participants: {
+        Row: ConversationParticipant
+        Insert: Omit<ConversationParticipant, 'id' | 'joined_at'>
+        Update: Partial<Omit<ConversationParticipant, 'id' | 'joined_at'>>
+      }
+      messages: {
+        Row: Message
+        Insert: Omit<Message, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Message, 'id' | 'created_at'>>
+      }
+      message_reads: {
+        Row: MessageRead
+        Insert: Omit<MessageRead, 'id' | 'read_at'>
+        Update: Partial<Omit<MessageRead, 'id' | 'read_at'>>
+      }
+      typing_indicators: {
+        Row: TypingIndicator
+        Insert: Omit<TypingIndicator, 'id' | 'updated_at'>
+        Update: Partial<Omit<TypingIndicator, 'id' | 'updated_at'>>
+      }
     }
     Views: {
       user_group_balances: {
@@ -555,6 +580,107 @@ export interface SignUpData {
 export interface SignInData {
   email: string
   password: string
+}
+
+// ============================================
+// CHAT TYPES
+// ============================================
+
+export type ConversationType = 'group' | 'individual';
+export type MessageType = 'text' | 'image' | 'file' | 'expense';
+
+export interface Conversation {
+  id: string;
+  type: ConversationType;
+  group_id: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string | null;
+  last_message_text: string | null;
+  last_message_sender_id: string | null;
+}
+
+export interface ConversationParticipant {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  joined_at: string;
+  last_read_at: string | null;
+  is_muted: boolean;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  text: string;
+  message_type: MessageType;
+  created_at: string;
+  updated_at: string;
+  is_edited: boolean;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  related_expense_id: string | null;
+  media_url: string | null;
+  media_type: string | null;
+}
+
+export interface MessageRead {
+  id: string;
+  message_id: string;
+  user_id: string;
+  read_at: string;
+}
+
+export interface TypingIndicator {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  is_typing: boolean;
+  updated_at: string;
+}
+
+// Extended types with relations
+export interface ConversationWithDetails extends Conversation {
+  group?: Group;
+  participants: ConversationParticipantWithProfile[];
+  last_message_sender?: Profile;
+  unread_count?: number;
+}
+
+export interface ConversationParticipantWithProfile extends ConversationParticipant {
+  user: Profile;
+}
+
+export interface MessageWithStatus extends Message {
+  sender: Profile;
+  reads: MessageRead[];
+  read_count: number;
+  total_participants: number;
+  status: 'sending' | 'sent'; // Loading, single tick
+}
+
+export interface TypingIndicatorWithProfile extends TypingIndicator {
+  user: Profile;
+}
+
+// Request types
+export interface SendMessageRequest {
+  conversation_id: string;
+  text: string;
+  message_type?: MessageType;
+  media_url?: string;
+  media_type?: string;
+  related_expense_id?: string;
+}
+
+export interface CreateIndividualConversationRequest {
+  other_user_email: string;
+}
+
+export interface CreateGroupConversationRequest {
+  group_id: string;
 }
 
 export interface AuthUser {

@@ -192,6 +192,9 @@ import PaymentMethodsScreen from '../screens/main/PaymentMethodsScreen';
 import AddPaymentMethodScreen from '../screens/forms/AddPaymentMethodScreen';
 import ManageHotelScreen from '../screens/admin/ManageHotelScreen';
 import EditPaymentMethodScreen from '../screens/forms/EditPaymentMethodScreen';
+import InvitationsScreen from '../screens/main/InvitationsScreen';
+import MessagesScreen from '../screens/main/MessagesScreen';
+import ChatScreen from '../screens/chat/ChatScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -203,6 +206,7 @@ export type MainTabParamList = {
   Dashboard: undefined;
   Groups: undefined;
   Expenses: undefined;
+  Messages: undefined;
   Profile: undefined;
 };
 
@@ -224,6 +228,9 @@ export type RootStackParamList = {
   AddPaymentMethod: undefined;
   EditPaymentMethod: { methodId: string };
   ManageHotel: undefined;
+  Invitations: undefined;
+  Messages: undefined;
+  Chat: { conversationId: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -257,6 +264,8 @@ function MainNavigator() {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Expenses') {
             iconName = focused ? 'wallet' : 'wallet-outline';
+          } else           if (route.name === 'Messages') {
+            iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           } else {
@@ -284,6 +293,11 @@ function MainNavigator() {
         name="Expenses"
         component={ExpensesScreen}
         options={{ title: 'Expenses' }}
+      />
+      <MainTab.Screen
+        name="Messages"
+        component={MessagesScreen}
+        options={{ title: 'Messages' }}
       />
       <MainTab.Screen
         name="Profile"
@@ -392,6 +406,16 @@ export default function AppNavigator() {
             name="ManageHotel"
             component={ManageHotelScreen}
             options={{ ...detailScreenOptions, title: 'Manage Hotels' }}
+          />
+          <RootStack.Screen
+            name="Invitations"
+            component={InvitationsScreen}
+            options={{ ...detailScreenOptions, title: 'Group Invitations' }}
+          />
+          <RootStack.Screen
+            name="Chat"
+            component={ChatScreen}
+            options={{ ...detailScreenOptions, title: 'Chat' }}
           />
         </>
       ) : (
