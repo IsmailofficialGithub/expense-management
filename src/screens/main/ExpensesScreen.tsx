@@ -85,74 +85,70 @@ export default function ExpensesScreen({ navigation }: any) {
     return acc;
   }, {});
 
-  const renderExpenseCard = (expense: any) => {
+const renderExpenseCard = (expense: any) => {
     const isPaidByMe = expense.paid_by === profile?.id;
-  const mySplit = expense.splits?.find((s: { user_id: string; amount: number }) => 
-  s.user_id === profile?.id
-);
+    const mySplit = expense.splits?.find((s: { user_id: string; amount: number }) =>
+      s.user_id === profile?.id
+    );
 
+    // Calculate the amount relevant to the user
     const myShare = mySplit ? Number(mySplit.amount) : 0;
+    const amountDisplay = isPaidByMe 
+      ? Number(expense.amount) - myShare // Amount I get back
+      : myShare; // Amount I owe
 
     return (
-     <Card
-  key={expense.id}
-  style={styles.expenseCard}
-  onPress={() => {
-    navigation.navigate('ExpenseDetails', { expenseId: expense.id });
-  }}
->
+      <Card
+        key={expense.id}
+        style={styles.expenseCard}
+        onPress={() => {
+          navigation.navigate('ExpenseDetails', { expenseId: expense.id });
+        }}
+      >
         <Card.Content style={styles.cardContent}>
-          <View style={styles.expenseHeader}>
-            <View style={styles.expenseLeft}>
-              <Text style={styles.categoryIcon}>{expense.category?.icon || '💰'}</Text>
-              <View style={styles.expenseInfo}>
-                <Text style={[styles.expenseDescription, { color: theme.colors.onSurface }]}>{expense.description}</Text>
-                <View style={styles.expenseMeta}>
-                  <Chip 
-                    mode="flat" 
-                    style={styles.categoryChip}
-                    textStyle={styles.categoryChipText}
-                  >
-                    {expense.category?.name || 'Other'}
-                  </Chip>
-                  <Text style={[styles.expenseGroup, { color: theme.colors.onSurfaceVariant }]}>
-                    • {groups.find(g => g.id === expense.group_id)?.name || 'Unknown Group'}
-                  </Text>
-                </View>
+          <View style={styles.cardRow}>
+            {/* 1. Category Icon (Circular Avatar) */}
+            <View style={[styles.iconContainer, { backgroundColor: theme.colors.elevation.level2 }]}>
+              <Text style={styles.emojiIcon}>{expense.category?.icon || '🧾'}</Text>
+            </View>
+
+            {/* 2. Main Details (Description & Group/Payer) */}
+            <View style={styles.detailsContainer}>
+              <Text 
+                style={[styles.expenseTitle, { color: theme.colors.onSurface }]} 
+                numberOfLines={1}
+              >
+                {expense.description}
+              </Text>
+              
+              <View style={styles.subDetailRow}>
+                 {/* Group Name */}
+                <Text style={[styles.groupName, { color: theme.colors.onSurfaceVariant }]}>
+                  {groups.find(g => g.id === expense.group_id)?.name}
+                </Text>
+                <Text style={[styles.dotSeparator, { color: theme.colors.onSurfaceVariant }]}>•</Text>
+                {/* Payer Info */}
+                <Text style={[styles.payerName, { color: theme.colors.onSurfaceVariant }]}>
+                  {isPaidByMe ? 'You paid' : `${expense.paid_by_user?.full_name?.split(' ')[0]} paid`}
+                </Text>
               </View>
             </View>
-            <IconButton icon="chevron-right" size={20} style={styles.chevron} />
-          </View>
 
-          <Divider style={styles.divider} />
-
-          <View style={styles.expenseFooter}>
+            {/* 3. Financials (Right Side) */}
             <View style={styles.amountContainer}>
-              <Text style={[styles.totalAmount, { color: theme.colors.onSurface }]}>₹{expense.amount}</Text>
-              <Text style={[styles.amountLabel, { color: theme.colors.onSurfaceVariant }]}>Total</Text>
-            </View>
-
-            <View style={styles.splitContainer}>
-              {isPaidByMe ? (
-                <>
-                  <Text style={[styles.splitAmount, styles.positiveAmount]}>
-                    +₹{(Number(expense.amount) - myShare).toFixed(2)}
-                  </Text>
-                  <Text style={[styles.splitLabel, { color: theme.colors.onSurfaceVariant }]}>You lent</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.splitAmount, styles.negativeAmount]}>
-                    -₹{myShare.toFixed(2)}
-                  </Text>
-                  <Text style={[styles.splitLabel, { color: theme.colors.onSurfaceVariant }]}>You owe</Text>
-                </>
-              )}
-            </View>
-
-            <View style={styles.paidByContainer}>
-              <Text style={[styles.paidByLabel, { color: theme.colors.onSurfaceVariant }]}>
-                {isPaidByMe ? 'You paid' : `${expense.paid_by_user?.full_name || 'Someone'} paid`}
+              {/* Primary Number: Impact on YOU */}
+              <Text
+                style={[
+                  styles.impactAmount,
+                  isPaidByMe ? styles.positiveText : styles.negativeText
+                ]}
+              >
+                {isPaidByMe ? '+' : '-'}₹{amountDisplay.toFixed(0)}
+              </Text>
+              
+              {/* Secondary Number: Total Bill */}
+              <Text style={[styles.totalBillLabel, { color: theme.colors.onSurfaceDisabled }]}>
+                Total: ₹{expense.amount}
               </Text>
             </View>
           </View>
@@ -160,7 +156,6 @@ export default function ExpensesScreen({ navigation }: any) {
       </Card>
     );
   };
-
   const renderSection = ({ item }: any) => {
     const [date, expensesList] = item;
     
@@ -300,12 +295,119 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  expenseCard: {
-    marginBottom: 12,
-    elevation: 2,
+ expenseCard: {
+    marginBottom: 10,
+    // backgroundColor: 'white',
+    borderRadius: 16, // Softer corners
+    elevation: 1, // Subtle shadow
   },
   cardContent: {
-    padding: 16,
+    padding: 12,
+    paddingVertical: 14,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  emojiIcon: {
+    fontSize: 24,
+  },
+  
+  // Middle: Details
+  detailsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  expenseTitle: {
+    fontSize: 16,
+    fontWeight: '700', // Bold title
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  subDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  groupName: {
+    fontSize: 12,
+    fontWeight: '500',
+    maxWidth: 80, // Limit width so it doesn't push payer name too far
+  },
+  dotSeparator: {
+    marginHorizontal: 4,
+    fontSize: 12,
+  },
+  payerName: {
+    fontSize: 12,
+  },
+
+  // Right: Amounts
+  amountContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: 70,
+  },
+  impactAmount: {
+    fontSize: 18,
+    fontWeight: '800', // Very bold for the money
+    marginBottom: 2,
+  },
+  positiveText: {
+    color: '#4CAF50', // Green
+  },
+  negativeText: {
+    color: '#F44336', // Red
+  },
+  totalBillLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+
+  // --- FAB & Empty States ---
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 80,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    opacity: 0.7,
+  },
+  fabContainer: {
+    position: 'absolute',
+    right: 16,
+    bottom: 24,
+    alignItems: 'flex-end',
+  },
+  fab: {
+    backgroundColor: '#6200EE',
+    borderRadius: 16,
+  },
+  fabSecondary: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 16,
+  },
+  fabSpacing: {
+    marginBottom: 16,
   },
   expenseHeader: {
     flexDirection: 'row',
@@ -357,9 +459,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  amountContainer: {
-    alignItems: 'flex-start',
-  },
   totalAmount: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -391,36 +490,5 @@ const styles = StyleSheet.create({
   paidByLabel: {
     fontSize: 12,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingTop: 80,
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  fabContainer: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-    alignItems: 'flex-end',
-  },
-  fab: {
-    backgroundColor: '#6200EE',
-  },
-  fabSecondary: {
-    backgroundColor: '#4CAF50',
-  },
-  fabSpacing: {
-    marginBottom: 12,
-  },
+ 
 });

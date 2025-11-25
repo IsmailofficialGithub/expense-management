@@ -3,10 +3,13 @@ import 'dotenv/config';
 export default ({ config }: { config: any }) => ({
   ...config,
   extra: {
+    ...config.extra,
+    eas: {
+      projectId: "b5f91826-4a20-4949-87db-d95724d815e7",
+    },
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    // Email configuration for nodemailer
     SMTP_HOST: process.env.SMTP_HOST,
     SMTP_PORT: process.env.SMTP_PORT,
     SMTP_USER: process.env.SMTP_USER,

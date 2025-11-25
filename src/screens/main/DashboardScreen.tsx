@@ -6,6 +6,7 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  Platform,
 } from "react-native";
 import {
   Text,
@@ -30,6 +31,7 @@ import { useNetworkCheck } from "../../hooks/useNetworkCheck";
 import LoadingOverlay from "../../components/LoadingOverlay";
 import { useTheme } from "react-native-paper";
 import { invitationService } from "../../services/supabase.service";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function DashboardScreen({ navigation }: any) {
   const theme = useTheme();
@@ -41,6 +43,11 @@ export default function DashboardScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
+  const [isBalanceHidden, setIsBalanceHidden] = useState(false);
+
+const toggleBalanceVisibility = () => {
+  setIsBalanceHidden(!isBalanceHidden);
+};
   const { isOnline } = useNetworkCheck({
     showToast: true,
     onOnline: () => {
@@ -177,7 +184,7 @@ export default function DashboardScreen({ navigation }: any) {
           <View>
             <Text style={[styles.greeting, { color: theme.colors.onSurfaceVariant }]}>Hello,</Text>
             <Text style={[styles.userName, { color: theme.colors.onSurface }]}>
-              {profile?.full_name || "User"} 👋
+              {profile?.full_name || "User"}
             </Text>
           </View>
           <View style={styles.headerRight}>
@@ -215,38 +222,78 @@ export default function DashboardScreen({ navigation }: any) {
       </View>
 
       {/* Overall Balance Card */}
-      <Card style={styles.overallBalanceCard}>
-        <Card.Content>
-          <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Overall Balance</Text>
+    {/* --- MASTERCARD STYLE CARD WITH HIDE/SHOW --- */}
+      <View style={styles.cardContainer}>
+        <LinearGradient
+          colors={['#5b247a', '#1bcedf']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.creditCard}
+        >
+          {/* Top Row: Chip and Contactless */}
+          <View style={styles.cardTopRow}>
+            <View style={styles.cardChip} />
             <IconButton
-              icon="information"
-              size={20}
-              iconColor="#fff"
-              onPress={showBalanceInfo}
+              icon="wifi"
+              size={24}
+              iconColor="rgba(10, 132, 53, 0.6)"
+              style={{ transform: [{ rotate: '90deg' }], margin: 0 }}
             />
           </View>
-          <Text
-            style={[
-              styles.balanceAmount,
-              overallBalance > 0
-                ? styles.positiveBalance
-                : overallBalance < 0
-                ? styles.negativeBalance
-                : styles.neutralBalance,
-            ]}
-          >
-            ₹{overallBalance.toFixed(2)}
-          </Text>
-          <Text style={styles.balanceDescription}>
-            {overallBalance > 0
-              ? "You're in good shape! 💪"
-              : overallBalance < 0
-              ? "You're spending more than earning"
-              : "You're breaking even"}
-          </Text>
-        </Card.Content>
-      </Card>
+
+          {/* Middle: Label, Eye, and Balance */}
+          <View style={styles.cardMiddle}>
+            <View style={styles.balanceHeader}>
+              <View style={styles.labelRow}>
+                <Text style={styles.cardLabel}>Total Balance</Text>
+                <IconButton
+                  icon={isBalanceHidden ? "eye-off" : "eye"}
+                  size={20}
+                  iconColor="rgba(255,255,255,0.8)"
+                  onPress={toggleBalanceVisibility}
+                  style={styles.eyeIcon}
+                  rippleColor="rgba(255,255,255,0.3)"
+                />
+              </View>
+              
+              <IconButton
+                icon="information-outline"
+                size={18}
+                iconColor="rgba(255,255,255,0.5)"
+                onPress={showBalanceInfo}
+                style={styles.infoIcon}
+              />
+            </View>
+
+            {/* THE BALANCE / MASKED TEXT */}
+            <Text style={styles.cardNumber}>
+              {isBalanceHidden 
+                ? "₹ ******" 
+                : `₹ ${overallBalance.toFixed(2)}`}
+            </Text>
+          </View>
+
+          {/* Bottom Row: Details and Logo */}
+          <View style={styles.cardBottom}>
+            <View style={styles.cardHolderInfo}>
+              <Text style={styles.cardLabelSmall}>CARD HOLDER</Text>
+              <Text style={styles.cardName} numberOfLines={1}>
+                {profile?.full_name?.toUpperCase() || "USER"}
+              </Text>
+              <Text style={styles.cardStatusText}>
+                {isBalanceHidden 
+                   ? "Status: Hidden" 
+                   : overallBalance >= 0 ? "Status: Active" : "Status: Attention"}
+              </Text>
+            </View>
+
+            <View style={styles.mcLogoContainer}>
+              <View style={[styles.mcCircle, { backgroundColor: 'rgba(235, 0, 27, 0.8)' }]} />
+              <View style={[styles.mcCircle, { backgroundColor: 'rgba(247, 158, 27, 0.8)', marginLeft: -12 }]} />
+            </View>
+          </View>
+        </LinearGradient>
+      </View>
 
       {/* Personal Finance Summary */}
       <Card style={styles.summaryCard}>
@@ -409,10 +456,12 @@ export default function DashboardScreen({ navigation }: any) {
       </View>
 
       {/* Recent Personal Transactions */}
-      {recentPersonalTransactions.length > 0 && (
+    {recentPersonalTransactions.length > 0 && (
         <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Recent Personal Transactions</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+              Recent Transactions
+            </Text>
             <Button
               mode="text"
               onPress={() => navigation.navigate("PersonalFinance")}
@@ -426,27 +475,34 @@ export default function DashboardScreen({ navigation }: any) {
             <Card
               key={transaction.id}
               style={styles.transactionCard}
-              onPress={() => {
-                // TODO: Navigate to transaction details
-                console.log('View transaction:', transaction.id);
-              }}
+              onPress={() => navigation.navigate("PersonalFinance",{transactionId:transaction.id})}
             >
               <Card.Content style={styles.transactionContent}>
                 <View style={styles.transactionLeft}>
-                  <IconButton
-                    icon={transaction.type === 'income' ? 'arrow-down-circle' : 'arrow-up-circle'}
-                    size={32}
-                    iconColor={transaction.type === 'income' ? '#4CAF50' : '#F44336'}
+                  {/* Changed to Avatar.Icon to match Group Card height (size 40) */}
+                  <Avatar.Icon
+                    size={25}
+                    icon={transaction.type === 'income' ? 'arrow-down' : 'arrow-up'}
+                    color="#fff"
+                    style={{
+                      backgroundColor: transaction.type === 'income' ? '#4CAF50' : '#F44336',
+                      marginRight: 12, // Matches Group spacing
+                    }}
                   />
                   <View style={styles.transactionInfo}>
-                    <Text style={[styles.transactionDescription, { color: theme.colors.onSurface }]}>
+                    <Text 
+                      style={[styles.transactionDescription, { color: theme.colors.onSurface }]}
+                      numberOfLines={1}
+                    >
                       {transaction.description}
                     </Text>
                     <Text style={[styles.transactionDate, { color: theme.colors.onSurfaceVariant }]}>
-                      {format(new Date(transaction.date), "MMM dd, yyyy")} • {transaction.category}
+                      {format(new Date(transaction.date), "MMM dd")} • {transaction.category}
                     </Text>
                   </View>
                 </View>
+                
+                {/* Amount on the right */}
                 <Text
                   style={[
                     styles.transactionAmount,
@@ -460,12 +516,13 @@ export default function DashboardScreen({ navigation }: any) {
           ))}
         </View>
       )}
-
       {/* Recent Group Expenses */}
-      {recentExpenses.length > 0 && (
+   {recentExpenses.length > 0 && (
         <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Recent Group Expenses</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+              Recent Group Expenses
+            </Text>
             <Button
               mode="text"
               onPress={() => navigation.navigate("Expenses")}
@@ -487,32 +544,37 @@ export default function DashboardScreen({ navigation }: any) {
             >
               <Card.Content style={styles.expenseContent}>
                 <View style={styles.expenseLeft}>
-                  <Text style={styles.expenseCategory}>
-                    {expense.category?.icon}
-                  </Text>
+                  {/* Category Emoji inside a 40px Circle (Matches Avatar size) */}
+                  <View style={styles.categoryAvatar}>
+                    <Text style={{ fontSize: 20 }}>
+                      {expense.category?.icon || "🧾"}
+                    </Text>
+                  </View>
+                  
                   <View style={styles.expenseInfo}>
-                    <Text style={[styles.expenseDescription, { color: theme.colors.onSurface }]}>
+                    <Text 
+                      style={[styles.expenseDescription, { color: theme.colors.onSurface }]}
+                      numberOfLines={1}
+                    >
                       {expense.description}
                     </Text>
-                    <Text style={[styles.expenseDate, { color: theme.colors.onSurfaceVariant }]}>
-                      {format(new Date(expense.date), "MMM dd, yyyy")}
+                    <Text style={[styles.expenseSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                      {format(new Date(expense.date), "MMM dd")} • {expense.paid_by === profile?.id ? "You paid" : "Someone paid"}
                     </Text>
                   </View>
                 </View>
-                  <View style={styles.expenseRight}>
-                    <Text style={[styles.expenseAmount, { color: theme.colors.onSurface }]}>₹{expense.amount}</Text>
-                    <Text style={[styles.expensePaidBy, { color: theme.colors.onSurfaceVariant }]}>
-                      {expense.paid_by === profile?.id
-                        ? "You paid"
-                        : `${expense.paid_by_user?.full_name || "Someone"} paid`}
-                    </Text>
-                  </View>
+
+                {/* Amount on the Right */}
+                <View style={styles.expenseRight}>
+                  <Text style={[styles.expenseAmount, { color: theme.colors.onSurface }]}>
+                    ₹{expense.amount}
+                  </Text>
+                </View>
               </Card.Content>
             </Card>
           ))}
         </View>
       )}
-
       {/* Quick Actions */}
       <View style={styles.quickActions}>
         <Button
@@ -622,15 +684,119 @@ const styles = StyleSheet.create({
   avatar: {
     backgroundColor: "#6200EE",
   },
-  overallBalanceCard: {
-    marginBottom: 16,
-    backgroundColor: "#6200EE",
-    elevation: 4,
+ 
+cardContainer: {
+    marginBottom: 24,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
+  creditCard: {
+    borderRadius: 20,
+    padding: 24,
+    height: 220,
+    justifyContent: "space-between",
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  cardChip: {
+    width: 50,
+    height: 35,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.1)",
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardMiddle: {
+    justifyContent: "center",
+  },
+  // UPDATED HEADER STYLES
   balanceHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row', 
     justifyContent: 'space-between',
+    alignItems: 'center', 
+    marginBottom: 8,
+  },
+  labelRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+  },
+  cardLabel: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    letterSpacing: 1.5,
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  eyeIcon: {
+    margin: 0,
+    marginLeft: 10,
+    height: 24,
+    width: 24,
+  },
+  infoIcon: {
+    margin: 0,
+    padding: 0,
+    height: 20,
+    width: 20,
+  },
+  // UPDATED NUMBER STYLE
+  cardNumber: {
+    color: "#fff",
+    fontSize: 28, // Slightly smaller to fit **** safely
+    fontWeight: "bold",
+    letterSpacing: 2, // Wider spacing looks more like a credit card
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', 
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  // ... Keep Bottom Row styles ...
+  cardBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+  },
+  cardHolderInfo: {
+    flex: 1,
+  },
+  cardLabelSmall: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
+  cardName: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    letterSpacing: 1,
+    marginTop: 2,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  cardStatusText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  mcLogoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  mcCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   balanceLabel: {
     fontSize: 14,
@@ -730,6 +896,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
+    marginBottom: 18,
   },
   emptyCard: {
   },
@@ -773,65 +940,83 @@ const styles = StyleSheet.create({
   transactionCard: {
     marginBottom: 8,
   },
-  transactionContent: {
+ transactionContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 8, // This is the key to matching Group Card height
   },
+  
   transactionLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    marginRight: 8, // Add spacing so long text doesn't hit the amount
   },
+  
   transactionInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
+  
   transactionDescription: {
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: "600", // Matches groupName weight
   },
+  
   transactionDate: {
     fontSize: 12,
     marginTop: 2,
   },
+  
   transactionAmount: {
-    fontSize: 18,
+    fontSize: 16, // Matches groupName size for consistency
     fontWeight: "bold",
   },
-  expenseCard: {
+ expenseCard: {
     marginBottom: 8,
   },
+  // Matches Group Content Padding (Vertical 8 is key)
   expenseContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 4,  // Reduced from default padding
+    paddingVertical: 8, 
   },
   expenseLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    marginRight: 8,
   },
-  expenseCategory: {
-    fontSize: 28,  // Reduced from 32
-    marginRight: 10,  // Reduced from 12
+  // New style to mimic Avatar.Image size 40
+  categoryAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f2f5', // Light gray background for emoji
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12, // Standard spacing
   },
   expenseInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   expenseDescription: {
-    fontSize: 15,  // Slightly reduced from 16
-    fontWeight: "500",
+    fontSize: 16,
+    fontWeight: "600",
   },
-  expenseDate: {
-    fontSize: 11,  // Reduced from 12
+  expenseSubtext: {
+    fontSize: 12,
     marginTop: 2,
   },
   expenseRight: {
     alignItems: "flex-end",
+    justifyContent: 'center',
   },
   expenseAmount: {
-    fontSize: 15,  // Reduced from 16
+    fontSize: 16,
     fontWeight: "bold",
   },
   expensePaidBy: {
