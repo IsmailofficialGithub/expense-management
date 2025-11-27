@@ -101,7 +101,7 @@ function MainNavigator() {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Expenses') {
             iconName = focused ? 'wallet' : 'wallet-outline';
-          } else           if (route.name === 'Messages') {
+          } else if (route.name === 'Messages') {
             iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
@@ -158,6 +158,7 @@ export default function AppNavigator() {
   // Screen options for detail and form screens
   const detailScreenOptions = {
     headerShown: true,
+
     headerStyle: {
       backgroundColor: '#6200EE',
     },

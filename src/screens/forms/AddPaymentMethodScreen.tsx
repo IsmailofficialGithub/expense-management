@@ -370,9 +370,9 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
               <Text style={styles.warningText}>
                 ⚠️ When visible to groups, members will see your {
                   methodType === 'bank' ? 'bank account details' :
-                  methodType === 'jazzcash' || methodType === 'easypaisa' ? 'phone number' :
-                  methodType === 'card' ? 'card last 4 digits' :
-                  'payment information'
+                    methodType === 'jazzcash' || methodType === 'easypaisa' ? 'phone number' :
+                      methodType === 'card' ? 'card last 4 digits' :
+                        'payment information'
                 } for easy settlements.
               </Text>
             </Card.Content>

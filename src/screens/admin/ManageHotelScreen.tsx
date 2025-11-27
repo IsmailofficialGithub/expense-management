@@ -88,7 +88,7 @@ export default function ManageHotelScreen({ navigation }: any) {
 
   const handleOpenMenuItemModal = (hotelId: string, menuItem?: HotelMenuItem) => {
     setSelectedHotelId(hotelId);
-    
+
     if (menuItem) {
       // Editing existing item
       setEditingMenuItem(menuItem);
@@ -104,7 +104,7 @@ export default function ManageHotelScreen({ navigation }: any) {
       setItemPrice('');
       setItemDescription('');
     }
-    
+
     setMenuItemErrors({ name: '', category: '', price: '' });
     setMenuItemModalVisible(true);
   };
@@ -257,7 +257,7 @@ export default function ManageHotelScreen({ navigation }: any) {
   // Group menu items by category
   const groupMenuItemsByCategory = (menuItems: HotelMenuItem[]) => {
     const grouped: { [category: string]: HotelMenuItem[] } = {};
-    
+
     menuItems.forEach(item => {
       if (!grouped[item.category]) {
         grouped[item.category] = [];
@@ -355,7 +355,7 @@ export default function ManageHotelScreen({ navigation }: any) {
                   {isExpanded && (
                     <>
                       <Divider style={styles.divider} />
-                      
+
                       {/* Add Item Button */}
                       {isCreatedByMe && (
                         <Button
@@ -388,8 +388,8 @@ export default function ManageHotelScreen({ navigation }: any) {
                               </View>
                             </View>
                             {items.map((item, index) => (
-                              <View 
-                                key={item.id} 
+                              <View
+                                key={item.id}
                                 style={[
                                   styles.menuItem,
                                   index === items.length - 1 && styles.menuItemLast

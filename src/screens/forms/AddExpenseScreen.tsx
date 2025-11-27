@@ -178,82 +178,82 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   };
 
   const validateForm = (): string | null => {
-  const newErrors = {
-    description: "",
-    amount: "",
-    group: "",
-    category: "",
-    members: "",
-    splits: "",
-  };
+    const newErrors = {
+      description: "",
+      amount: "",
+      group: "",
+      category: "",
+      members: "",
+      splits: "",
+    };
 
-  // 1. Check Description
-  if (!description.trim()) {
-    newErrors.description = "Description is required";
-    setErrors(newErrors);
-    return "Description is required"; // Return the specific error
-  }
-
-  // 2. Check Amount
-  const amountNum = parseFloat(amount);
-  if (!amount || isNaN(amountNum) || amountNum <= 0) {
-    newErrors.amount = "Please enter a valid amount greater than 0";
-    setErrors(newErrors);
-    return "Please enter a valid amount"; // Return the specific error
-  }
-
-  // 3. Check Group
-  if (!selectedGroupId) {
-    newErrors.group = "Please select a group";
-    setErrors(newErrors);
-    return "Please select a group"; // Return the specific error
-  }
-
-  // 4. Check Category
-  if (!selectedCategoryId) {
-    newErrors.category = "Please select a category";
-    setErrors(newErrors);
-    return "Please select a category"; // Return the specific error
-  }
-
-  // 5. Check Members
-  if (selectedMembers.length === 0) {
-    newErrors.members = "Please select at least one member";
-    setErrors(newErrors);
-    return "Please select at least one member"; // Return the specific error
-  }
-
-  // 6. Check Custom Splits
-  if (splitType === "unequal") {
-    const totalSplit = selectedMembers.reduce((sum, userId) => {
-      const splitAmount = parseFloat(customSplits[userId] || "0");
-      return sum + splitAmount;
-    }, 0);
-
-    if (Math.abs(totalSplit - amountNum) > 0.01) {
-      const errorMsg = `Splits must equal total amount (₹${amountNum.toFixed(2)})`;
-      newErrors.splits = errorMsg;
+    // 1. Check Description
+    if (!description.trim()) {
+      newErrors.description = "Description is required";
       setErrors(newErrors);
-      return errorMsg; // Return the specific error
+      return "Description is required"; // Return the specific error
     }
-  }
 
-  // 7. No Errors Found
-  setErrors(newErrors); // Clear any old errors
-  return null; // Return null if valid
-};
+    // 2. Check Amount
+    const amountNum = parseFloat(amount);
+    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+      newErrors.amount = "Please enter a valid amount greater than 0";
+      setErrors(newErrors);
+      return "Please enter a valid amount"; // Return the specific error
+    }
+
+    // 3. Check Group
+    if (!selectedGroupId) {
+      newErrors.group = "Please select a group";
+      setErrors(newErrors);
+      return "Please select a group"; // Return the specific error
+    }
+
+    // 4. Check Category
+    if (!selectedCategoryId) {
+      newErrors.category = "Please select a category";
+      setErrors(newErrors);
+      return "Please select a category"; // Return the specific error
+    }
+
+    // 5. Check Members
+    if (selectedMembers.length === 0) {
+      newErrors.members = "Please select at least one member";
+      setErrors(newErrors);
+      return "Please select at least one member"; // Return the specific error
+    }
+
+    // 6. Check Custom Splits
+    if (splitType === "unequal") {
+      const totalSplit = selectedMembers.reduce((sum, userId) => {
+        const splitAmount = parseFloat(customSplits[userId] || "0");
+        return sum + splitAmount;
+      }, 0);
+
+      if (Math.abs(totalSplit - amountNum) > 0.01) {
+        const errorMsg = `Splits must equal total amount (₹${amountNum.toFixed(2)})`;
+        newErrors.splits = errorMsg;
+        setErrors(newErrors);
+        return errorMsg; // Return the specific error
+      }
+    }
+
+    // 7. No Errors Found
+    setErrors(newErrors); // Clear any old errors
+    return null; // Return null if valid
+  };
   const handleSubmit = async () => {
     // ... (no changes to this function)
     if (!isOnline) {
       showToast("Cannot add expense. No internet connection.", "error");
       return;
     }
-  const validationError = validateForm();
+    const validationError = validateForm();
 
-  if (validationError) {
-    showToast(validationError, "error");
-    return; // Stop the function
-  }
+    if (validationError) {
+      showToast(validationError, "error");
+      return; // Stop the function
+    }
     setIsSubmitting(true);
     const amountNum = parseFloat(amount);
     const splits = selectedMembers.map((userId) => {
@@ -269,24 +269,24 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
         };
       }
     });
-   let receiptFile: any = undefined;
-if (receiptUri) {
-  try {
-    // For React Native, we need to create a proper file object
-    const filename = receiptUri.split('/').pop() || 'receipt.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    let receiptFile: any = undefined;
+    if (receiptUri) {
+      try {
+        // For React Native, we need to create a proper file object
+        const filename = receiptUri.split('/').pop() || 'receipt.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-    receiptFile = {
-      uri: receiptUri,
-      name: filename,
-      type: type,
-    };
-  } catch (error) {
-    ErrorHandler.logError(error, "Receipt Upload");
-    showToast("Failed to upload receipt", "warning");
-  }
-}
+        receiptFile = {
+          uri: receiptUri,
+          name: filename,
+          type: type,
+        };
+      } catch (error) {
+        ErrorHandler.logError(error, "Receipt Upload");
+        showToast("Failed to upload receipt", "warning");
+      }
+    }
     try {
       await dispatch(
         createExpense({

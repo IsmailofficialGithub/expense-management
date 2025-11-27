@@ -88,7 +88,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
         parseFloat(amount) !== Number(transaction.amount) ||
         selectedCategory !== transaction.category ||
         notes.trim() !== (transaction.notes || '');
-      
+
       setHasChanges(changed);
     }
   }, [type, description, amount, selectedCategory, notes, transaction]);
@@ -262,7 +262,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
         onValueChange={(value) => {
           const newType = value as 'income' | 'expense';
           setType(newType);
-          
+
           // Reset category if current category doesn't exist in new type
           const categoryExistsInNewType = categories.some(
             c => c.type === newType && c.name === selectedCategory
@@ -341,9 +341,9 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
               style={[
                 styles.categoryChip,
                 selectedCategory === category.name &&
-                  (type === 'income'
-                    ? styles.selectedIncomeChip
-                    : styles.selectedExpenseChip),
+                (type === 'income'
+                  ? styles.selectedIncomeChip
+                  : styles.selectedExpenseChip),
               ]}
               icon={() => <Text style={styles.categoryIcon}>{category.icon}</Text>}
               textStyle={styles.categoryText}

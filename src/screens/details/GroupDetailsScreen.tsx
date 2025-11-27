@@ -1,6 +1,5 @@
-// src/screens/details/GroupDetailsScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar } from 'react-native';
 import { Text, Card, Avatar, Button, IconButton, Chip, Divider, FAB, Portal, Modal, TextInput, HelperText, List } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
 import { useExpenses } from '../../hooks/useExpenses';
@@ -13,7 +12,7 @@ import { fetchExpenses } from '../../store/slices/expensesSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
-import SafeScrollView from '../../components/SafeScrollView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { chatService } from '../../services/chat.service';
 
@@ -35,6 +34,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
+  const insets = useSafeAreaInsets();
 
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -221,9 +221,9 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <SafeScrollView
+      <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+      <ScrollView
         contentContainerStyle={styles.content}
-        hasTabBar={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -300,8 +300,8 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                     myBalance && myBalance.balance > 0
                       ? styles.positiveBalance
                       : myBalance && myBalance.balance < 0
-                      ? styles.negativeBalance
-                      : styles.neutralBalance,
+                        ? styles.negativeBalance
+                        : styles.neutralBalance,
                   ]}
                 >
                   {myBalance ? `₹${myBalance.balance.toFixed(2)}` : '₹0.00'}
@@ -315,14 +315,14 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Members</Text>
-           <View style={{display: 'flex', flexDirection: 'row'}}>
-             {isAdmin && (
-              <IconButton
-                icon="account-plus"
-                size={24}
-                onPress={() => setAddMemberModalVisible(true)}
-              />
-            )}
+            <View style={{ display: 'flex', flexDirection: 'row' }}>
+              {isAdmin && (
+                <IconButton
+                  icon="account-plus"
+                  size={24}
+                  onPress={() => setAddMemberModalVisible(true)}
+                />
+              )}
               <IconButton
                 icon="email"
                 size={24}
@@ -340,7 +340,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                   }
                 }}
               />
-           </View>
+            </View>
           </View>
 
           {selectedGroup.members?.map((member) => {
@@ -372,8 +372,8 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                           memberBalance.balance > 0
                             ? styles.positiveBalance
                             : memberBalance.balance < 0
-                            ? styles.negativeBalance
-                            : styles.neutralBalance,
+                              ? styles.negativeBalance
+                              : styles.neutralBalance,
                         ]}
                       >
                         ₹{memberBalance.balance.toFixed(2)}
@@ -452,7 +452,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             ))
           )}
         </View>
-      </SafeScrollView>
+      </ScrollView>
 
       {/* Floating Action Buttons */}
       <View style={styles.fabContainer}>
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 80,
+    paddingBottom: 120,
   },
   headerCard: {
     marginBottom: 16,

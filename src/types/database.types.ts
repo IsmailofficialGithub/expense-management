@@ -233,10 +233,10 @@ export interface PersonalDebt {
   updated_at: string
 }
 
-export type NotificationType = 
-  | 'expense_added' 
-  | 'payment_received' 
-  | 'reminder' 
+export type NotificationType =
+  | 'expense_added'
+  | 'payment_received'
+  | 'reminder'
   | 'group_invite'
 
 export interface Notification {
@@ -312,26 +312,26 @@ export interface UserPaymentMethod {
   user_id: string;
   method_type: PaymentMethodType;
   is_default: boolean;
-  
+
   // Bank details
   bank_name: string | null;
   account_title: string | null;
   account_number: string | null;
   iban: string | null;
-  
+
   // Mobile wallet
   phone_number: string | null;
-  
+
   // Card details
   card_last_four: string | null;
-  
+
   // Other
   custom_name: string | null;
   notes: string | null;
-  
+
   // Privacy
   is_visible_to_groups: boolean;
-  
+
   created_at: string;
   updated_at: string;
 }
@@ -546,11 +546,11 @@ export interface ExpenseFilters {
   search?: string
 }
 
-export type ExpenseSortBy = 
-  | 'date_desc' 
-  | 'date_asc' 
-  | 'amount_desc' 
-  | 'amount_asc' 
+export type ExpenseSortBy =
+  | 'date_desc'
+  | 'date_asc'
+  | 'amount_desc'
+  | 'amount_asc'
   | 'created_desc'
 
 export interface PaginationParams {

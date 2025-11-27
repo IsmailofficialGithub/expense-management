@@ -241,9 +241,9 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
               style={[
                 styles.categoryChip,
                 selectedCategory === category.name &&
-                  (type === 'income'
-                    ? styles.selectedIncomeChip
-                    : styles.selectedExpenseChip),
+                (type === 'income'
+                  ? styles.selectedIncomeChip
+                  : styles.selectedExpenseChip),
               ]}
               icon={() => <Text style={styles.categoryIcon}>{category.icon}</Text>}
               textStyle={styles.categoryText}

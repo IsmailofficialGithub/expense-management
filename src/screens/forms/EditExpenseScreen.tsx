@@ -100,7 +100,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
     try {
       await dispatch(fetchCategories()).unwrap();
       const expense = await dispatch(fetchExpense(expenseId)).unwrap();
-      
+
       if (expense.group_id) {
         await dispatch(fetchGroup(expense.group_id)).unwrap();
       }
@@ -466,7 +466,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
 
         {/* Optional: Date, Notes, Receipt */}
         <Text style={styles.sectionTitle}>Additional Details (Optional)</Text>
-        
+
         {/* Date - Simple display for now */}
         <Text style={styles.label}>Date</Text>
         <Text style={styles.dateText}>{format(selectedDate, 'MMMM dd, yyyy')}</Text>

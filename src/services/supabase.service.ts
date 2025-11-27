@@ -54,7 +54,7 @@ export const authService = {
 
     // Note: Invitation token is already stored in group_invitations table
     // We don't need to store it in user metadata - we'll look it up by email when user logs in
-    
+
     // Sign out immediately after signup to prevent auto-login
     // User must verify email and then manually log in
     await supabase.auth.signOut();
@@ -146,7 +146,7 @@ export const profileService = {
       .select('*')
       .eq('id', userId)
       .single();
-    
+
     // Handle case where profile doesn't exist (PGRST116)
     if (error) {
       if (error.code === 'PGRST116') {
@@ -169,87 +169,87 @@ export const profileService = {
     if (error) throw error;
     return data;
   },
-uploadAvatar: async (imageUri: string): Promise<string> => {
-  const user = await authService.getCurrentUser();
-  if (!user) throw new Error('Not authenticated');
+  uploadAvatar: async (imageUri: string): Promise<string> => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
 
-  // Get current profile to check for existing avatar
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('avatar_url')
-    .eq('id', user.id)
-    .single();
+    // Get current profile to check for existing avatar
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('id', user.id)
+      .single();
 
-  // Delete old avatar if exists
-  if (profile?.avatar_url) {
-    try {
-      const urlParts = profile.avatar_url.split('/avatars/');
-      if (urlParts.length > 1) {
-        const oldFileName = urlParts[1];
-        
-        const { error: deleteError } = await supabase.storage
-          .from('avatars')
-          .remove([oldFileName]);
+    // Delete old avatar if exists
+    if (profile?.avatar_url) {
+      try {
+        const urlParts = profile.avatar_url.split('/avatars/');
+        if (urlParts.length > 1) {
+          const oldFileName = urlParts[1];
 
-        if (deleteError) {
-          console.warn('Failed to delete old avatar:', deleteError);
-        } else {
-          console.log('Old avatar deleted successfully');
+          const { error: deleteError } = await supabase.storage
+            .from('avatars')
+            .remove([oldFileName]);
+
+          if (deleteError) {
+            console.warn('Failed to delete old avatar:', deleteError);
+          } else {
+            console.log('Old avatar deleted successfully');
+          }
         }
+      } catch (error) {
+        console.warn('Error processing old avatar:', error);
       }
-    } catch (error) {
-      console.warn('Error processing old avatar:', error);
     }
-  }
 
-  // Generate unique filename
-  const fileExt = 'jpg';
-  const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-  
-  // Fetch image and convert to Uint8Array
-  const response = await fetch(imageUri);
-  
-  if (!response.ok) {
-    throw new Error('Failed to fetch image');
-  }
-  
-  const arrayBuffer = await response.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
+    // Generate unique filename
+    const fileExt = 'jpg';
+    const fileName = `${user.id}-${Date.now()}.${fileExt}`;
 
-  // Upload to Supabase Storage (no 'avatars/' prefix in path)
-  const { error: uploadError } = await supabase.storage
-    .from('avatars')
-    .upload(fileName, uint8Array, {
-      contentType: 'image/jpeg',
-      cacheControl: '3600',
-      upsert: false,
-    });
+    // Fetch image and convert to Uint8Array
+    const response = await fetch(imageUri);
 
-  if (uploadError) {
-    console.error('Avatar upload error:', uploadError);
-    throw uploadError;
-  }
+    if (!response.ok) {
+      throw new Error('Failed to fetch image');
+    }
 
-  // Get public URL
-  const { data: { publicUrl } } = supabase.storage
-    .from('avatars')
-    .getPublicUrl(fileName);
+    const arrayBuffer = await response.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
 
-  console.log('Generated public URL:', publicUrl);
+    // Upload to Supabase Storage (no 'avatars/' prefix in path)
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, uint8Array, {
+        contentType: 'image/jpeg',
+        cacheControl: '3600',
+        upsert: false,
+      });
 
-  // Update profile with new avatar URL
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({ avatar_url: publicUrl })
-    .eq('id', user.id);
+    if (uploadError) {
+      console.error('Avatar upload error:', uploadError);
+      throw uploadError;
+    }
 
-  if (updateError) {
-    console.error('Profile update error:', updateError);
-    throw updateError;
-  }
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(fileName);
 
-  return publicUrl;
-},
+    console.log('Generated public URL:', publicUrl);
+
+    // Update profile with new avatar URL
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ avatar_url: publicUrl })
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error('Profile update error:', updateError);
+      throw updateError;
+    }
+
+    return publicUrl;
+  },
   searchProfiles: async (query: string): Promise<Profile[]> => {
     const { data, error } = await supabase
       .from('profiles')
@@ -682,7 +682,7 @@ export const invitationService = {
       console.error('Email sending failed:', error);
       // Log the full error for debugging
       console.error('Full error object:', JSON.stringify(error, null, 2));
-      
+
       // Don't throw - invitation is still created even if email fails
       // This allows the invitation to work even if email service is down
       // But we still log it for debugging
@@ -694,7 +694,7 @@ export const invitationService = {
    * Invite user to group
    */
 
- async inviteUser(request: InviteUserRequest): Promise<GroupInvitation> {
+  async inviteUser(request: InviteUserRequest): Promise<GroupInvitation> {
     const logContext = {
       action: "inviteUser",
       groupId: request.group_id,
@@ -736,8 +736,8 @@ export const invitationService = {
         .eq("email", request.invited_email)
         // .maybeSingle();
         .single();
-        console.log("existingProfile", existingProfile);
-        console.log("profileError", profileError);
+      console.log("existingProfile", existingProfile);
+      console.log("profileError", profileError);
 
       if (profileError && profileError.code !== "PGRST116") {
         console.error("Profile lookup failed:", { ...logContext, profileError });
@@ -747,7 +747,7 @@ export const invitationService = {
       // If user exists already, just create invitation (no password, no user creation)
       if (existingProfile) {
         console.log("User exists, creating simple invitation:", logContext);
-        
+
         // Check if user is already a member
         const { data: existingMember } = await supabase
           .from("group_members")
@@ -810,7 +810,7 @@ export const invitationService = {
         // Send simple invitation email (no password, no credentials)
         try {
           const appLink = `flatmates://invitations`;
-          
+
           await this.sendInvitationEmail(
             request.invited_email,
             inviterProfile?.full_name || "Someone",
@@ -1333,85 +1333,85 @@ export const groupService = {
 
 export const expenseService = {
 
-createExpense: async (request: CreateExpenseRequest): Promise<Expense> => {
-  // Upload receipt if provided
-  let receiptUrl = null;
-  if (request.receipt) {
-    try {
-      const fileName = `${Date.now()}_${request.receipt.name || 'receipt.jpg'}`;
-      
-      // Simpler method - use fetch with arrayBuffer
-      const response = await fetch(request.receipt.uri);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch image');
-      }
-      
-      const arrayBuffer = await response.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      // Upload to Supabase storage
-      const { error: uploadError } = await supabase.storage
-        .from('receipts')
-        .upload(fileName, uint8Array, {
-          contentType: request.receipt.type || 'image/jpeg',
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (uploadError) {
-        console.error('Receipt upload error:', uploadError);
-        throw uploadError;
-      }
+  createExpense: async (request: CreateExpenseRequest): Promise<Expense> => {
+    // Upload receipt if provided
+    let receiptUrl = null;
+    if (request.receipt) {
+      try {
+        const fileName = `${Date.now()}_${request.receipt.name || 'receipt.jpg'}`;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('receipts')
-        .getPublicUrl(fileName);
-      
-      receiptUrl = publicUrl;
-    } catch (error) {
-      console.error('Failed to process receipt:', error);
-      receiptUrl = null;
+        // Simpler method - use fetch with arrayBuffer
+        const response = await fetch(request.receipt.uri);
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch image');
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        // Upload to Supabase storage
+        const { error: uploadError } = await supabase.storage
+          .from('receipts')
+          .upload(fileName, uint8Array, {
+            contentType: request.receipt.type || 'image/jpeg',
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Receipt upload error:', uploadError);
+          throw uploadError;
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('receipts')
+          .getPublicUrl(fileName);
+
+        receiptUrl = publicUrl;
+      } catch (error) {
+        console.error('Failed to process receipt:', error);
+        receiptUrl = null;
+      }
     }
-  }
 
-  // Create expense
-  const { data: expense, error: expenseError } = await supabase
-    .from('expenses')
-    .insert({
-      group_id: request.group_id,
-      category_id: request.category_id,
-      description: request.description,
-      amount: request.amount,
-      paid_by: request.paid_by,
-      date: request.date || new Date().toISOString().split('T')[0],
-      notes: request.notes,
-      receipt_url: receiptUrl,
-      split_type: request.split_type,
-    })
-    .select()
-    .single();
+    // Create expense
+    const { data: expense, error: expenseError } = await supabase
+      .from('expenses')
+      .insert({
+        group_id: request.group_id,
+        category_id: request.category_id,
+        description: request.description,
+        amount: request.amount,
+        paid_by: request.paid_by,
+        date: request.date || new Date().toISOString().split('T')[0],
+        notes: request.notes,
+        receipt_url: receiptUrl,
+        split_type: request.split_type,
+      })
+      .select()
+      .single();
 
-  if (expenseError) throw expenseError;
+    if (expenseError) throw expenseError;
 
-  // Create splits
-  const splits = request.splits.map(split => ({
-    expense_id: expense.id,
-    user_id: split.user_id,
-    amount: split.amount || 0,
-    percentage: split.percentage,
-    shares: split.shares,
-  }));
+    // Create splits
+    const splits = request.splits.map(split => ({
+      expense_id: expense.id,
+      user_id: split.user_id,
+      amount: split.amount || 0,
+      percentage: split.percentage,
+      shares: split.shares,
+    }));
 
-  const { error: splitsError } = await supabase
-    .from('expense_splits')
-    .insert(splits);
+    const { error: splitsError } = await supabase
+      .from('expense_splits')
+      .insert(splits);
 
-  if (splitsError) throw splitsError;
+    if (splitsError) throw splitsError;
 
-  return expense;
-},
+    return expense;
+  },
   getExpenses: async (filters?: ExpenseFilters): Promise<ExpenseWithDetails[]> => {
     let query = supabase
       .from('expenses')
@@ -1456,10 +1456,10 @@ createExpense: async (request: CreateExpenseRequest): Promise<Expense> => {
     return data as any;
   },
 
- async getExpense(expenseId: string): Promise<ExpenseWithDetails> {
-  const { data, error } = await supabase
-    .from('expenses')
-    .select(`
+  async getExpense(expenseId: string): Promise<ExpenseWithDetails> {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select(`
       *,
       category:expense_categories(*),
       paid_by_user:profiles!expenses_paid_by_fkey(*),
@@ -1472,12 +1472,12 @@ createExpense: async (request: CreateExpenseRequest): Promise<Expense> => {
       food_items:expense_food_items(*),
       payment_method:user_payment_methods(*)
     `)
-    .eq('id', expenseId)
-    .single();
+      .eq('id', expenseId)
+      .single();
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   updateExpense: async (expenseId: string, updates: Partial<Expense>) => {
     const { data, error } = await supabase
@@ -1490,33 +1490,33 @@ createExpense: async (request: CreateExpenseRequest): Promise<Expense> => {
     return data;
   },
   async uploadReceipt(filePath: string, file: File) {
-  return await supabase.storage
-    .from("receipts")
-    .upload(filePath, file, { upsert: true });
-},
-getReceiptUrl(filePath: string) {
-  return supabase.storage.from("receipts").getPublicUrl(filePath).data.publicUrl;
-}
-,
-async replaceSplits(expenseId: string, splits: { user_id: string; amount: number }[]) {
-  // Delete old splits
-  await supabase
-    .from("expense_splits")
-    .delete()
-    .eq("expense_id", expenseId);
-
-  // Insert new splits
-  if (splits.length > 0) {
-    await supabase.from("expense_splits").insert(
-      splits.map((s) => ({
-        expense_id: expenseId,
-        user_id: s.user_id,
-        amount: s.amount,
-      }))
-    );
+    return await supabase.storage
+      .from("receipts")
+      .upload(filePath, file, { upsert: true });
+  },
+  getReceiptUrl(filePath: string) {
+    return supabase.storage.from("receipts").getPublicUrl(filePath).data.publicUrl;
   }
-}
-,
+  ,
+  async replaceSplits(expenseId: string, splits: { user_id: string; amount: number }[]) {
+    // Delete old splits
+    await supabase
+      .from("expense_splits")
+      .delete()
+      .eq("expense_id", expenseId);
+
+    // Insert new splits
+    if (splits.length > 0) {
+      await supabase.from("expense_splits").insert(
+        splits.map((s) => ({
+          expense_id: expenseId,
+          user_id: s.user_id,
+          amount: s.amount,
+        }))
+      );
+    }
+  }
+  ,
   deleteExpense: async (expenseId: string) => {
     const { error } = await supabase
       .from('expenses')

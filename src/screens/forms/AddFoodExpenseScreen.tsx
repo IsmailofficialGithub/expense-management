@@ -35,7 +35,7 @@ interface SelectedFoodItem extends FoodItemInput {
 
 export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   const preSelectedGroupId = route?.params?.groupId;
-  
+
   const { groups } = useGroups();
   const { hotels } = useHotels();
   const { paymentMethods, defaultMethod } = usePaymentMethods();
@@ -61,7 +61,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   const [menuItemModalVisible, setMenuItemModalVisible] = useState(false);
   const [manualItemModalVisible, setManualItemModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Manual item inputs
   const [manualItemName, setManualItemName] = useState('');
   const [manualItemPrice, setManualItemPrice] = useState('');
@@ -90,7 +90,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       if (group && group.members) {
         const memberIds = group.members.map(m => m.user_id);
         setSelectedMembers(memberIds);
-        
+
         const splits: { [key: string]: string } = {};
         memberIds.forEach(id => {
           splits[id] = '';
@@ -150,7 +150,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   const handleAddMenuItem = (menuItem: HotelMenuItem) => {
     // Check if item already added
     const existing = selectedFoodItems.find(item => item.menu_item_id === menuItem.id);
-    
+
     if (existing) {
       // Increase quantity
       setSelectedFoodItems(
@@ -306,8 +306,8 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
 
     try {
       // Find food category - look for "Food" or "Restaurant" category, otherwise use first available
-      let foodCategoryId = categories.find(cat => 
-        cat.name.toLowerCase().includes('food') || 
+      let foodCategoryId = categories.find(cat =>
+        cat.name.toLowerCase().includes('food') ||
         cat.name.toLowerCase().includes('restaurant') ||
         cat.name.toLowerCase().includes('dining')
       )?.id;
@@ -549,15 +549,15 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
                 style={styles.chip}
                 icon={
                   method.method_type === 'cash' ? 'cash' :
-                  method.method_type === 'bank' ? 'bank' :
-                  method.method_type === 'card' ? 'credit-card' :
-                  'wallet'
+                    method.method_type === 'bank' ? 'bank' :
+                      method.method_type === 'card' ? 'credit-card' :
+                        'wallet'
                 }
               >
                 {method.method_type === 'cash' ? 'Cash' :
-                 method.method_type === 'bank' ? method.bank_name || 'Bank' :
-                 method.method_type === 'card' ? `Card ${method.card_last_four || ''}` :
-                 method.custom_name || method.method_type}
+                  method.method_type === 'bank' ? method.bank_name || 'Bank' :
+                    method.method_type === 'card' ? `Card ${method.card_last_four || ''}` :
+                      method.custom_name || method.method_type}
               </Chip>
             ))}
           </View>
@@ -677,7 +677,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
           contentContainerStyle={styles.modalContent}
         >
           <Text style={styles.modalTitle}>Select from Menu</Text>
-          
+
           <Searchbar
             placeholder="Search items..."
             onChangeText={setSearchQuery}

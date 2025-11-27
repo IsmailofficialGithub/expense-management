@@ -60,10 +60,10 @@ export default function InvitationsScreen({ navigation }: any) {
     try {
       await invitationService.acceptInvitation(invitation.id);
       showToast(`You've joined "${invitation.group.name}"!`, 'success');
-      
+
       // Remove from list
       setInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
-      
+
       // Navigate to group details
       navigation.navigate('GroupDetails', { groupId: invitation.group_id });
     } catch (error: any) {
@@ -88,7 +88,7 @@ export default function InvitationsScreen({ navigation }: any) {
     try {
       await invitationService.rejectInvitation(invitation.id);
       showToast('Invitation declined', 'info');
-      
+
       // Remove from list
       setInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
     } catch (error: any) {
@@ -120,8 +120,8 @@ export default function InvitationsScreen({ navigation }: any) {
             Group Invitations
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
-            {invitations.length === 0 
-              ? 'No pending invitations' 
+            {invitations.length === 0
+              ? 'No pending invitations'
               : `${invitations.length} invitation${invitations.length > 1 ? 's' : ''} pending`}
           </Text>
         </View>

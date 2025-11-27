@@ -85,7 +85,7 @@ export default function InviteUserScreen({ navigation, route }: Props) {
       } catch (error: any) {
         failCount++;
         console.error(`Failed to invite ${invitedEmail}:`, error.message);
-        
+
         // Show specific error for this email
         if (error.message.includes('already exists') || error.message.includes('already a member')) {
           showToast(`${invitedEmail} is already a member`, 'warning');
@@ -104,7 +104,7 @@ export default function InviteUserScreen({ navigation, route }: Props) {
         `Successfully invited ${successCount} user${successCount > 1 ? 's' : ''}!`,
         'success'
       );
-      
+
       if (failCount === 0) {
         navigation.goBack();
       } else {

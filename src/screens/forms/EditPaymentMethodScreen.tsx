@@ -63,7 +63,7 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
     const method = paymentMethods.find(m => m.id === methodId);
     if (method) {
       setPaymentMethod(method);
-      
+
       // Populate form
       setIsDefault(method.is_default);
       setIsVisibleToGroups(method.is_visible_to_groups);
@@ -411,9 +411,9 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
               <Text style={styles.warningText}>
                 ⚠️ When visible to groups, members will see your {
                   paymentMethod.method_type === 'bank' ? 'bank account details' :
-                  paymentMethod.method_type === 'jazzcash' || paymentMethod.method_type === 'easypaisa' ? 'phone number' :
-                  paymentMethod.method_type === 'card' ? 'card last 4 digits' :
-                  'payment information'
+                    paymentMethod.method_type === 'jazzcash' || paymentMethod.method_type === 'easypaisa' ? 'phone number' :
+                      paymentMethod.method_type === 'card' ? 'card last 4 digits' :
+                        'payment information'
                 } for easy settlements.
               </Text>
             </Card.Content>
