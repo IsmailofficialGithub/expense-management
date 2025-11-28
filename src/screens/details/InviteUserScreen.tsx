@@ -1,7 +1,7 @@
 // src/screens/details/InviteUserScreen.tsx
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, StatusBar } from 'react-native';
-import { Text, TextInput, Button, Card, IconButton, Chip, HelperText, useTheme } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, StatusBar, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { Text, TextInput, Button, Card, IconButton, Chip, HelperText, useTheme, Divider } from 'react-native-paper';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { invitationService } from '../../services/supabase.service';
@@ -55,6 +55,7 @@ export default function InviteUserScreen({ navigation, route }: Props) {
 
     setInvitedEmails([...invitedEmails, email.toLowerCase()]);
     setEmail('');
+    Keyboard.dismiss();
   };
 
   const handleRemoveEmail = (emailToRemove: string) => {
@@ -72,6 +73,7 @@ export default function InviteUserScreen({ navigation, route }: Props) {
       return;
     }
 
+    Keyboard.dismiss();
     setIsInviting(true);
 
     let successCount = 0;
@@ -124,97 +126,148 @@ export default function InviteUserScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} translucent={false} />
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* Info Card */}
-          <Card style={styles.infoCard}>
-            <Card.Content>
-              <IconButton icon="information" size={32} iconColor="#6200EE" style={styles.infoIcon} />
-              <Text style={styles.infoTitle}>How it works</Text>
-              <Text style={styles.infoText}>
-                • Enter email addresses of people you want to invite{'\n'}
-                • We'll create accounts for them automatically{'\n'}
-                • They'll receive an email with login credentials{'\n'}
-                • They can change their password after first login
-              </Text>
-            </Card.Content>
-          </Card>
-
-          {/* Group Info */}
-          <Card style={styles.groupCard}>
-            <Card.Content>
-              <Text style={styles.label}>Inviting to group:</Text>
-              <Text style={styles.groupName}>{groupName}</Text>
-            </Card.Content>
-          </Card>
-
-          {/* Email Input */}
-          <Text style={styles.sectionTitle}>Add Email Addresses</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              label="Email Address *"
-              value={email}
-              onChangeText={setEmail}
-              mode="outlined"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              error={!!errors.email}
-              style={styles.emailInput}
-              placeholder="user@example.com"
-              onSubmitEditing={handleAddEmail}
-            />
-            <IconButton
-              icon="plus"
-              size={24}
-              mode="contained"
-              onPress={handleAddEmail}
-              style={styles.addButton}
-              disabled={!email.trim()}
-            />
-          </View>
-          {errors.email ? (
-            <HelperText type="error" visible={!!errors.email}>
-              {errors.email}
-            </HelperText>
-          ) : null}
-
-          {/* Invited Emails List */}
-          {invitedEmails.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>
-                Emails to Invite ({invitedEmails.length})
-              </Text>
-              <View style={styles.emailsList}>
-                {invitedEmails.map((invitedEmail) => (
-                  <Chip
-                    key={invitedEmail}
-                    mode="outlined"
-                    onClose={() => handleRemoveEmail(invitedEmail)}
-                    style={styles.emailChip}
-                  >
-                    {invitedEmail}
-                  </Chip>
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Send Button */}
-          <Button
-            mode="contained"
-            onPress={handleSendInvitations}
-            disabled={invitedEmails.length === 0 || isInviting}
-            loading={isInviting}
-            style={styles.sendButton}
-            contentStyle={styles.sendButtonContent}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            Send Invitations
-          </Button>
-        </ScrollView>
+            {/* Group Info */}
+            <Card style={[styles.groupCard, { borderLeftColor: theme.colors.primary, backgroundColor: theme.colors.surface }]} elevation={1}>
+              <Card.Content style={styles.groupCardContent}>
+                <View style={[styles.groupIconContainer, { backgroundColor: theme.colors.primaryContainer }]}>
+                  <IconButton
+                    icon="account-group"
+                    size={24}
+                    iconColor={theme.colors.primary}
+                    style={styles.groupIcon}
+                  />
+                </View>
+                <View style={styles.groupTextContainer}>
+                  <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Inviting to group</Text>
+                  <Text style={[styles.groupName, { color: theme.colors.onSurface }]}>{groupName}</Text>
+                </View>
+              </Card.Content>
+            </Card>
+
+            {/* Email Input Section */}
+            <Card style={[styles.inputCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
+              <Card.Content>
+                <View style={styles.sectionHeader}>
+                  <IconButton
+                    icon="email-plus"
+                    size={20}
+                    iconColor={theme.colors.primary}
+                    style={styles.sectionIcon}
+                  />
+                  <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Add Email Addresses</Text>
+                </View>
+
+                <Divider style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+
+                <View style={styles.inputRow}>
+                  <TextInput
+                    label="Email Address *"
+                    value={email}
+                    onChangeText={setEmail}
+                    mode="outlined"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    error={!!errors.email}
+                    style={[styles.emailInput, { backgroundColor: theme.colors.surface }]}
+                    placeholder="user@example.com"
+                    onSubmitEditing={handleAddEmail}
+                    returnKeyType="done"
+                    blurOnSubmit={false}
+                    theme={{ colors: { primary: theme.colors.primary } }}
+                  />
+                  <IconButton
+                    icon="plus-circle"
+                    size={28}
+                    iconColor={email.trim() ? theme.colors.primary : theme.colors.surfaceDisabled}
+                    onPress={handleAddEmail}
+                    style={styles.addButton}
+                    disabled={!email.trim()}
+                  />
+                </View>
+                {errors.email ? (
+                  <HelperText type="error" visible={!!errors.email} style={styles.errorText}>
+                    {errors.email}
+                  </HelperText>
+                ) : null}
+              </Card.Content>
+            </Card>
+
+            {/* Invited Emails List */}
+            {invitedEmails.length > 0 && (
+              <Card style={[styles.emailsListCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
+                <Card.Content>
+                  <View style={styles.sectionHeader}>
+                    <IconButton
+                      icon="email-check"
+                      size={20}
+                      iconColor={theme.colors.primary}
+                      style={styles.sectionIcon}
+                    />
+                    <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+                      Emails to Invite
+                    </Text>
+                    <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
+                      <Text style={[styles.countBadgeText, { color: theme.colors.onPrimary }]}>{invitedEmails.length}</Text>
+                    </View>
+                  </View>
+
+                  <Divider style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+
+                  <View style={styles.emailsList}>
+                    {invitedEmails.map((invitedEmail, index) => (
+                      <Chip
+                        key={invitedEmail}
+                        mode="outlined"
+                        onClose={() => handleRemoveEmail(invitedEmail)}
+                        style={[styles.emailChip, {
+                          backgroundColor: theme.colors.primaryContainer,
+                          borderColor: theme.colors.primary
+                        }]}
+                        closeIcon="close-circle"
+                        textStyle={[styles.chipText, { color: theme.colors.onPrimaryContainer }]}
+                      >
+                        {invitedEmail}
+                      </Chip>
+                    ))}
+                  </View>
+                </Card.Content>
+              </Card>
+            )}
+
+            {/* Send Button */}
+            <Button
+              mode="contained"
+              onPress={handleSendInvitations}
+              disabled={invitedEmails.length === 0 || isInviting}
+              loading={isInviting}
+              style={styles.sendButton}
+              contentStyle={styles.sendButtonContent}
+              icon="send"
+              labelStyle={styles.sendButtonLabel}
+              buttonColor={theme.colors.primary}
+            >
+              {invitedEmails.length > 0
+                ? `Send ${invitedEmails.length} Invitation${invitedEmails.length > 1 ? 's' : ''}`
+                : 'Send Invitations'
+              }
+            </Button>
+
+            {/* Bottom spacing for keyboard */}
+            <View style={styles.bottomSpacer} />
+          </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
 
       <LoadingOverlay visible={isInviting} message="Sending invitations..." />
@@ -231,73 +284,133 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 120,
+    paddingTop: 20,
+    flexGrow: 1,
   },
-  infoCard: {
-    marginBottom: 16,
-    backgroundColor: '#E8DEF8',
+
+  // Group Card Styles
+  groupCard: {
+    marginBottom: 20, // backgroundColor: '#fff',
+    borderRadius: 12,
+    borderLeftWidth: 4,
   },
-  infoIcon: {
-    alignSelf: 'center',
+  groupCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  groupIconContainer: {
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  groupIcon: {
     margin: 0,
   },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6200EE',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 22,
-  },
-  groupCard: {
-    marginBottom: 24,
-    backgroundColor: '#fff',
+  groupTextContainer: {
+    flex: 1,
   },
   label: {
     fontSize: 12,
-    color: '#666',
     marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontWeight: '600',
   },
   groupName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+
+  // Input Card Styles
+  inputCard: {
+    marginBottom: 20,
+    borderRadius: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionIcon: {
+    margin: 0,
+    marginRight: 4,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  divider: {
+    marginBottom: 16,
   },
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 8,
   },
   emailInput: {
     flex: 1,
   },
   addButton: {
+    margin: 0,
     marginTop: 6,
-    backgroundColor: '#6200EE',
+  },
+  errorText: {
+    marginTop: 4,
+    marginLeft: 0,
+  },
+
+  // Emails List Card Styles
+  emailsListCard: {
+    marginBottom: 20,
+    borderRadius: 12,
+  },
+  countBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   emailsList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 24,
+    gap: 10,
   },
   emailChip: {
-    marginBottom: 4,
+    borderWidth: 1.5,
   },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // Send Button Styles
   sendButton: {
-    marginTop: 24,
+    marginTop: 8,
+    borderRadius: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   sendButtonContent: {
-    paddingVertical: 8,
+    paddingVertical: 10,
+  },
+  sendButtonLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // Bottom Spacer
+  bottomSpacer: {
+    height: 80,
   },
 });

@@ -31,6 +31,7 @@
       "SMTP_USER": "lalagggg786@gmail.com",
       "SMTP_PASSWORD": "ejylvsecowyaifmo",
       "SMTP_FROM_NAME": "Flatmates Expense Tracker",
+      "DOWNLOAD_URL": "https://github.com/IsmailofficialGithub/expense-management",
       "eas": {
         "projectId": "75672ee6-6961-4fc7-a57e-f04d11cb6dc6"
       }

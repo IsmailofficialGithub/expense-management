@@ -14,6 +14,8 @@ import ExpensesScreen from '../screens/main/ExpensesScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import LoadingScreen from '../screens/LoadingScreen';
 import GroupDetailsScreen from '../screens/details/GroupDetailsScreen';
+import SingleGroupDetailsScreen from '../screens/details/SingleGroupDetailsScreen';
+import SingleGroupExpenseDetailsScreen from '../screens/details/SingleGroupExpenseDetailsScreen';
 import ExpenseDetailsScreen from '../screens/details/ExpenseDetailsScreen';
 import SettleUpScreen from '../screens/details/SettleUpScreen';
 import AddExpenseScreen from '../screens/forms/AddExpenseScreen';
@@ -52,6 +54,8 @@ export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
   GroupDetails: { groupId: string };
+  SingleGroupDetails: { groupId: string };
+  SingleGroupExpenseDetails: { expenseId: string; groupId?: string };
   ExpenseDetails: { expenseId: string };
   SettleUp: { groupId?: string; userId?: string; amount?: string };
   AddExpense: { groupId?: string };
@@ -179,6 +183,16 @@ export default function AppNavigator() {
             name="GroupDetails"
             component={GroupDetailsScreen}
             options={{ ...detailScreenOptions, title: 'Group Details' }}
+          />
+          <RootStack.Screen
+            name="SingleGroupDetails"
+            component={SingleGroupDetailsScreen}
+            options={{ ...detailScreenOptions, title: 'Group Expenses' }}
+          />
+          <RootStack.Screen
+            name="SingleGroupExpenseDetails"
+            component={SingleGroupExpenseDetailsScreen}
+            options={{ ...detailScreenOptions, title: 'Expense Details' }}
           />
           <RootStack.Screen
             name="ExpenseDetails"

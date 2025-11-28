@@ -245,7 +245,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                   </Text>
                 )}
                 <View style={styles.badges}>
-                  <Chip icon="account-group" style={styles.badge}>
+                  <Chip icon="account-group" style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
                     {selectedGroup.members?.length || 0} members
                   </Chip>
                   {isAdmin && (
@@ -339,20 +339,14 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Members</Text>
             <View style={{ display: 'flex', flexDirection: 'row' }}>
-              {isAdmin && (
-                <IconButton
-                  icon="account-plus"
-                  size={24}
-                  onPress={() => setAddMemberModalVisible(true)}
-                />
-              )}
+
               <IconButton
-                icon="email"
+                icon="account-plus"
                 size={24}
                 onPress={() => navigation.navigate('InviteUser', { groupId, groupName: selectedGroup.name })}
               />
               <IconButton
-                icon="chat"
+                icon="message"
                 size={24}
                 onPress={async () => {
                   try {
@@ -419,12 +413,13 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         </View>
 
         {/* Recent Expenses */}
+        {/* Recent Expenses */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Recent Expenses</Text>
             <Button
               mode="text"
-              onPress={() => navigation.navigate('Expenses', { groupId })}
+              onPress={() => navigation.navigate('SingleGroupDetails', { groupId })}
               compact
             >
               View All
@@ -445,10 +440,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               <Card
                 key={expense.id}
                 style={styles.expenseCard}
-                onPress={() => {
-                  // TODO: Navigate to expense details
-                  console.log('View expense:', expense.id);
-                }}
+                onPress={() => navigation.navigate('ExpenseDetails', { expenseId: expense.id })}
               >
                 <Card.Content style={styles.expenseContent}>
                   <View style={styles.expenseLeft}>
@@ -651,12 +643,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   badge: {
-    height: 28,
-    backgroundColor: '#E8DEF8',
+    height: 30,
   },
   adminBadge: {
-    height: 28,
-    backgroundColor: '#FFE082',
+    height: 30,
   },
   adminActions: {
     flexDirection: 'row',

@@ -826,9 +826,16 @@ export const invitationService = {
 
         return invitation;
       }
-
-      // User doesn't exist - don't create account, just show error
-      throw new Error("User does not exist. User must have an account to be invited.");
+      // User doesn't exist - send download email
+      try {
+        const { data: inviterProfile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+        const downloadUrl = process.env.DOWNLOAD_URL || 'https://github.com/IsmailofficialGithub/expense-management';
+        const html = `<!DOCTYPE html><html><body style="font-family: Arial; max-width: 600px; margin: 0 auto; padding: 20px;"><h2>🎉 You've been invited!</h2><p>Hi there,</p><p><strong>${inviterProfile?.full_name || "Someone"}</strong> invited you to use Flatmates Expense Tracker to join the group <strong>"${group.name}"</strong>.</p><p>Download the app to get started:</p><a href="${downloadUrl}" style="display: inline-block; background: #6200EE; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0;">Download App</a></body></html>`;
+        await fetch('https://send-email-nu-five.vercel.app/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: request.invited_email, subject: "You're invited to use Flatmates Expense Tracker", html }) });
+        return { id: 'email-sent', group_id: request.group_id, invited_by: user.id, invited_email: request.invited_email, invitation_token: null, status: 'email_sent', created_at: new Date().toISOString() } as any;
+      } catch (emailError) {
+        throw new Error("Failed to send download email.");
+      }
     } catch (err: any) {
       console.error("Unhandled error in inviteUser:", { ...logContext, error: err });
       throw new Error(err.message || "Something went wrong while inviting the user.");

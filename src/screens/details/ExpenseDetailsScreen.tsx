@@ -13,6 +13,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
+import { supabase } from '../../services/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -112,9 +113,12 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
           onPress: async () => {
             setIsProcessing(true);
             try {
-              // TODO: Implement mark split as settled
-              showToast('Split marked as settled', 'success');
-              await loadExpenseData();
+              const { error } = await supabase
+                .from('expense_splits')
+                .update({ is_settled: true, settled_at: new Date().toISOString() })
+                .eq('id', splitId);
+
+              if (error) throw error;
             } catch (error) {
               ErrorHandler.handleError(error, showToast, 'Mark as Settled');
             } finally {
@@ -142,36 +146,36 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.primary} translucent={false} />
       <ScrollView contentContainerStyle={styles.content}>
         {/* Expense Header */}
-        <Card style={styles.headerCard}>
+        <Card style={[styles.headerCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
           <Card.Content>
             <View style={styles.header}>
               <Text style={styles.categoryIcon}>
                 {selectedExpense.category?.icon || '💰'}
               </Text>
               <View style={styles.headerText}>
-                <Text style={styles.description}>{selectedExpense.description}</Text>
+                <Text style={[styles.description, { color: theme.colors.onSurface }]}>{selectedExpense.description}</Text>
                 <Chip
                   mode="flat"
-                  style={styles.categoryChip}
-                  textStyle={styles.categoryChipText}
+                  style={[styles.categoryChip, { backgroundColor: theme.colors.primaryContainer }]}
+                  textStyle={[styles.categoryChipText, { color: theme.colors.primary }]}
                 >
                   {selectedExpense.category?.name || 'Other'}
                 </Chip>
               </View>
             </View>
 
-            <Divider style={styles.divider} />
+            <Divider style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
 
             <View style={styles.amountSection}>
               <View style={styles.amountRow}>
-                <Text style={styles.label}>Total Amount</Text>
-                <Text style={styles.totalAmount}>₹{totalAmount.toFixed(2)}</Text>
+                <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Total Amount</Text>
+                <Text style={[styles.totalAmount, { color: theme.colors.onSurface }]}>₹{totalAmount.toFixed(2)}</Text>
               </View>
               <View style={styles.amountRow}>
-                <Text style={styles.label}>Your Share</Text>
+                <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Your Share</Text>
                 <Text
                   style={[
                     styles.yourShare,
@@ -192,9 +196,9 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
         </Card>
 
         {/* Expense Details */}
-        <Card style={styles.detailsCard}>
+        <Card style={[styles.detailsCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
           <Card.Content>
-            <Text style={styles.sectionTitle}>Details</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Details</Text>
 
             <List.Item
               title="Paid By"
@@ -203,16 +207,20 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
                   ? 'You'
                   : selectedExpense.paid_by_user?.full_name || 'Unknown'
               }
-              left={(props) => <List.Icon {...props} icon="account" />}
+              left={(props) => <List.Icon {...props} icon="account" color={theme.colors.primary} />}
+              titleStyle={{ color: theme.colors.onSurface }}
+              descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
             />
-            <Divider />
+            <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />
 
             <List.Item
               title="Date"
               description={format(new Date(selectedExpense.date), 'MMMM dd, yyyy')}
-              left={(props) => <List.Icon {...props} icon="calendar" />}
+              left={(props) => <List.Icon {...props} icon="calendar" color={theme.colors.primary} />}
+              titleStyle={{ color: theme.colors.onSurface }}
+              descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
             />
-            <Divider />
+            <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />
 
             <List.Item
               title="Split Type"
@@ -221,29 +229,35 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
                   ? 'Split Equally'
                   : 'Custom Split'
               }
-              left={(props) => <List.Icon {...props} icon="chart-pie" />}
+              left={(props) => <List.Icon {...props} icon="chart-pie" color={theme.colors.primary} />}
+              titleStyle={{ color: theme.colors.onSurface }}
+              descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
             />
 
             {selectedExpense.notes && (
               <>
-                <Divider />
+                <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />
                 <List.Item
                   title="Notes"
                   description={selectedExpense.notes}
-                  left={(props) => <List.Icon {...props} icon="note-text" />}
+                  left={(props) => <List.Icon {...props} icon="note-text" color={theme.colors.primary} />}
+                  titleStyle={{ color: theme.colors.onSurface }}
+                  descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
                 />
               </>
             )}
 
             {selectedExpense.receipt_url && (
               <>
-                <Divider />
+                <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />
                 <List.Item
                   title="Receipt"
                   description="Tap to view"
-                  left={(props) => <List.Icon {...props} icon="receipt" />}
-                  right={(props) => <List.Icon {...props} icon="chevron-right" />}
+                  left={(props) => <List.Icon {...props} icon="receipt" color={theme.colors.primary} />}
+                  right={(props) => <List.Icon {...props} icon="chevron-right" color={theme.colors.onSurfaceVariant} />}
                   onPress={() => setReceiptModalVisible(true)}
+                  titleStyle={{ color: theme.colors.onSurface }}
+                  descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
                 />
               </>
             )}
@@ -251,9 +265,9 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
         </Card>
 
         {/* Split Details */}
-        <Card style={styles.splitsCard}>
+        <Card style={[styles.splitsCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
           <Card.Content>
-            <Text style={styles.sectionTitle}>Split Between</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Split Between</Text>
 
             {selectedExpense.splits?.map((split, index) => {
               const user = split.user;
@@ -263,25 +277,26 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
 
               return (
                 <React.Fragment key={split.id}>
-                  {index > 0 && <Divider />}
+                  {index > 0 && <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />}
                   <View style={styles.splitItem}>
                     <View style={styles.splitLeft}>
                       <Avatar.Text
                         size={40}
                         label={user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                        style={styles.splitAvatar}
+                        style={[styles.splitAvatar, { backgroundColor: theme.colors.primary }]}
+                        color={theme.colors.onPrimary}
                       />
                       <View style={styles.splitInfo}>
-                        <Text style={styles.splitName}>
+                        <Text style={[styles.splitName, { color: theme.colors.onSurface }]}>
                           {user?.full_name || 'Unknown'}
                           {isCurrentUser && ' (You)'}
                         </Text>
-                        <Text style={styles.splitPercentage}>{splitPercentage}% of total</Text>
+                        <Text style={[styles.splitPercentage, { color: theme.colors.onSurfaceVariant }]}>{splitPercentage}% of total</Text>
                       </View>
                     </View>
 
                     <View style={styles.splitRight}>
-                      <Text style={styles.splitAmount}>₹{splitAmount.toFixed(2)}</Text>
+                      <Text style={[styles.splitAmount, { color: theme.colors.onSurfaceVariant }]}>₹{splitAmount.toFixed(2)}</Text>
                       {split.is_settled ? (
                         <Chip
                           icon="check"
@@ -296,6 +311,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
                           mode="text"
                           onPress={() => handleMarkAsSettled(split.id)}
                           compact
+                          textColor={theme.colors.primary}
                         >
                           Mark Settled
                         </Button>
@@ -324,6 +340,8 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
               icon="pencil"
               onPress={handleEditExpense}
               style={styles.actionButton}
+              textColor={theme.colors.primary}
+              buttonColor={theme.colors.surface}
             >
               Edit
             </Button>
@@ -340,7 +358,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
         )}
 
         {/* Created Info */}
-        <Text style={styles.createdText}>
+        <Text style={[styles.createdText, { color: theme.colors.onSurfaceVariant }]}>
           Created on {format(new Date(selectedExpense.created_at), 'MMM dd, yyyy HH:mm')}
         </Text>
       </ScrollView>
@@ -350,14 +368,15 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
         <Modal
           visible={receiptModalVisible}
           onDismiss={() => setReceiptModalVisible(false)}
-          contentContainerStyle={styles.receiptModal}
+          contentContainerStyle={[styles.receiptModal, { backgroundColor: theme.colors.surface }]}
         >
-          <View style={styles.receiptHeader}>
-            <Text style={styles.receiptTitle}>Receipt</Text>
+          <View style={[styles.receiptHeader, { borderBottomColor: theme.colors.outlineVariant }]}>
+            <Text style={[styles.receiptTitle, { color: theme.colors.onSurface }]}>Receipt</Text>
             <IconButton
               icon="close"
               size={24}
               onPress={() => setReceiptModalVisible(false)}
+              iconColor={theme.colors.onSurface}
             />
           </View>
           {selectedExpense.receipt_url && (
@@ -390,7 +409,6 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     marginBottom: 16,
-    backgroundColor: '#fff',
     elevation: 2,
   },
   header: {
@@ -408,16 +426,13 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 8,
   },
   categoryChip: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E8DEF8',
   },
   categoryChipText: {
     fontSize: 12,
-    color: '#6200EE',
   },
   divider: {
     marginVertical: 16,
@@ -432,12 +447,10 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#666',
   },
   totalAmount: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
   },
   yourShare: {
     fontSize: 24,
@@ -460,18 +473,15 @@ const styles = StyleSheet.create({
   },
   detailsCard: {
     marginBottom: 16,
-    backgroundColor: '#fff',
     elevation: 2,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 16,
   },
   splitsCard: {
     marginBottom: 16,
-    backgroundColor: '#fff',
     elevation: 2,
   },
   splitItem: {
@@ -486,7 +496,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   splitAvatar: {
-    backgroundColor: '#6200EE',
   },
   splitInfo: {
     marginLeft: 12,
@@ -495,11 +504,9 @@ const styles = StyleSheet.create({
   splitName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
   },
   splitPercentage: {
     fontSize: 12,
-    color: '#666',
     marginTop: 2,
   },
   splitRight: {
@@ -508,7 +515,6 @@ const styles = StyleSheet.create({
   splitAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 4,
   },
   settledBadge: {
@@ -520,7 +526,7 @@ const styles = StyleSheet.create({
     color: '#2E7D32',
   },
   pendingBadge: {
-    height: 24,
+    height: 3,
     backgroundColor: '#FFE0B2',
   },
   pendingBadgeText: {
@@ -541,11 +547,9 @@ const styles = StyleSheet.create({
   },
   createdText: {
     fontSize: 12,
-    color: '#999',
     textAlign: 'center',
   },
   receiptModal: {
-    backgroundColor: 'white',
     margin: 20,
     borderRadius: 8,
     maxHeight: '80%',
@@ -556,12 +560,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   receiptTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
   },
   receiptImage: {
     width: width - 40,
