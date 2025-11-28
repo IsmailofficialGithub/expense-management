@@ -7,7 +7,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  TouchableOpacity, // Import for date picker
+  TouchableOpacity,
+  StatusBar,
 } from "react-native";
 import {
   Text,
@@ -19,15 +20,14 @@ import {
   HelperText,
   Card,
   IconButton,
-  useTheme, // Import useTheme for colors
+  useTheme,
 } from "react-native-paper";
 import { useGroups } from "../../hooks/useGroups";
 import { useExpenses } from "../../hooks/useExpenses";
 import { useAuth } from "../../hooks/useAuth";
 import { useAppDispatch } from "../../store";
-import { createExpense } from "../../store/slices/expensesSlice";
 import { fetchGroups } from "../../store/slices/groupsSlice";
-import { fetchCategories } from "../../store/slices/expensesSlice";
+import { fetchCategories, createExpense } from "../../store/slices/expensesSlice";
 import * as ImagePicker from "expo-image-picker";
 import { format } from "date-fns";
 import { ErrorHandler } from "../../utils/errorHandler";
@@ -36,16 +36,16 @@ import { useNetworkCheck } from "../../hooks/useNetworkCheck";
 import LoadingOverlay from "../../components/LoadingOverlay";
 import DateTimePicker, {
   DateTimePickerEvent,
-} from "@react-native-community/datetimepicker"; // Import Date Picker
+} from "@react-native-community/datetimepicker";
 
-// Import type-safe props
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import SafeScrollView from "../../components/SafeScrollView";
 type Props = NativeStackScreenProps<RootStackParamList, 'AddExpense'>;
 
 export default function AddExpenseScreen({ navigation, route }: Props) {
-  const theme = useTheme(); // Get theme for colors
+  const theme = useTheme();
+  console.log(theme);
   const { groups } = useGroups();
   const { categories, loading } = useExpenses();
   const { profile } = useAuth();
@@ -53,12 +53,10 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false); // For date picker
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Pre-selected group from navigation params (optional)
   const preSelectedGroupId = route?.params?.groupId;
 
-  // Form state
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState(
@@ -74,7 +72,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
     [userId: string]: string;
   }>({});
 
-  // Validation errors
   const [errors, setErrors] = useState({
     description: "",
     amount: "",
@@ -85,12 +82,10 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   });
 
   useEffect(() => {
-    // Load groups and categories
     dispatch(fetchGroups());
     dispatch(fetchCategories());
   }, [dispatch]);
 
-  // Auto-select all group members when group is selected
   useEffect(() => {
     if (selectedGroupId) {
       const group = groups.find((g) => g.id === selectedGroupId);
@@ -98,7 +93,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
         const memberIds = group.members.map((m) => m.user_id);
         setSelectedMembers(memberIds);
 
-        // Initialize custom splits
         const splits: { [key: string]: string } = {};
         memberIds.forEach((id) => {
           splits[id] = "";
@@ -108,7 +102,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
     }
   }, [selectedGroupId, groups]);
 
-  // Date picker handler
   const onChangeDate = (
     event: DateTimePickerEvent,
     date?: Date
@@ -119,7 +112,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   };
 
   const handlePickImage = async () => {
-    // ... (no changes to this function)
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
@@ -139,7 +131,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   };
 
   const handleTakePhoto = async () => {
-    // ... (no changes to this function)
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
@@ -158,7 +149,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   };
 
   const toggleMember = (userId: string) => {
-    // ... (no changes to this function)
     if (selectedMembers.includes(userId)) {
       setSelectedMembers(selectedMembers.filter((id) => id !== userId));
       const newSplits = { ...customSplits };
@@ -171,7 +161,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   };
 
   const calculateEqualSplit = () => {
-    // ... (no changes to this function)
     const amountNum = parseFloat(amount);
     if (isNaN(amountNum) || selectedMembers.length === 0) return 0;
     return amountNum / selectedMembers.length;
@@ -187,43 +176,37 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
       splits: "",
     };
 
-    // 1. Check Description
     if (!description.trim()) {
       newErrors.description = "Description is required";
       setErrors(newErrors);
-      return "Description is required"; // Return the specific error
+      return "Description is required";
     }
 
-    // 2. Check Amount
     const amountNum = parseFloat(amount);
     if (!amount || isNaN(amountNum) || amountNum <= 0) {
       newErrors.amount = "Please enter a valid amount greater than 0";
       setErrors(newErrors);
-      return "Please enter a valid amount"; // Return the specific error
+      return "Please enter a valid amount";
     }
 
-    // 3. Check Group
     if (!selectedGroupId) {
       newErrors.group = "Please select a group";
       setErrors(newErrors);
-      return "Please select a group"; // Return the specific error
+      return "Please select a group";
     }
 
-    // 4. Check Category
     if (!selectedCategoryId) {
       newErrors.category = "Please select a category";
       setErrors(newErrors);
-      return "Please select a category"; // Return the specific error
+      return "Please select a category";
     }
 
-    // 5. Check Members
     if (selectedMembers.length === 0) {
       newErrors.members = "Please select at least one member";
       setErrors(newErrors);
-      return "Please select at least one member"; // Return the specific error
+      return "Please select at least one member";
     }
 
-    // 6. Check Custom Splits
     if (splitType === "unequal") {
       const totalSplit = selectedMembers.reduce((sum, userId) => {
         const splitAmount = parseFloat(customSplits[userId] || "0");
@@ -234,16 +217,15 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
         const errorMsg = `Splits must equal total amount (₹${amountNum.toFixed(2)})`;
         newErrors.splits = errorMsg;
         setErrors(newErrors);
-        return errorMsg; // Return the specific error
+        return errorMsg;
       }
     }
 
-    // 7. No Errors Found
-    setErrors(newErrors); // Clear any old errors
-    return null; // Return null if valid
+    setErrors(newErrors);
+    return null;
   };
+
   const handleSubmit = async () => {
-    // ... (no changes to this function)
     if (!isOnline) {
       showToast("Cannot add expense. No internet connection.", "error");
       return;
@@ -252,7 +234,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
 
     if (validationError) {
       showToast(validationError, "error");
-      return; // Stop the function
+      return;
     }
     setIsSubmitting(true);
     const amountNum = parseFloat(amount);
@@ -272,7 +254,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
     let receiptFile: any = undefined;
     if (receiptUri) {
       try {
-        // For React Native, we need to create a proper file object
         const filename = receiptUri.split('/').pop() || 'receipt.jpg';
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : 'image/jpeg';
@@ -314,341 +295,335 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   const selectedGroup = groups.find((g) => g.id === selectedGroupId);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <SafeScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        hasTabBar={false}
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* === CARD 1: Main Details === */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <TextInput
-              label="Description *"
-              value={description}
-              onChangeText={setDescription}
-              mode="outlined"
-              placeholder="e.g., Groceries, Dinner, Rent"
-              error={!!errors.description}
-              style={styles.input}
-              left={<TextInput.Icon icon="format-text" />}
-            />
-            {errors.description ? (
-              <HelperText type="error" visible={!!errors.description}>
-                {errors.description}
-              </HelperText>
-            ) : null}
+        <SafeScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          hasTabBar={false}
+        >
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <Card.Content>
+              <TextInput
+                label="Description *"
+                value={description}
+                onChangeText={setDescription}
+                mode="outlined"
+                placeholder="e.g., Groceries, Dinner, Rent"
+                error={!!errors.description}
+                style={[styles.input, { backgroundColor: theme.colors.surface }]}
+                left={<TextInput.Icon icon="format-text" />}
+              />
+              {errors.description ? (
+                <HelperText type="error" visible={!!errors.description}>
+                  {errors.description}
+                </HelperText>
+              ) : null}
 
-            <TextInput
-              label="Amount *"
-              value={amount}
-              onChangeText={setAmount}
-              mode="outlined"
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              error={!!errors.amount}
-              left={<TextInput.Icon icon="currency-inr" />}
-              style={styles.input}
-            />
-            {errors.amount ? (
-              <HelperText type="error" visible={!!errors.amount}>
-                {errors.amount}
-              </HelperText>
-            ) : null}
-          </Card.Content>
-        </Card>
+              <TextInput
+                label="Amount *"
+                value={amount}
+                onChangeText={setAmount}
+                mode="outlined"
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                error={!!errors.amount}
+                left={<TextInput.Icon icon="currency-inr" />}
+                style={styles.input}
+              />
+              {errors.amount ? (
+                <HelperText type="error" visible={!!errors.amount}>
+                  {errors.amount}
+                </HelperText>
+              ) : null}
+            </Card.Content>
+          </Card>
 
-        {/* === CARD 2: Group & Category === */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text style={styles.subtitle}>Which group? *</Text>
-            {groups.length === 0 ? (
-              <Text style={styles.noDataText}>Loading groups...</Text>
-            ) : (
-              <View style={styles.chipContainer}>
-                {groups.map((group) => {
-                  const isSelected = selectedGroupId === group.id;
-                  return (
-                    <Chip
-                      key={group.id}
-                      selected={isSelected}
-                      onPress={() => setSelectedGroupId(group.id)}
-                      style={[
-                        styles.chip,
-                        isSelected && {
-                          backgroundColor: theme.colors.primary,
-                        },
-                      ]}
-                      textStyle={[
-                        styles.chipText,
-                        isSelected && {
-                          color: theme.colors.onPrimary,
-                        },
-                      ]}
-                    >
-                      {group.name}
-                    </Chip>
-                  );
-                })}
-              </View>
-            )}
-            {errors.group ? (
-              <HelperText type="error" visible={!!errors.group}>
-                {errors.group}
-              </HelperText>
-            ) : null}
-
-            <Divider style={styles.divider} />
-
-            <Text style={styles.subtitle}>Category *</Text>
-            {categories.length === 0 ? (
-              <Text style={styles.noDataText}>Loading categories...</Text>
-            ) : (
-              <View style={styles.chipContainer}>
-                {categories.map((category) => {
-                  const isSelected = selectedCategoryId === category.id;
-                  return (
-                    <Chip
-                      key={category.id}
-                      selected={isSelected} // This adds the checkmark icon
-                      onPress={() => setSelectedCategoryId(category.id)}
-                      // *** THIS IS THE FIX FOR YOUR BUG ***
-                      // We manually apply styles to make selection obvious
-                      style={[
-                        styles.chip,
-                        isSelected && {
-                          backgroundColor: theme.colors.primary, // Or theme.colors.primaryContainer
-                        },
-                      ]}
-                      textStyle={[
-                        styles.chipText,
-                        isSelected && {
-                          color: theme.colors.onPrimary, // Or theme.colors.onPrimaryContainer
-                        },
-                      ]}
-                      icon={() => <Text>{category.icon}</Text>}
-                    >
-                      {category.name}
-                    </Chip>
-                  );
-                })}
-              </View>
-            )}
-            {errors.category ? (
-              <HelperText type="error" visible={!!errors.category}>
-                {errors.category}
-              </HelperText>
-            ) : null}
-          </Card.Content>
-        </Card>
-
-        {/* === CARD 3: Split Details === */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text style={styles.subtitle}>How to split? *</Text>
-            <SegmentedButtons
-              value={splitType}
-              onValueChange={(value) =>
-                setSplitType(value as "equal" | "unequal")
-              }
-              buttons={[
-                { value: "equal", label: "Split Equally" },
-                { value: "unequal", label: "Custom Amounts" },
-              ]}
-              style={styles.segmentedButtons}
-            />
-
-            {selectedGroup && (
-              <>
-                <Text style={styles.subtitle}>Split with *</Text>
-                <View style={styles.membersContainer}>
-                  {selectedGroup.members?.map((member) => {
-                    const isSelected = selectedMembers.includes(member.user_id);
-                    const user = member.user;
-                    const splitAmount =
-                      splitType === "equal"
-                        ? calculateEqualSplit()
-                        : parseFloat(customSplits[member.user_id] || "0");
-
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <Card.Content>
+              <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Which group? *</Text>
+              {groups.length === 0 ? (
+                <Text style={[styles.noDataText, { color: theme.colors.onSurfaceVariant }]}>Loading groups...</Text>
+              ) : (
+                <View style={styles.chipContainer}>
+                  {groups.map((group) => {
+                    const isSelected = selectedGroupId === group.id;
                     return (
-                      <Card
-                        key={member.user_id}
+                      <Chip
+                        key={group.id}
+                        selected={isSelected}
+                        onPress={() => setSelectedGroupId(group.id)}
                         style={[
-                          styles.memberCard,
-                          isSelected && styles.memberCardSelected,
+                          styles.chip,
+                          isSelected && {
+                            backgroundColor: theme.colors.primary,
+                          },
                         ]}
-                        onPress={() => toggleMember(member.user_id)}
+                        textStyle={[
+                          styles.chipText,
+                          isSelected && {
+                            color: theme.colors.onPrimary,
+                          },
+                        ]}
                       >
-                        <Card.Content style={styles.memberCardContent}>
-                          <View style={styles.memberInfo}>
-                            <Chip
-                              selected={isSelected}
-                              onPress={() => toggleMember(member.user_id)}
-                              style={styles.memberChip}
-                            >
-                              {user?.full_name || "Unknown"}
-                            </Chip>
-                            {isSelected && (
-                              <Text style={styles.memberSplit}>
-                                ₹{splitAmount.toFixed(2)}
-                              </Text>
-                            )}
-                          </View>
-
-                          {isSelected && splitType === "unequal" && (
-                            <TextInput
-                              value={customSplits[member.user_id]}
-                              onChangeText={(value) =>
-                                setCustomSplits({
-                                  ...customSplits,
-                                  [member.user_id]: value,
-                                })
-                              }
-                              mode="outlined"
-                              keyboardType="decimal-pad"
-                              placeholder="0.00"
-                              dense
-                              left={<TextInput.Affix text="₹" />}
-                              style={styles.splitInput}
-                            />
-                          )}
-                        </Card.Content>
-                      </Card>
+                        {group.name}
+                      </Chip>
                     );
                   })}
                 </View>
-                {errors.members ? (
-                  <HelperText type="error" visible={!!errors.members}>
-                    {errors.members}
-                  </HelperText>
-                ) : null}
-                {errors.splits ? (
-                  <HelperText type="error" visible={!!errors.splits}>
-                    {errors.splits}
-                  </HelperText>
-                ) : null}
-              </>
-            )}
-          </Card.Content>
-        </Card>
+              )}
+              {errors.group ? (
+                <HelperText type="error" visible={!!errors.group}>
+                  {errors.group}
+                </HelperText>
+              ) : null}
 
-        {/* === CARD 4: Additional Details === */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text style={styles.subtitle}>Additional Details (Optional)</Text>
+              <Divider style={styles.divider} />
 
-            {/* Date Picker */}
-            <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-              <TextInput
-                label="Date"
-                value={format(selectedDate, "MMMM dd, yyyy")}
-                mode="outlined"
-                editable={false} // Make it not editable
-                left={<TextInput.Icon icon="calendar" />}
-                style={styles.input}
-              />
-            </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                testID="dateTimePicker"
-                value={selectedDate}
-                mode="date"
-                display="default"
-                onChange={onChangeDate}
-              />
-            )}
-
-            {/* Notes */}
-            <TextInput
-              label="Notes"
-              value={notes}
-              onChangeText={setNotes}
-              mode="outlined"
-              multiline
-              numberOfLines={3}
-              placeholder="Add any additional details..."
-              style={styles.input}
-              left={<TextInput.Icon icon="note-text-outline" />}
-            />
-
-            {/* Receipt */}
-            <Text style={styles.label}>Receipt</Text>
-            <View style={styles.receiptContainer}>
-              {receiptUri ? (
-                <View style={styles.receiptPreview}>
-                  <Text style={styles.receiptText}>Receipt attached ✓</Text>
-                  <IconButton
-                    icon="close"
-                    size={20}
-                    onPress={() => setReceiptUri(null)}
-                  />
-                </View>
+              <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Category *</Text>
+              {categories.length === 0 ? (
+                <Text style={[styles.noDataText, { color: theme.colors.onSurfaceVariant }]}>Loading categories...</Text>
               ) : (
-                <View style={styles.receiptButtons}>
-                  <Button
-                    mode="outlined"
-                    icon="camera"
-                    onPress={handleTakePhoto}
-                    style={styles.receiptButton}
-                  >
-                    Take Photo
-                  </Button>
-                  <Button
-                    mode="outlined"
-                    icon="image"
-                    onPress={handlePickImage}
-                    style={styles.receiptButton}
-                  >
-                    Choose Image
-                  </Button>
+                <View style={styles.chipContainer}>
+                  {categories.map((category) => {
+                    const isSelected = selectedCategoryId === category.id;
+                    return (
+                      <Chip
+                        key={category.id}
+                        selected={isSelected}
+                        onPress={() => setSelectedCategoryId(category.id)}
+                        style={[
+                          styles.chip,
+                          isSelected && {
+                            backgroundColor: theme.colors.primary,
+                          },
+                        ]}
+                        textStyle={[
+                          styles.chipText,
+                          isSelected && {
+                            color: theme.colors.onPrimary,
+                          },
+                        ]}
+                        icon={() => <Text>{category.icon}</Text>}
+                      >
+                        {category.name}
+                      </Chip>
+                    );
+                  })}
                 </View>
               )}
-            </View>
-          </Card.Content>
-        </Card>
+              {errors.category ? (
+                <HelperText type="error" visible={!!errors.category}>
+                  {errors.category}
+                </HelperText>
+              ) : null}
+            </Card.Content>
+          </Card>
 
-        {/* Submit Button */}
-        <Button
-          mode="contained"
-          onPress={handleSubmit}
-          loading={isSubmitting}
-          disabled={isSubmitting}
-          style={styles.submitButton}
-          contentStyle={styles.submitButtonContent}
-        >
-          Add Expense
-        </Button>
-      </SafeScrollView>
-      <LoadingOverlay
-        visible={isSubmitting}
-        message="Creating expense..."
-      />
-    </KeyboardAvoidingView>
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <Card.Content>
+              <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>How to split? *</Text>
+              <SegmentedButtons
+                value={splitType}
+                onValueChange={(value) =>
+                  setSplitType(value as "equal" | "unequal")
+                }
+                buttons={[
+                  { value: "equal", label: "Split Equally" },
+                  { value: "unequal", label: "Custom Amounts" },
+                ]}
+                style={styles.segmentedButtons}
+              />
+
+              {selectedGroup && (
+                <>
+                  <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Split with *</Text>
+                  <View style={styles.membersContainer}>
+                    {selectedGroup.members?.map((member) => {
+                      const isSelected = selectedMembers.includes(member.user_id);
+                      const user = member.user;
+                      const splitAmount =
+                        splitType === "equal"
+                          ? calculateEqualSplit()
+                          : parseFloat(customSplits[member.user_id] || "0");
+
+                      return (
+                        <Card
+                          key={member.user_id}
+                          style={[
+                            styles.memberCard,
+                            { backgroundColor: theme.colors.surface },
+                            isSelected && { backgroundColor: theme.colors.primaryContainer },
+                          ]}
+                          onPress={() => toggleMember(member.user_id)}
+                        >
+                          <Card.Content style={styles.memberCardContent}>
+                            <View style={styles.memberInfo}>
+                              <Chip
+                                selected={isSelected}
+                                onPress={() => toggleMember(member.user_id)}
+                                style={styles.memberChip}
+                              >
+                                {user?.full_name || "Unknown"}
+                              </Chip>
+                              {isSelected && (
+                                <Text style={[styles.memberSplit, { color: theme.colors.primary }]}>
+                                  ₹{splitAmount.toFixed(2)}
+                                </Text>
+                              )}
+                            </View>
+
+                            {isSelected && splitType === "unequal" && (
+                              <TextInput
+                                value={customSplits[member.user_id]}
+                                onChangeText={(value) =>
+                                  setCustomSplits({
+                                    ...customSplits,
+                                    [member.user_id]: value,
+                                  })
+                                }
+                                mode="outlined"
+                                keyboardType="decimal-pad"
+                                placeholder="0.00"
+                                dense
+                                left={<TextInput.Affix text="₹" />}
+                                style={styles.splitInput}
+                              />
+                            )}
+                          </Card.Content>
+                        </Card>
+                      );
+                    })}
+                  </View>
+                  {errors.members ? (
+                    <HelperText type="error" visible={!!errors.members}>
+                      {errors.members}
+                    </HelperText>
+                  ) : null}
+                  {errors.splits ? (
+                    <HelperText type="error" visible={!!errors.splits}>
+                      {errors.splits}
+                    </HelperText>
+                  ) : null}
+                </>
+              )}
+            </Card.Content>
+          </Card>
+
+          <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+            <Card.Content>
+              <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Additional Details (Optional)</Text>
+
+              <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+                <TextInput
+                  label="Date"
+                  value={format(selectedDate, "MMMM dd, yyyy")}
+                  mode="outlined"
+                  editable={false}
+                  left={<TextInput.Icon icon="calendar" />}
+                  style={styles.input}
+                />
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  testID="dateTimePicker"
+                  value={selectedDate}
+                  mode="date"
+                  display="default"
+                  onChange={onChangeDate}
+                />
+              )}
+
+              <TextInput
+                label="Notes"
+                value={notes}
+                onChangeText={setNotes}
+                mode="outlined"
+                multiline
+                numberOfLines={3}
+                placeholder="Add any additional details..."
+                style={styles.input}
+                left={<TextInput.Icon icon="note-text-outline" />}
+              />
+
+              <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Receipt</Text>
+              <View style={styles.receiptContainer}>
+                {receiptUri ? (
+                  <View style={styles.receiptPreview}>
+                    <Text style={styles.receiptText}>Receipt attached ✓</Text>
+                    <IconButton
+                      icon="close"
+                      size={20}
+                      onPress={() => setReceiptUri(null)}
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.receiptButtons}>
+                    <Button
+                      mode="outlined"
+                      icon="camera"
+                      onPress={handleTakePhoto}
+                      style={styles.receiptButton}
+                    >
+                      Take Photo
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      icon="image"
+                      onPress={handlePickImage}
+                      style={styles.receiptButton}
+                    >
+                      Choose Image
+                    </Button>
+                  </View>
+                )}
+              </View>
+            </Card.Content>
+          </Card>
+
+          <Button
+            mode="contained"
+            onPress={handleSubmit}
+            loading={isSubmitting}
+            disabled={isSubmitting}
+            style={styles.submitButton}
+            contentStyle={styles.submitButtonContent}
+          >
+            Add Expense
+          </Button>
+        </SafeScrollView>
+        <LoadingOverlay
+          visible={isSubmitting}
+          message="Creating expense..."
+        />
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-// *** NEW STYLES ADDED/UPDATED ***
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+  },
+  keyboardView: {
+    flex: 1,
   },
   content: {
     padding: 16,
     paddingBottom: 32,
   },
   card: {
-    backgroundColor: "#fff",
     marginBottom: 16,
     elevation: 2,
+    borderRadius: 8,
   },
   subtitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
     marginBottom: 12,
   },
   input: {
@@ -663,13 +638,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    // Base style for all chips
     marginBottom: 8,
   },
-  chipText: {
-    // Base text style
-  },
-  // NOTE: Selected style is now applied inline using the theme
+  chipText: {},
   segmentedButtons: {
     marginBottom: 16,
   },
@@ -677,10 +648,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   memberCard: {
-    backgroundColor: "#fff",
-  },
-  memberCardSelected: {
-    backgroundColor: "#E8DEF8", // This color is from Paper's theme
+    borderRadius: 8,
   },
   memberCardContent: {
     paddingVertical: 8,
@@ -697,7 +665,6 @@ const styles = StyleSheet.create({
   memberSplit: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#6200EE",
     marginLeft: 12,
   },
   splitInput: {
@@ -705,13 +672,11 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     fontSize: 14,
-    color: "#666",
     fontStyle: "italic",
   },
   label: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#666",
     marginBottom: 8,
   },
   receiptContainer: {
@@ -743,7 +708,4 @@ const styles = StyleSheet.create({
   submitButtonContent: {
     paddingVertical: 8,
   },
-  // Old styles no longer needed
-  // sectionTitle: { ... }
-  // dateText: { ... }
 });

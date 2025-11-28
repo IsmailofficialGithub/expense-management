@@ -5,7 +5,7 @@ export default ({ config }: { config: any }) => ({
   extra: {
     ...config.extra,
     eas: {
-      projectId: "b5f91826-4a20-4949-87db-d95724d815e7",
+      projectId: "75672ee6-6961-4fc7-a57e-f04d11cb6dc6",
     },
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,

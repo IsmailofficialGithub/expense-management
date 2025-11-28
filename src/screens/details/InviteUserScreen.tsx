@@ -1,12 +1,12 @@
 // src/screens/details/InviteUserScreen.tsx
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { Text, TextInput, Button, Card, IconButton, Chip, HelperText } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, StatusBar } from 'react-native';
+import { Text, TextInput, Button, Card, IconButton, Chip, HelperText, useTheme } from 'react-native-paper';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { invitationService } from '../../services/supabase.service';
 import LoadingOverlay from '../../components/LoadingOverlay';
-import SafeScrollView from '../../components/SafeScrollView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Props {
   navigation: any;
@@ -20,8 +20,10 @@ interface Props {
 
 export default function InviteUserScreen({ navigation, route }: Props) {
   const { groupId, groupName } = route.params;
+  const theme = useTheme();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
+  const insets = useSafeAreaInsets();
 
   const [email, setEmail] = useState('');
   const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
@@ -121,110 +123,115 @@ export default function InviteUserScreen({ navigation, route }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
-        {/* Info Card */}
-        <Card style={styles.infoCard}>
-          <Card.Content>
-            <IconButton icon="information" size={32} iconColor="#6200EE" style={styles.infoIcon} />
-            <Text style={styles.infoTitle}>How it works</Text>
-            <Text style={styles.infoText}>
-              • Enter email addresses of people you want to invite{'\n'}
-              • We'll create accounts for them automatically{'\n'}
-              • They'll receive an email with login credentials{'\n'}
-              • They can change their password after first login
-            </Text>
-          </Card.Content>
-        </Card>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView contentContainerStyle={styles.content}>
+          {/* Info Card */}
+          <Card style={styles.infoCard}>
+            <Card.Content>
+              <IconButton icon="information" size={32} iconColor="#6200EE" style={styles.infoIcon} />
+              <Text style={styles.infoTitle}>How it works</Text>
+              <Text style={styles.infoText}>
+                • Enter email addresses of people you want to invite{'\n'}
+                • We'll create accounts for them automatically{'\n'}
+                • They'll receive an email with login credentials{'\n'}
+                • They can change their password after first login
+              </Text>
+            </Card.Content>
+          </Card>
 
-        {/* Group Info */}
-        <Card style={styles.groupCard}>
-          <Card.Content>
-            <Text style={styles.label}>Inviting to group:</Text>
-            <Text style={styles.groupName}>{groupName}</Text>
-          </Card.Content>
-        </Card>
+          {/* Group Info */}
+          <Card style={styles.groupCard}>
+            <Card.Content>
+              <Text style={styles.label}>Inviting to group:</Text>
+              <Text style={styles.groupName}>{groupName}</Text>
+            </Card.Content>
+          </Card>
 
-        {/* Email Input */}
-        <Text style={styles.sectionTitle}>Add Email Addresses</Text>
-        <View style={styles.inputRow}>
-          <TextInput
-            label="Email Address *"
-            value={email}
-            onChangeText={setEmail}
-            mode="outlined"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={!!errors.email}
-            style={styles.emailInput}
-            placeholder="user@example.com"
-            onSubmitEditing={handleAddEmail}
-          />
-          <IconButton
-            icon="plus"
-            size={24}
+          {/* Email Input */}
+          <Text style={styles.sectionTitle}>Add Email Addresses</Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              label="Email Address *"
+              value={email}
+              onChangeText={setEmail}
+              mode="outlined"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={!!errors.email}
+              style={styles.emailInput}
+              placeholder="user@example.com"
+              onSubmitEditing={handleAddEmail}
+            />
+            <IconButton
+              icon="plus"
+              size={24}
+              mode="contained"
+              onPress={handleAddEmail}
+              style={styles.addButton}
+              disabled={!email.trim()}
+            />
+          </View>
+          {errors.email ? (
+            <HelperText type="error" visible={!!errors.email}>
+              {errors.email}
+            </HelperText>
+          ) : null}
+
+          {/* Invited Emails List */}
+          {invitedEmails.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>
+                Emails to Invite ({invitedEmails.length})
+              </Text>
+              <View style={styles.emailsList}>
+                {invitedEmails.map((invitedEmail) => (
+                  <Chip
+                    key={invitedEmail}
+                    mode="outlined"
+                    onClose={() => handleRemoveEmail(invitedEmail)}
+                    style={styles.emailChip}
+                  >
+                    {invitedEmail}
+                  </Chip>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Send Button */}
+          <Button
             mode="contained"
-            onPress={handleAddEmail}
-            style={styles.addButton}
-            disabled={!email.trim()}
-          />
-        </View>
-        {errors.email ? (
-          <HelperText type="error" visible={!!errors.email}>
-            {errors.email}
-          </HelperText>
-        ) : null}
-
-        {/* Invited Emails List */}
-        {invitedEmails.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>
-              Emails to Invite ({invitedEmails.length})
-            </Text>
-            <View style={styles.emailsList}>
-              {invitedEmails.map((invitedEmail) => (
-                <Chip
-                  key={invitedEmail}
-                  mode="outlined"
-                  onClose={() => handleRemoveEmail(invitedEmail)}
-                  style={styles.emailChip}
-                >
-                  {invitedEmail}
-                </Chip>
-              ))}
-            </View>
-          </>
-        )}
-
-        {/* Send Button */}
-        <Button
-          mode="contained"
-          onPress={handleSendInvitations}
-          disabled={invitedEmails.length === 0 || isInviting}
-          loading={isInviting}
-          style={styles.sendButton}
-          contentStyle={styles.sendButtonContent}
-        >
-          Send Invitations
-        </Button>
-      </SafeScrollView>
+            onPress={handleSendInvitations}
+            disabled={invitedEmails.length === 0 || isInviting}
+            loading={isInviting}
+            style={styles.sendButton}
+            contentStyle={styles.sendButtonContent}
+          >
+            Send Invitations
+          </Button>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <LoadingOverlay visible={isInviting} message="Sending invitations..." />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+  },
+  keyboardView: {
+    flex: 1,
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 120,
   },
   infoCard: {
     marginBottom: 16,

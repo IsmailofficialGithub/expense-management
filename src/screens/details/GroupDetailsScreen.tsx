@@ -286,14 +286,24 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         {/* Balance Summary */}
         <Card style={styles.balanceCard}>
           <Card.Content>
-            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Your Balance</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+              Your Balance
+            </Text>
+
             <View style={styles.balanceRow}>
               <View style={styles.balanceItem}>
-                <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>Total Spent</Text>
-                <Text style={[styles.balanceAmount, { color: theme.colors.onSurface }]}>₹{totalSpent.toFixed(2)}</Text>
+                <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Total Spent
+                </Text>
+                <Text style={[styles.balanceAmount, { color: theme.colors.onSurface }]}>
+                  ₹{totalSpent.toFixed(2)}
+                </Text>
               </View>
+
               <View style={styles.balanceItem}>
-                <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>Your Balance</Text>
+                <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Your Balance
+                </Text>
                 <Text
                   style={[
                     styles.balanceAmount,
@@ -308,8 +318,21 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                 </Text>
               </View>
             </View>
+
+            {/* Settle Up Button - Show only if user owes money */}
+            {myBalance && myBalance.balance < 0 && (
+              <Button
+                mode="contained"
+                icon="cash"
+                onPress={() => navigation.navigate('SettleUp', { groupId })}
+                style={{ marginTop: 16 }}
+              >
+                Settle Up
+              </Button>
+            )}
           </Card.Content>
         </Card>
+
 
         {/* Members Section */}
         <View style={styles.section}>

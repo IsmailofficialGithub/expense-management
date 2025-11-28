@@ -1,12 +1,13 @@
 {
   "expo": {
     "name": "Flatmates Expense Tracker",
-    "slug": "flatmates-expense-tracker",
+    "slug": "manager",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
+      "image": "./assets/splash-icon.png",
       "backgroundColor": "#6200EE",
       "resizeMode": "contain"
     },
@@ -17,6 +18,7 @@
     "android": {
       "package": "com.yourname.flatmates",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/splash-icon.png",
         "backgroundColor": "#6200EE"
       }
     },
@@ -30,14 +32,14 @@
       "SMTP_PASSWORD": "ejylvsecowyaifmo",
       "SMTP_FROM_NAME": "Flatmates Expense Tracker",
       "eas": {
-        "projectId": "b5f91826-4a20-4949-87db-d95724d815e7"
+        "projectId": "75672ee6-6961-4fc7-a57e-f04d11cb6dc6"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/b5f91826-4a20-4949-87db-d95724d815e7"
+      "url": "https://u.expo.dev/75672ee6-6961-4fc7-a57e-f04d11cb6dc6"
     }
   }
 }

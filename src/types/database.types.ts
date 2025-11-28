@@ -197,6 +197,7 @@ export interface Expense {
 }
 
 export interface ExpenseSplit {
+  user?: Profile | null;
   id: string
   expense_id: string
   user_id: string

@@ -1,6 +1,6 @@
 // src/screens/details/ExpenseDetailsScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, Alert, Dimensions, StatusBar } from 'react-native';
 import { Text, Card, Avatar, Button, IconButton, Chip, Divider, List, Portal, Modal } from 'react-native-paper';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useAuth } from '../../hooks/useAuth';
@@ -11,7 +11,8 @@ import { fetchExpense, deleteExpense, updateExpense } from '../../store/slices/e
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
-import SafeScrollView from '../../components/SafeScrollView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from 'react-native-paper';
 
 const { width } = Dimensions.get('window');
 
@@ -26,11 +27,13 @@ interface Props {
 
 export default function ExpenseDetailsScreen({ navigation, route }: Props) {
   const { expenseId } = route.params;
+  const theme = useTheme();
   const { selectedExpense, loading } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
+  const insets = useSafeAreaInsets();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
@@ -138,8 +141,9 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
   const allSettled = selectedExpense.splits?.every(s => s.is_settled) || false;
 
   return (
-    <View style={styles.container}>
-      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+      <ScrollView contentContainerStyle={styles.content}>
         {/* Expense Header */}
         <Card style={styles.headerCard}>
           <Card.Content>
@@ -339,7 +343,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
         <Text style={styles.createdText}>
           Created on {format(new Date(selectedExpense.created_at), 'MMM dd, yyyy HH:mm')}
         </Text>
-      </SafeScrollView>
+      </ScrollView>
 
       {/* Receipt Modal */}
       <Portal>
@@ -374,7 +378,6 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   loadingContainer: {
     flex: 1,
@@ -383,7 +386,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 120,
   },
   headerCard: {
     marginBottom: 16,
