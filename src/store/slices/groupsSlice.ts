@@ -61,8 +61,8 @@ export const createGroup = createAsyncThunk('groups/createGroup', async (request
     const isOnline = state.ui.isOnline;
     
     if (isOnline) {
-      try {
-        const group = await groupService.createGroup(request);
+  try {
+    const group = await groupService.createGroup(request);
         const groupWithDetails = await groupService.getGroup(group.id);
         // Save to local storage
         const currentGroups = await storageService.getGroups() || [];
@@ -103,8 +103,8 @@ export const updateGroup = createAsyncThunk('groups/updateGroup', async ({ group
     const isOnline = state.ui.isOnline;
     
     if (isOnline) {
-      try {
-        await groupService.updateGroup(groupId, updates);
+  try {
+    await groupService.updateGroup(groupId, updates);
         const updatedGroup = await groupService.getGroup(groupId);
         // Update local storage
         const currentGroups = await storageService.getGroups() || [];
@@ -144,8 +144,8 @@ export const deleteGroup = createAsyncThunk('groups/deleteGroup', async (groupId
     const isOnline = state.ui.isOnline;
     
     if (isOnline) {
-      try {
-        await groupService.deleteGroup(groupId);
+  try {
+    await groupService.deleteGroup(groupId);
         // Remove from local storage
         const currentGroups = await storageService.getGroups() || [];
         await storageService.setGroups(currentGroups.filter((g: any) => g.id !== groupId));

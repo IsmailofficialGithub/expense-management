@@ -21,6 +21,8 @@ const STORAGE_KEYS = {
   SETTLEMENTS_META: 'settlements_meta',
   PERSONAL_CATEGORIES: 'personal_categories',
   PERSONAL_CATEGORIES_META: 'personal_categories_meta',
+  COMPLETE_BALANCE: 'complete_balance',
+  COMPLETE_BALANCE_META: 'complete_balance_meta',
   MESSAGES: 'messages',
   MESSAGES_META: 'messages_meta',
   CONVERSATIONS: 'conversations',
@@ -289,6 +291,28 @@ export const storageService = {
       version: ((await this.getPersonalCategoriesMetadata())?.version || 0) + 1,
     };
     await storage.set(STORAGE_KEYS.PERSONAL_CATEGORIES_META, meta);
+  },
+
+  // Complete Balance
+  async getCompleteBalance() {
+    return storage.get(STORAGE_KEYS.COMPLETE_BALANCE);
+  },
+
+  async setCompleteBalance(balance: any) {
+    await storage.set(STORAGE_KEYS.COMPLETE_BALANCE, balance);
+    await this.updateCompleteBalanceMetadata();
+  },
+
+  async getCompleteBalanceMetadata(): Promise<StorageMetadata | null> {
+    return storage.get<StorageMetadata>(STORAGE_KEYS.COMPLETE_BALANCE_META);
+  },
+
+  async updateCompleteBalanceMetadata() {
+    const meta: StorageMetadata = {
+      lastSync: Date.now(),
+      version: ((await this.getCompleteBalanceMetadata())?.version || 0) + 1,
+    };
+    await storage.set(STORAGE_KEYS.COMPLETE_BALANCE_META, meta);
   },
 
   // Messages

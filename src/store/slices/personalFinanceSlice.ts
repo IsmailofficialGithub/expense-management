@@ -152,8 +152,8 @@ export const deletePersonalTransaction = createAsyncThunk(
       const isOnline = state.ui.isOnline;
       
       if (isOnline) {
-        try {
-          await personalFinanceService.deleteTransaction(id);
+    try {
+      await personalFinanceService.deleteTransaction(id);
           // Remove from local storage
           const currentTransactions = await storageService.getPersonalTransactions() || [];
           await storageService.setPersonalTransactions(currentTransactions.filter((t: any) => t.id !== id));
@@ -212,9 +212,28 @@ export const setCompleteBalanceFromCache = createAction<UserCompleteBalance>('pe
 
 export const fetchCompleteBalance = createAsyncThunk(
   'personalFinance/fetchCompleteBalance',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, getState }) => {
     try {
-      return await personalFinanceService.getCompleteBalance();
+      const state = getState() as any;
+      const isOnline = state.ui.isOnline;
+      
+      if (isOnline) {
+        try {
+          const balance = await personalFinanceService.getCompleteBalance();
+          await storageService.setCompleteBalance(balance);
+          return balance;
+        } catch (error: any) {
+          console.warn('Online fetch complete balance failed, trying offline:', error);
+        }
+      }
+      
+      // Offline: load from local storage
+      const cachedBalance = await storageService.getCompleteBalance();
+      if (cachedBalance) {
+        return cachedBalance;
+      }
+      
+      throw new Error('No complete balance available');
     } catch (error: any) {
       return rejectWithValue(error.message);
     }

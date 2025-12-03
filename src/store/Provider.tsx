@@ -63,6 +63,12 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
           store.dispatch(setPersonalCategoriesFromCache(cachedPersonalCategories));
         }
 
+        // Load complete balance
+        const cachedCompleteBalance = await storageService.getCompleteBalance();
+        if (cachedCompleteBalance) {
+          store.dispatch(setCompleteBalanceFromCache(cachedCompleteBalance));
+        }
+
         // Load hotels
         const cachedHotels = await storageService.getHotels();
         if (cachedHotels && cachedHotels.length > 0) {

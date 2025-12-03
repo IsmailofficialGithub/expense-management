@@ -122,8 +122,8 @@ export const createExpense = createAsyncThunk('expenses/createExpense', async (r
     const isOnline = state.ui.isOnline;
     
     if (isOnline) {
-      try {
-        const expense = await expenseService.createExpense(request);
+  try {
+    const expense = await expenseService.createExpense(request);
         const expenseWithDetails = await expenseService.getExpense(expense.id);
         // Save to local storage
         const currentExpenses = await storageService.getExpenses() || [];
@@ -269,34 +269,34 @@ export const updateExpense = createAsyncThunk(
       const isOnline = state.ui.isOnline;
       
       if (isOnline) {
-        try {
-          // 1️⃣ If a new receipt file was uploaded
-          let receipt_url: string | null | undefined = undefined;
+    try {
+      // 1️⃣ If a new receipt file was uploaded
+      let receipt_url: string | null | undefined = undefined;
 
-          if (receipt) {
-            const fileExt = receipt.name.split(".").pop();
-            const filePath = `receipts/${expenseId}.${fileExt}`;
+      if (receipt) {
+        const fileExt = receipt.name.split(".").pop();
+        const filePath = `receipts/${expenseId}.${fileExt}`;
 
-            // Upload to Supabase Storage
-            const upload = await expenseService.uploadReceipt(filePath, receipt);
+        // Upload to Supabase Storage
+        const upload = await expenseService.uploadReceipt(filePath, receipt);
 
-            if (upload.error) throw upload.error;
+        if (upload.error) throw upload.error;
 
-            // Get public URL
-            const publicUrl = expenseService.getReceiptUrl(filePath);
-            receipt_url = publicUrl;
-          }
+        // Get public URL
+        const publicUrl = expenseService.getReceiptUrl(filePath);
+        receipt_url = publicUrl;
+      }
 
-          // 2️⃣ Update expense main data (add receipt_url if replaced)
-          const updatedExpense = await expenseService.updateExpense(expenseId, {
-            ...updates,
-            ...(receipt_url ? { receipt_url } : {}),
-          });
+      // 2️⃣ Update expense main data (add receipt_url if replaced)
+      const updatedExpense = await expenseService.updateExpense(expenseId, {
+        ...updates,
+        ...(receipt_url ? { receipt_url } : {}),
+      });
 
-          // 3️⃣ Update splits (delete old + insert new)
-          await expenseService.replaceSplits(expenseId, splits);
+      // 3️⃣ Update splits (delete old + insert new)
+      await expenseService.replaceSplits(expenseId, splits);
 
-          // 4️⃣ Return fresh expense with details
+      // 4️⃣ Return fresh expense with details
           const expenseWithDetails = await expenseService.getExpense(expenseId);
           
           // Update local storage
@@ -363,8 +363,8 @@ export const deleteExpense = createAsyncThunk('expenses/deleteExpense', async (e
     const isOnline = state.ui.isOnline;
     
     if (isOnline) {
-      try {
-        await expenseService.deleteExpense(expenseId);
+  try {
+    await expenseService.deleteExpense(expenseId);
         // Remove from local storage
         const currentExpenses = await storageService.getExpenses() || [];
         await storageService.setExpenses(currentExpenses.filter((e: any) => e.id !== expenseId));
