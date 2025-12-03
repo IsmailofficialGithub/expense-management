@@ -9,6 +9,7 @@ import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { fetchPaymentMethods, setDefaultPaymentMethod, deletePaymentMethod, updatePaymentMethod } from '../../store/slices/paymentMethodsSlice';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import ErrorState from '../../components/ErrorState';
 
 export default function PaymentMethodsScreen({ navigation }: any) {
   const { paymentMethods, defaultMethod, loading } = usePaymentMethods();
@@ -19,20 +20,24 @@ export default function PaymentMethodsScreen({ navigation }: any) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadPaymentMethods();
   }, []);
 
   const loadPaymentMethods = async () => {
-    if (!isOnline) {
-      showToast('Unable to load payment methods. No internet connection.', 'error');
-      return;
-    }
-
+    setError(null);
     try {
+      if (!isOnline) {
+        showToast('Unable to load payment methods. No internet connection.', 'error');
+        return;
+      }
+
       await dispatch(fetchPaymentMethods(profile!.id)).unwrap();
     } catch (error: any) {
+      const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
+      setError(errorMessage);
       console.error('Load payment methods error:', error);
       showToast('Failed to load payment methods', 'error');
     }
@@ -40,8 +45,13 @@ export default function PaymentMethodsScreen({ navigation }: any) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadPaymentMethods();
-    setRefreshing(false);
+    try {
+      await loadPaymentMethods();
+    } catch (error) {
+      // Error already handled in loadPaymentMethods
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleSetDefault = async (methodId: string) => {
@@ -182,6 +192,21 @@ export default function PaymentMethodsScreen({ navigation }: any) {
       </Text>
     </View>
   );
+
+  // Show error state if there's an error and no payment methods
+  if (error && paymentMethods.length === 0 && !loading) {
+    return (
+      <View style={styles.container}>
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            loadPaymentMethods();
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

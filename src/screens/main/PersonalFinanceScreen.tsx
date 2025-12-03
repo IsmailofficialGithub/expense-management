@@ -31,6 +31,7 @@ import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import SafeScrollView from '../../components/SafeScrollView';
+import ErrorState from '../../components/ErrorState';
 
 export default function PersonalFinanceScreen({ navigation }: any) {
   const { transactions, categories, loading } = usePersonalFinance();
@@ -46,31 +47,49 @@ export default function PersonalFinanceScreen({ navigation }: any) {
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    if (!isOnline) {
-      showToast('Unable to load data. No internet connection.', 'error');
-      return;
-    }
-
+    setError(null);
     try {
-      await Promise.all([
-        dispatch(fetchPersonalTransactions()).unwrap(),
-        dispatch(fetchPersonalCategories()).unwrap(),
-      ]);
-    } catch (error) {
+      // Data is already loaded from cache in Provider.tsx
+      // If online, sync in background to get latest data
+      if (isOnline) {
+        await Promise.all([
+          dispatch(fetchPersonalTransactions()).unwrap(),
+          dispatch(fetchPersonalCategories()).unwrap(),
+        ]);
+      } else {
+        // Offline: data is already in Redux from cache
+        // Just ensure we have the data (fetch will use cache)
+        const state = require('../../store').store.getState();
+        if (state.personalFinance.transactions.length === 0) {
+          await dispatch(fetchPersonalTransactions()).unwrap();
+        }
+        if (state.personalFinance.categories.length === 0) {
+          await dispatch(fetchPersonalCategories()).unwrap();
+        }
+      }
+    } catch (error: any) {
+      const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
+      setError(errorMessage);
       ErrorHandler.handleError(error, showToast, 'Personal Finance');
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
+    try {
+      await loadData();
+    } catch (error) {
+      // Error already handled in loadData
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleDeleteTransaction = (transactionId: string, description: string) => {
@@ -83,10 +102,7 @@ export default function PersonalFinanceScreen({ navigation }: any) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            if (!isOnline) {
-              showToast('Cannot delete transaction. No internet connection.', 'error');
-              return;
-            }
+            // Delete works offline - it will be queued for sync
 
             setIsProcessing(true);
             try {
@@ -168,6 +184,21 @@ export default function PersonalFinanceScreen({ navigation }: any) {
     const category = categories.find(c => c.name === categoryName);
     return category?.icon || '💰';
   };
+
+  // Show error state if there's an error and no data
+  if (error && transactions.length === 0 && !loading) {
+    return (
+      <View style={styles.container}>
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            loadData();
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

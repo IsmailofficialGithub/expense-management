@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction, createAction } from '@reduxjs/toolkit';
 import { personalFinanceService } from '../../services/supabase.service';
 import {
   PersonalTransaction,
@@ -6,6 +6,8 @@ import {
   CreatePersonalTransactionRequest,
   UserCompleteBalance,
 } from '../../types/database.types';
+import { storageService } from '../../services/storage.service';
+import { syncService } from '../../services/sync.service';
 
 interface PersonalFinanceState {
   transactions: PersonalTransaction[];
@@ -26,9 +28,28 @@ const initialState: PersonalFinanceState = {
 // Async Thunks
 export const fetchPersonalTransactions = createAsyncThunk(
   'personalFinance/fetchTransactions',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, getState }) => {
     try {
-      return await personalFinanceService.getTransactions();
+      const state = getState() as any;
+      const isOnline = state.ui.isOnline;
+      
+      if (isOnline) {
+        try {
+          const transactions = await personalFinanceService.getTransactions();
+          await storageService.setPersonalTransactions(transactions);
+          return transactions;
+        } catch (error: any) {
+          console.warn('Online fetch transactions failed, trying offline:', error);
+        }
+      }
+      
+      // Offline: load from local storage
+      const cachedTransactions = await storageService.getPersonalTransactions();
+      if (cachedTransactions) {
+        return cachedTransactions;
+      }
+      
+      throw new Error('No transactions available');
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -37,9 +58,40 @@ export const fetchPersonalTransactions = createAsyncThunk(
 
 export const createPersonalTransaction = createAsyncThunk(
   'personalFinance/createTransaction',
-  async (request: CreatePersonalTransactionRequest, { rejectWithValue }) => {
+  async (request: CreatePersonalTransactionRequest, { rejectWithValue, getState }) => {
     try {
-      return await personalFinanceService.createTransaction(request);
+      const state = getState() as any;
+      const isOnline = state.ui.isOnline;
+      
+      if (isOnline) {
+        try {
+          const transaction = await personalFinanceService.createTransaction(request);
+          // Save to local storage
+          const currentTransactions = await storageService.getPersonalTransactions() || [];
+          await storageService.setPersonalTransactions([transaction, ...currentTransactions]);
+          return transaction;
+        } catch (error: any) {
+          console.warn('Online create transaction failed, queueing for sync:', error);
+        }
+      }
+      
+      // Offline or online failed: create temporary transaction and queue for sync
+      const tempTransaction: PersonalTransaction = {
+        id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        user_id: '',
+        ...request,
+        date: request.date || new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      await syncService.addToQueue('create', 'transaction', request);
+      
+      // Save to local storage
+      const currentTransactions = await storageService.getPersonalTransactions() || [];
+      await storageService.setPersonalTransactions([tempTransaction, ...currentTransactions]);
+      
+      return tempTransaction;
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -50,10 +102,42 @@ export const updatePersonalTransaction = createAsyncThunk(
   'personalFinance/updateTransaction',
   async (
     { id, updates }: { id: string; updates: Partial<PersonalTransaction> },
-    { rejectWithValue }
+    { rejectWithValue, getState }
   ) => {
     try {
-      return await personalFinanceService.updateTransaction(id, updates);
+      const state = getState() as any;
+      const isOnline = state.ui.isOnline;
+      
+      if (isOnline) {
+        try {
+          const transaction = await personalFinanceService.updateTransaction(id, updates);
+          // Update local storage
+          const currentTransactions = await storageService.getPersonalTransactions() || [];
+          const updatedTransactions = currentTransactions.map((t: any) => 
+            t.id === id ? transaction : t
+          );
+          await storageService.setPersonalTransactions(updatedTransactions);
+          return transaction;
+        } catch (error: any) {
+          console.warn('Online update transaction failed, queueing for sync:', error);
+        }
+      }
+      
+      // Offline or online failed: update local storage and queue for sync
+      const currentTransactions = await storageService.getPersonalTransactions() || [];
+      const transactionToUpdate = currentTransactions.find((t: any) => t.id === id);
+      
+      if (transactionToUpdate) {
+        const updatedTransaction = { ...transactionToUpdate, ...updates, updated_at: new Date().toISOString() };
+        await syncService.addToQueue('update', 'transaction', { id, updates });
+        const updatedTransactions = currentTransactions.map((t: any) => 
+          t.id === id ? updatedTransaction : t
+        );
+        await storageService.setPersonalTransactions(updatedTransactions);
+        return updatedTransaction;
+      }
+      
+      throw new Error('Transaction not found');
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -62,9 +146,28 @@ export const updatePersonalTransaction = createAsyncThunk(
 
 export const deletePersonalTransaction = createAsyncThunk(
   'personalFinance/deleteTransaction',
-  async (id: string, { rejectWithValue }) => {
+  async (id: string, { rejectWithValue, getState }) => {
     try {
-      await personalFinanceService.deleteTransaction(id);
+      const state = getState() as any;
+      const isOnline = state.ui.isOnline;
+      
+      if (isOnline) {
+        try {
+          await personalFinanceService.deleteTransaction(id);
+          // Remove from local storage
+          const currentTransactions = await storageService.getPersonalTransactions() || [];
+          await storageService.setPersonalTransactions(currentTransactions.filter((t: any) => t.id !== id));
+          return id;
+        } catch (error: any) {
+          console.warn('Online delete transaction failed, queueing for sync:', error);
+        }
+      }
+      
+      // Offline or online failed: remove from local storage and queue for sync
+      const currentTransactions = await storageService.getPersonalTransactions() || [];
+      await syncService.addToQueue('delete', 'transaction', { id });
+      await storageService.setPersonalTransactions(currentTransactions.filter((t: any) => t.id !== id));
+      
       return id;
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -74,14 +177,38 @@ export const deletePersonalTransaction = createAsyncThunk(
 
 export const fetchPersonalCategories = createAsyncThunk(
   'personalFinance/fetchCategories',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, getState }) => {
     try {
-      return await personalFinanceService.getCategories();
+      const state = getState() as any;
+      const isOnline = state.ui.isOnline;
+      
+      if (isOnline) {
+        try {
+          const categories = await personalFinanceService.getCategories();
+          await storageService.setPersonalCategories(categories);
+          return categories;
+        } catch (error: any) {
+          console.warn('Online fetch categories failed, trying offline:', error);
+        }
+      }
+      
+      // Offline: load from local storage
+      const cachedCategories = await storageService.getPersonalCategories();
+      if (cachedCategories) {
+        return cachedCategories;
+      }
+      
+      return [];
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
   }
 );
+
+// Cache setter actions - load data directly from cache without API calls
+export const setTransactionsFromCache = createAction<PersonalTransaction[]>('personalFinance/setTransactionsFromCache');
+export const setPersonalCategoriesFromCache = createAction<PersonalCategory[]>('personalFinance/setCategoriesFromCache');
+export const setCompleteBalanceFromCache = createAction<UserCompleteBalance>('personalFinance/setCompleteBalanceFromCache');
 
 export const fetchCompleteBalance = createAsyncThunk(
   'personalFinance/fetchCompleteBalance',
@@ -155,6 +282,17 @@ const personalFinanceSlice = createSlice({
 
     // Fetch Complete Balance
     builder.addCase(fetchCompleteBalance.fulfilled, (state, action) => {
+      state.completeBalance = action.payload;
+    });
+    // Cache setter actions
+    builder.addCase(setTransactionsFromCache, (state, action) => {
+      state.transactions = action.payload;
+      state.loading = false;
+    });
+    builder.addCase(setPersonalCategoriesFromCache, (state, action) => {
+      state.categories = action.payload;
+    });
+    builder.addCase(setCompleteBalanceFromCache, (state, action) => {
       state.completeBalance = action.payload;
     });
   },

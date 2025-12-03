@@ -1,5 +1,5 @@
 // src/store/slices/hotelsSlice.ts
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction, createAction } from '@reduxjs/toolkit';
 import { hotelService } from '../../services/supabase.service';
 import {
   Hotel,
@@ -8,6 +8,8 @@ import {
   CreateHotelRequest,
   CreateMenuItemRequest,
 } from '../../types/database.types';
+import { storageService } from '../../services/storage.service';
+import { syncService } from '../../services/sync.service';
 
 interface HotelsState {
   hotels: HotelWithMenu[];
@@ -26,8 +28,27 @@ const initialState: HotelsState = {
 // Async thunks
 export const fetchHotels = createAsyncThunk(
   'hotels/fetchHotels',
-  async () => {
-    return await hotelService.getHotels();
+  async (_, { getState }) => {
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+    
+    if (isOnline) {
+      try {
+        const hotels = await hotelService.getHotels();
+        await storageService.setHotels(hotels);
+        return hotels;
+      } catch (error: any) {
+        console.warn('Online fetch hotels failed, trying offline:', error);
+      }
+    }
+    
+    // Offline: load from local storage
+    const cachedHotels = await storageService.getHotels();
+    if (cachedHotels) {
+      return cachedHotels;
+    }
+    
+    return [];
   }
 );
 
@@ -40,9 +61,40 @@ export const fetchHotel = createAsyncThunk(
 
 export const createHotel = createAsyncThunk(
   'hotels/createHotel',
-  async (request: CreateHotelRequest) => {
-    const hotel = await hotelService.createHotel(request);
-    return await hotelService.getHotel(hotel.id);
+  async (request: CreateHotelRequest, { getState }) => {
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+    
+    if (isOnline) {
+      try {
+        const hotel = await hotelService.createHotel(request);
+        const hotelWithDetails = await hotelService.getHotel(hotel.id);
+        const currentHotels = await storageService.getHotels() || [];
+        await storageService.setHotels([hotelWithDetails, ...currentHotels]);
+        return hotelWithDetails;
+      } catch (error: any) {
+        console.warn('Online create hotel failed, queueing for sync:', error);
+      }
+    }
+    
+    // Offline or online failed: create temporary hotel and queue for sync
+    const tempHotel: HotelWithMenu = {
+      id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: request.name,
+      location: request.location || null,
+      phone: request.phone || null,
+      created_by: '',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      menu_items: [],
+    };
+    
+    await syncService.addToQueue('create', 'hotel', request);
+    const currentHotels = await storageService.getHotels() || [];
+    await storageService.setHotels([tempHotel, ...currentHotels]);
+    
+    return tempHotel;
   }
 );
 
@@ -60,6 +112,9 @@ export const updateMenuItem = createAsyncThunk(
     return await hotelService.updateMenuItem(itemId, updates);
   }
 );
+
+// Cache setter action - load data directly from cache without API calls
+export const setHotelsFromCache = createAction<HotelWithMenu[]>('hotels/setFromCache');
 
 export const deleteMenuItem = createAsyncThunk(
   'hotels/deleteMenuItem',
@@ -175,6 +230,11 @@ const hotelsSlice = createSlice({
           item => item.id !== deletedItemId
         );
       }
+    });
+    // Cache setter action
+    builder.addCase(setHotelsFromCache, (state, action) => {
+      state.hotels = action.payload;
+      state.loading = false;
     });
   },
 });

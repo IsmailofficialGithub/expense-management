@@ -57,12 +57,12 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   }, [selectedGroup]);
 
   const loadGroupData = async () => {
-    if (!isOnline) {
-      showToast('Unable to load group data. No internet connection.', 'error');
-      return;
-    }
-
     try {
+      if (!isOnline) {
+        showToast('Unable to load group data. No internet connection.', 'error');
+        return;
+      }
+
       await Promise.all([
         dispatch(fetchGroup(groupId)).unwrap(),
         dispatch(fetchGroupBalances(groupId)).unwrap(),
@@ -75,8 +75,13 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadGroupData();
-    setRefreshing(false);
+    try {
+      await loadGroupData();
+    } catch (error) {
+      // Error already handled in loadGroupData
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleUpdateGroup = async () => {

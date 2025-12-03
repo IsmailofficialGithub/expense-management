@@ -10,6 +10,7 @@ import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useTheme } from 'react-native-paper';
+import ErrorState from '../../components/ErrorState';
 
 export default function GroupsScreen({ navigation }: any) {
   const theme = useTheme();
@@ -29,30 +30,35 @@ export default function GroupsScreen({ navigation }: any) {
   const [newGroupDescription, setNewGroupDescription] = useState('');
   const [errors, setErrors] = useState({ name: '' });
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadGroups();
   }, []);
 
   const loadGroups = async () => {
+    setError(null);
     try {
       await dispatch(fetchGroups()).unwrap();
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
+      setError(errorMessage);
       ErrorHandler.handleError(error, showToast, 'Load Groups');
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadGroups();
-    setRefreshing(false);
+    try {
+      await loadGroups();
+    } catch (error) {
+      // Error already handled in loadGroups
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleCreateGroup = async () => {
-      if (!isOnline) {
-      showToast('Cannot create group. No internet connection.', 'error');
-      return;
-    }
     // Validation
     setErrors({ name: '' });
     if (!newGroupName.trim()) {
@@ -72,7 +78,13 @@ export default function GroupsScreen({ navigation }: any) {
       setNewGroupName('');
       setNewGroupDescription('');
       setModalVisible(false);
-            showToast('Group created successfully!', 'success');
+      
+      // Show different message based on online status
+      if (isOnline) {
+        showToast('Group created successfully!', 'success');
+      } else {
+        showToast('Group saved offline. Will sync when connection is restored.', 'info');
+      }
 
     } catch (error) {
        ErrorHandler.handleError(error, showToast, 'Create Group');
@@ -147,6 +159,21 @@ export default function GroupsScreen({ navigation }: any) {
       </Button>
     </View>
   );
+
+  // Show error state if there's an error and no groups
+  if (error && groups.length === 0 && !loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            loadGroups();
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

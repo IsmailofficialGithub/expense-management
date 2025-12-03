@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from 'react-native-paper';
+import ErrorState from '../../components/ErrorState';
 
 export default function ExpensesScreen({ navigation }: any) {
   const theme = useTheme();
@@ -25,16 +26,24 @@ export default function ExpensesScreen({ navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'paid' | 'owe'>('all');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, [filters]);
 
   const loadData = async () => {
-    await Promise.all([
-      dispatch(fetchExpenses(filters)),
-      dispatch(fetchCategories()),
-    ]);
+    setError(null);
+    try {
+      await Promise.all([
+        dispatch(fetchExpenses(filters)).unwrap(),
+        dispatch(fetchCategories()).unwrap(),
+      ]);
+    } catch (error: any) {
+      const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
+      setError(errorMessage);
+      ErrorHandler.handleError(error, showToast, 'Load Expenses');
+    }
   };
 
   const onRefresh = async () => {
@@ -178,6 +187,21 @@ const renderExpenseCard = (expense: any) => {
   );
 
   const sectionsData = Object.entries(groupedExpenses);
+
+  // Show error state if there's an error and no expenses
+  if (error && expenses.length === 0 && !loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            loadData();
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

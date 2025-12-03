@@ -44,12 +44,12 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
   }, [expenseId]);
 
   const loadExpenseData = async () => {
-    if (!isOnline) {
-      showToast('Unable to load expense. No internet connection.', 'error');
-      return;
-    }
-
     try {
+      if (!isOnline) {
+        showToast('Unable to load expense. No internet connection.', 'error');
+        return;
+      }
+
       await dispatch(fetchExpense(expenseId)).unwrap();
     } catch (error) {
       ErrorHandler.handleError(error, showToast, 'Load Expense Details');

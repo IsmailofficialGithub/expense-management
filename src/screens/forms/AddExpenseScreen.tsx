@@ -226,10 +226,6 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (!isOnline) {
-      showToast("Cannot add expense. No internet connection.", "error");
-      return;
-    }
     const validationError = validateForm();
 
     if (validationError) {
@@ -253,19 +249,24 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
     });
     let receiptFile: any = undefined;
     if (receiptUri) {
-      try {
-        const filename = receiptUri.split('/').pop() || 'receipt.jpg';
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
+      if (!isOnline) {
+        // Receipts can't be uploaded offline, show warning but allow expense creation
+        showToast("Receipt will be uploaded when connection is restored", "warning");
+      } else {
+        try {
+          const filename = receiptUri.split('/').pop() || 'receipt.jpg';
+          const match = /\.(\w+)$/.exec(filename);
+          const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-        receiptFile = {
-          uri: receiptUri,
-          name: filename,
-          type: type,
-        };
-      } catch (error) {
-        ErrorHandler.logError(error, "Receipt Upload");
-        showToast("Failed to upload receipt", "warning");
+          receiptFile = {
+            uri: receiptUri,
+            name: filename,
+            type: type,
+          };
+        } catch (error) {
+          ErrorHandler.logError(error, "Receipt Upload");
+          showToast("Failed to upload receipt", "warning");
+        }
       }
     }
     try {
@@ -283,7 +284,13 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
           receipt: receiptFile,
         })
       ).unwrap();
-      showToast("Expense added successfully!", "success");
+      
+      // Show different message based on online status
+      if (isOnline) {
+        showToast("Expense added successfully!", "success");
+      } else {
+        showToast("Expense saved offline. Will sync when connection is restored.", "info");
+      }
       navigation.goBack();
     } catch (error) {
       ErrorHandler.handleError(error, showToast, "Add Expense");

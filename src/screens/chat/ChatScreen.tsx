@@ -25,9 +25,11 @@ import { chatService } from '../../services/chat.service';
 import { MessageWithStatus, ConversationWithDetails, TypingIndicatorWithProfile } from '../../types/database.types';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
+import { useUI } from '../../hooks/useUI';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { format } from 'date-fns';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import ErrorState from '../../components/ErrorState';
 
 interface Props {
   route: {
@@ -42,6 +44,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { isOnline } = useUI();
   const { conversationId } = route.params;
   const insets = useSafeAreaInsets();
 
@@ -56,6 +59,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const messageChannelsRef = useRef<RealtimeChannel[]>([]);
@@ -181,34 +185,80 @@ export default function ChatScreen({ route, navigation }: Props) {
   };
 
   const loadMessages = async (beforeTimestamp?: string) => {
-    try {
-      const { messages: newMessages, hasMore: moreAvailable } = await chatService.getMessages(
-        conversationId,
-        20,
-        beforeTimestamp
-      );
-      
-      if (beforeTimestamp) {
-        // Loading more (prepend to existing messages)
-        setMessages(prev => [...newMessages, ...prev]);
-        setHasMore(moreAvailable);
-      } else {
-        // Initial load
-        setMessages(newMessages);
-        setHasMore(moreAvailable);
-        setLoading(false);
-        
-        // Scroll to bottom
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: false });
-        }, 100);
+    setError(null);
+    let shouldContinueToAPI = true;
+    
+    // First, try to load from cache immediately (like WhatsApp)
+    if (!beforeTimestamp) {
+      try {
+        const { storageService } = await import('../../services/storage.service');
+        const cachedMessages = await storageService.getMessages(conversationId) || [];
+        if (cachedMessages.length > 0) {
+          // Show cached messages immediately
+          const sorted = cachedMessages.sort((a: any, b: any) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          setMessages(sorted.reverse()); // Oldest first
+          setHasMore(true); // Assume there might be more
+          setLoading(false);
+          
+          // Scroll to bottom
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }, 100);
+          
+          // Then sync in background if online
+          if (!isOnline) {
+            shouldContinueToAPI = false; // Offline, use cache only
+          }
+        }
+      } catch (error) {
+        console.error('Error loading cached messages:', error);
+        // Continue to API call even if cache fails
       }
-    } catch (error) {
+    }
+    
+    // Then fetch from API (or use cache if offline)
+    try {
+      if (shouldContinueToAPI) {
+        const { messages: newMessages, hasMore: moreAvailable } = await chatService.getMessages(
+          conversationId,
+          20,
+          beforeTimestamp
+        );
+        
+        if (beforeTimestamp) {
+          // Loading more (prepend to existing messages)
+          setMessages(prev => [...newMessages, ...prev]);
+          setHasMore(moreAvailable);
+        } else {
+          // Initial load or refresh
+          setMessages(newMessages);
+          setHasMore(moreAvailable);
+          setLoading(false);
+          
+          // Scroll to bottom
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }, 100);
+        }
+      }
+    } catch (error: any) {
+      const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
+      setError(errorMessage);
       ErrorHandler.handleError(error, showToast, 'Chat');
-      setLoading(false);
+      // Only set loading to false if this was initial load (not loading more)
+      if (!beforeTimestamp) {
+        setLoading(false);
+      }
     } finally {
+      // Always clear loadingMore state
       setLoadingMore(false);
       loadingMoreRef.current = false;
+      // Ensure loading is cleared if it was set
+      if (!beforeTimestamp && loading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -315,7 +365,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         text,
       });
       
-      // Remove temporary message and add the real one
+      // Remove temporary message and add the real one (or keep temp if offline)
       setMessages(prev => {
         const filtered = prev.filter(msg => msg.id !== tempMessageId);
         // Check if message already exists (from subscription)
@@ -324,8 +374,17 @@ export default function ChatScreen({ route, navigation }: Props) {
         }
         return [...filtered, sentMessage];
       });
+
+      // Show appropriate toast based on online status
+      if (isOnline && !sentMessage.id.startsWith('temp-')) {
+        // Message was sent successfully online
+        // No toast needed - real-time subscription will handle it
+      } else if (!isOnline || sentMessage.id.startsWith('temp-')) {
+        // Message was queued for offline sync
+        showToast('Message saved offline. Will send when connection is restored.', 'info');
+      }
     } catch (error) {
-      // Remove optimistic message on error
+      // Remove optimistic message on error (only if it's a real error, not offline)
       setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
       ErrorHandler.handleError(error, showToast, 'Send Message');
       setMessageText(text); // Restore message on error
@@ -589,6 +648,22 @@ export default function ChatScreen({ route, navigation }: Props) {
       </View>
     );
   };
+
+  // Show error state if there's an error and no messages
+  if (error && messages.length === 0 && !loading) {
+    return (
+      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.colors.background }]}>
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setLoading(true);
+            loadMessages();
+          }}
+        />
+      </View>
+    );
+  }
 
   if (loading) {
     return (

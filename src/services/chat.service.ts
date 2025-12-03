@@ -26,6 +26,16 @@ export const chatService = {
    * Get all conversations for current user
    */
   async getConversations(): Promise<ConversationWithDetails[]> {
+    // Check if offline and load from local storage
+    const { isOnline } = await import('../utils/networkAware');
+    const { storageService } = await import('./storage.service');
+    
+    if (!isOnline()) {
+      // Load from local storage
+      const cachedConversations = await storageService.getConversations() || [];
+      return cachedConversations;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -36,7 +46,11 @@ export const chatService = {
       .eq('user_id', user.id);
 
     if (participantError) throw participantError;
-    if (!participantData || participantData.length === 0) return [];
+    if (!participantData || participantData.length === 0) {
+      // Save empty array to cache
+      await storageService.setConversations([]);
+      return [];
+    }
 
     const conversationIds = participantData.map(p => p.conversation_id);
 
@@ -78,6 +92,9 @@ export const chatService = {
         } as ConversationWithDetails;
       })
     );
+
+    // Save to local storage for offline access
+    await storageService.setConversations(conversationsWithDetails);
 
     return conversationsWithDetails;
   },
@@ -265,34 +282,101 @@ export const chatService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Insert message with sender profile in one query (faster - no participant check, RLS handles it)
-    const { data: message, error } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: request.conversation_id,
-        sender_id: user.id,
-        text: request.text,
-        message_type: request.message_type || 'text',
-        media_url: request.media_url || null,
-        media_type: request.media_type || null,
-        related_expense_id: request.related_expense_id || null,
-      })
-      .select(`
-        *,
-        sender:profiles(*)
-      `)
-      .single();
+    // Import network-aware utilities
+    const { isOnline } = await import('../utils/networkAware');
+    const { storageService } = await import('./storage.service');
+    const { syncService } = await import('./sync.service');
 
-    if (error) throw error;
+    // Create message object with sender profile
+    const messageData = {
+      conversation_id: request.conversation_id,
+      sender_id: user.id,
+      text: request.text,
+      message_type: request.message_type || 'text',
+      media_url: request.media_url || null,
+      media_type: request.media_type || null,
+      related_expense_id: request.related_expense_id || null,
+    };
 
-    // Return message with minimal status (real-time subscription will update it)
-    return {
-      ...message,
-      reads: [],
-      read_count: 0,
-      total_participants: 0, // Will be updated by subscription
-      status: 'sent',
-    } as MessageWithStatus;
+    if (isOnline()) {
+      try {
+        // Insert message with sender profile in one query (faster - no participant check, RLS handles it)
+        const { data: message, error } = await supabase
+          .from('messages')
+          .insert(messageData)
+          .select(`
+            *,
+            sender:profiles(*)
+          `)
+          .single();
+
+        if (error) throw error;
+
+        // Save to local storage
+        const existingMessages = await storageService.getMessages(request.conversation_id) || [];
+        const messageWithStatus: MessageWithStatus = {
+          ...message,
+          reads: [],
+          read_count: 0,
+          total_participants: 0,
+          status: 'sent',
+        };
+        await storageService.setMessages([...existingMessages, messageWithStatus], request.conversation_id);
+
+        return messageWithStatus;
+      } catch (error: any) {
+        // If online call fails, queue for sync
+        console.warn('Failed to send message online, queueing for sync:', error);
+        await syncService.addToQueue('create', 'message', request);
+        
+        // Create temporary message for offline display
+        const tempMessage: MessageWithStatus = {
+          id: `temp-${Date.now()}-${Math.random()}`,
+          ...messageData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_edited: false,
+          is_deleted: false,
+          deleted_at: null,
+          sender: { id: user.id, full_name: user.user_metadata?.full_name || 'You' } as any,
+          reads: [],
+          read_count: 0,
+          total_participants: 0,
+          status: 'sending',
+        };
+        
+        // Save to local storage
+        const existingMessages = await storageService.getMessages(request.conversation_id) || [];
+        await storageService.setMessages([...existingMessages, tempMessage], request.conversation_id);
+        
+        return tempMessage;
+      }
+    } else {
+      // Offline: queue the message
+      await syncService.addToQueue('create', 'message', request);
+      
+      // Create temporary message for offline display
+      const tempMessage: MessageWithStatus = {
+        id: `temp-${Date.now()}-${Math.random()}`,
+        ...messageData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        is_edited: false,
+        is_deleted: false,
+        deleted_at: null,
+        sender: { id: user.id, full_name: user.user_metadata?.full_name || 'You' } as any,
+        reads: [],
+        read_count: 0,
+        total_participants: 0,
+        status: 'sending',
+      };
+      
+      // Save to local storage
+      const existingMessages = await storageService.getMessages(request.conversation_id) || [];
+      await storageService.setMessages([...existingMessages, tempMessage], request.conversation_id);
+      
+      return tempMessage;
+    }
   },
 
   /**
@@ -303,6 +387,27 @@ export const chatService = {
     limit: number = 20,
     beforeTimestamp?: string
   ): Promise<{ messages: MessageWithStatus[]; hasMore: boolean }> {
+    // Check if offline and load from local storage
+    const { isOnline } = await import('../utils/networkAware');
+    const { storageService } = await import('./storage.service');
+    
+    if (!isOnline()) {
+      // Load from local storage
+      const localMessages = await storageService.getMessages(conversationId) || [];
+      // Sort by created_at descending (newest first)
+      const sorted = localMessages.sort((a: any, b: any) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      // Apply pagination if needed
+      const paginated = beforeTimestamp 
+        ? sorted.filter((m: any) => new Date(m.created_at).getTime() < new Date(beforeTimestamp).getTime()).slice(0, limit)
+        : sorted.slice(0, limit);
+      return {
+        messages: paginated,
+        hasMore: sorted.length > paginated.length,
+      };
+    }
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -343,6 +448,19 @@ export const chatService = {
     const messagesWithStatus = await Promise.all(
       messagesToReturn.map(msg => this.getMessageWithStatus(msg.id))
     );
+
+    // Save to local storage for offline access
+    const existingMessages = await storageService.getMessages(conversationId) || [];
+    const updatedMessages = [...existingMessages];
+    messagesWithStatus.forEach((msg) => {
+      const index = updatedMessages.findIndex((m: any) => m.id === msg.id);
+      if (index >= 0) {
+        updatedMessages[index] = msg;
+      } else {
+        updatedMessages.push(msg);
+      }
+    });
+    await storageService.setMessages(updatedMessages, conversationId);
 
     return {
       messages: messagesWithStatus.reverse(), // Oldest first

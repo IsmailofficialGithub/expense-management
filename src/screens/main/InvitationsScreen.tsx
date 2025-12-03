@@ -27,18 +27,18 @@ export default function InvitationsScreen({ navigation }: any) {
   }, []);
 
   const loadInvitations = async () => {
-    if (!isOnline) {
-      showToast('Unable to load invitations. No internet connection.', 'error');
-      setLoading(false);
-      return;
-    }
-
     try {
+      if (!isOnline) {
+        showToast('Unable to load invitations. No internet connection.', 'error');
+        return;
+      }
+
       const data = await invitationService.getPendingInvitations();
       setInvitations(data);
-    } catch (error) {
+    } catch (error: any) {
       ErrorHandler.handleError(error, showToast, 'Load Invitations');
     } finally {
+      // Always clear loading states
       setLoading(false);
       setRefreshing(false);
     }

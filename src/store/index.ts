@@ -11,6 +11,7 @@ import uiReducer from './slices/uiSlice';
 import personalFinanceReducer from './slices/personalFinanceSlice';
 import paymentMethodsReducer from './slices/paymentMethodsSlice';
 import hotelsReducer from './slices/hotelsSlice';
+import { offlineMiddleware } from './middleware/offlineMiddleware';
 
 export const store = configureStore({
   reducer: {
@@ -33,7 +34,7 @@ export const store = configureStore({
         // Ignore these paths in the state
         ignoredPaths: ['auth.user'],
       },
-    }),
+    }).concat(offlineMiddleware),
 });
 
 

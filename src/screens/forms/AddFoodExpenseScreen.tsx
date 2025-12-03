@@ -14,8 +14,7 @@ import { useAppDispatch } from '../../store';
 import { fetchGroups } from '../../store/slices/groupsSlice';
 import { fetchHotels } from '../../store/slices/hotelsSlice';
 import { fetchPaymentMethods } from '../../store/slices/paymentMethodsSlice';
-import { fetchCategories } from '../../store/slices/expensesSlice';
-import { foodExpenseService } from '../../services/supabase.service';
+import { fetchCategories, createFoodExpense } from '../../store/slices/expensesSlice';
 import { format } from 'date-fns';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { FoodItemInput, HotelMenuItem } from '../../types/database.types';
@@ -107,21 +106,17 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   }, [defaultMethod]);
 
   const loadData = async () => {
-    if (!isOnline) {
-      showToast('Unable to load data. No internet connection.', 'error');
-      return;
-    }
-
     try {
+      // Try to load data - will use cached data if offline
       await Promise.all([
-        dispatch(fetchGroups()).unwrap(),
-        dispatch(fetchHotels()).unwrap(),
-        dispatch(fetchPaymentMethods(profile!.id)).unwrap(),
-        dispatch(fetchCategories()).unwrap(),
+        dispatch(fetchGroups()).unwrap().catch(() => {}),
+        dispatch(fetchHotels()).unwrap().catch(() => {}),
+        dispatch(fetchPaymentMethods(profile!.id)).unwrap().catch(() => {}),
+        dispatch(fetchCategories()).unwrap().catch(() => {}),
       ]);
     } catch (error: any) {
       console.error('Load data error:', error);
-      showToast('Failed to load data', 'error');
+      // Don't show error toast - data might be available from cache
     }
   };
 
@@ -297,11 +292,6 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    if (!isOnline) {
-      showToast('Cannot create expense. No internet connection.', 'error');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -320,8 +310,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       // If still no category, show error
       if (!foodCategoryId) {
         showToast('No expense category available. Please contact support.', 'error');
-        setIsSubmitting(false);
-        return;
+        return; // finally block will clear setIsSubmitting
       }
 
       // Prepare splits
@@ -339,7 +328,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         }
       });
 
-      await foodExpenseService.createFoodExpense({
+      await dispatch(createFoodExpense({
         group_id: selectedGroupId,
         category_id: foodCategoryId,
         description: description.trim(),
@@ -351,9 +340,14 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         hotel_id: selectedHotelId,
         food_items: selectedFoodItems,
         payment_method_id: selectedPaymentMethodId,
-      });
+      })).unwrap();
 
-      showToast('Food expense added successfully!', 'success');
+      // Show different message based on online status
+      if (isOnline) {
+        showToast('Food expense added successfully!', 'success');
+      } else {
+        showToast('Food expense saved offline. Will sync when connection is restored.', 'info');
+      }
       navigation.goBack();
     } catch (error: any) {
       console.error('Create food expense error:', error);

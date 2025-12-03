@@ -43,7 +43,7 @@ export default function DashboardScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
-  const [isBalanceHidden, setIsBalanceHidden] = useState(false);
+  const [isBalanceHidden, setIsBalanceHidden] = useState(true);
 
 const toggleBalanceVisibility = () => {
   setIsBalanceHidden(!isBalanceHidden);
@@ -76,19 +76,30 @@ const toggleBalanceVisibility = () => {
   };
 
   const loadData = async () => {
-    if (!isOnline) {
-      showToast("Unable to load data. No internet connection.", "error");
-      return;
-    }
-
     setIsLoading(true);
     try {
-      await Promise.all([
-        dispatch(fetchGroups()).unwrap(),
-        dispatch(fetchExpenses()).unwrap(),
-        dispatch(fetchPersonalTransactions()).unwrap(),
-        dispatch(fetchCompleteBalance()).unwrap(),
-      ]);
+      // Data is already loaded from cache in Provider.tsx
+      // If online, sync in background to get latest data
+      if (isOnline) {
+        await Promise.all([
+          dispatch(fetchGroups()).unwrap(),
+          dispatch(fetchExpenses()).unwrap(),
+          dispatch(fetchPersonalTransactions()).unwrap(),
+          dispatch(fetchCompleteBalance()).unwrap(),
+        ]);
+      } else {
+        // Offline: data is already in Redux from cache
+        // Just ensure we have the data (fetch will use cache)
+        if (groups.length === 0) {
+          await dispatch(fetchGroups()).unwrap();
+        }
+        if (expenses.length === 0) {
+          await dispatch(fetchExpenses()).unwrap();
+        }
+        if (transactions.length === 0) {
+          await dispatch(fetchPersonalTransactions()).unwrap();
+        }
+      }
     } catch (error) {
       ErrorHandler.handleError(error, showToast, "Dashboard");
     } finally {

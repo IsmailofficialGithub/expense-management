@@ -21,12 +21,14 @@ import { chatService } from '../../services/chat.service';
 import { ConversationWithDetails } from '../../types/database.types';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
+import { useUI } from '../../hooks/useUI';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { format } from 'date-fns';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../services/supabase';
 import { notificationsService } from '../../services/notifications.service';
 import { AppState } from 'react-native';
+import ErrorState from '../../components/ErrorState';
 
 type FilterType = 'all' | 'groups' | 'users';
 
@@ -34,6 +36,7 @@ export default function MessagesScreen({ navigation }: any) {
   const theme = useTheme();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const { isOnline } = useUI();
   
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
   const [filteredConversations, setFilteredConversations] = useState<ConversationWithDetails[]>([]);
@@ -46,6 +49,7 @@ export default function MessagesScreen({ navigation }: any) {
   const [emailError, setEmailError] = useState('');
   const [creatingChat, setCreatingChat] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
+  const [error, setError] = useState<string | null>(null);
 
   const channelsRef = useRef<RealtimeChannel[]>([]);
 
@@ -92,12 +96,34 @@ export default function MessagesScreen({ navigation }: any) {
   }, [conversations, searchQuery, filter]);
 
   const loadConversations = async () => {
+    setError(null);
+    let shouldContinueToAPI = true;
+    
     try {
-      const data = await chatService.getConversations();
-      setConversations(data);
-    } catch (error) {
+      // First, try to load from cache immediately
+      const { storageService } = await import('../../services/storage.service');
+      const cachedConversations = await storageService.getConversations() || [];
+      if (cachedConversations.length > 0) {
+        setConversations(cachedConversations);
+        setLoading(false);
+        
+        // Then sync in background if online
+        if (!isOnline) {
+          shouldContinueToAPI = false; // Offline, use cache only
+        }
+      }
+      
+      // Fetch from API if needed
+      if (shouldContinueToAPI) {
+        const data = await chatService.getConversations();
+        setConversations(data);
+      }
+    } catch (error: any) {
+      const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
+      setError(errorMessage);
       ErrorHandler.handleError(error, showToast, 'Messages');
     } finally {
+      // Always clear loading states
       setLoading(false);
       setRefreshing(false);
     }
@@ -435,6 +461,22 @@ export default function MessagesScreen({ navigation }: any) {
       </Card>
     );
   };
+
+  // Show error state if there's an error and no conversations
+  if (error && conversations.length === 0 && !loading) {
+    return (
+      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.colors.background }]}>
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setLoading(true);
+            loadConversations();
+          }}
+        />
+      </View>
+    );
+  }
 
   if (loading) {
     return (
