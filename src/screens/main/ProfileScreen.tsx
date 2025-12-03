@@ -29,6 +29,7 @@ import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from 'react-native-paper';
+import { updatesService } from '../../services/updates.service';
 
 export default function ProfileScreen({ navigation }: any) {
   const { profile, loading } = useAuth();
@@ -309,18 +310,10 @@ const handleRemoveAvatar = () => {
     }
   };
 
-  // Handle theme toggle - cycle through: light -> dark -> auto -> light
+  // Handle theme toggle - toggle between light and dark
   const handleThemeToggle = () => {
-    let newTheme: 'light' | 'dark' | 'auto';
-    if (userTheme === 'light') {
-      newTheme = 'dark';
-    } else if (userTheme === 'dark') {
-      newTheme = 'auto';
-    } else {
-      newTheme = 'light';
-    }
+    const newTheme = userTheme === 'dark' ? 'light' : 'dark';
     dispatch(setTheme(newTheme));
-    showToast(`${newTheme === 'auto' ? 'Auto' : newTheme === 'dark' ? 'Dark' : 'Light'} mode enabled`, 'success');
   };
 
   // Handle sign out
@@ -359,9 +352,9 @@ const handleRemoveAvatar = () => {
       <Card style={styles.headerCard}>
         <Card.Content style={styles.headerContent}>
           <View style={styles.avatarContainer}>
-  {profile.avatar_url ? (
-    <Avatar.Image size={100} source={{ uri: profile.avatar_url }} />
-  ) : (
+            {profile.avatar_url ? (
+              <Avatar.Image size={100} source={{ uri: profile.avatar_url }} />
+            ) : (
     <Avatar.Text
       size={100}
       label={profile.full_name?.substring(0, 2).toUpperCase() || 'U'}
@@ -478,27 +471,19 @@ const handleRemoveAvatar = () => {
           />
         </Card>
       </View>
-
       {/* Preferences */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Preferences</Text>
         <Card style={styles.card}>
           <List.Item
-            title="Theme"
-            description={
-              userTheme === 'auto' ? 'Auto (System)' :
-              userTheme === 'dark' ? 'Dark Mode' :
-              'Light Mode'
-            }
+            title="Dark Mode"
+            description={userTheme === 'dark' ? 'On' : 'Off'}
             left={(props) => <List.Icon {...props} icon="theme-light-dark" />}
             right={() => (
-              <Button
-                mode="outlined"
-                onPress={handleThemeToggle}
-                compact
-              >
-                {userTheme === 'auto' ? 'Auto' : userTheme === 'dark' ? 'Dark' : 'Light'}
-              </Button>
+              <Switch
+                value={userTheme === 'dark'}
+                onValueChange={handleThemeToggle}
+              />
             )}
           />
           <Divider />
@@ -506,44 +491,6 @@ const handleRemoveAvatar = () => {
             title="Notifications"
             description="Coming soon"
             left={(props) => <List.Icon {...props} icon="bell" />}
-            right={(props) => <List.Icon {...props} icon="chevron-right" />}
-            disabled
-          />
-          <Divider />
-          <List.Item
-            title="Currency"
-            description="PKR (₹)"
-            left={(props) => <List.Icon {...props} icon="currency-inr" />}
-            right={(props) => <List.Icon {...props} icon="chevron-right" />}
-            disabled
-          />
-        </Card>
-      </View>
-
-      {/* Data & Privacy */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Data & Privacy</Text>
-        <Card style={styles.card}>
-          <List.Item
-            title="Export Data"
-            description="Download your data"
-            left={(props) => <List.Icon {...props} icon="download" />}
-            right={(props) => <List.Icon {...props} icon="chevron-right" />}
-            disabled
-          />
-          <Divider />
-          <List.Item
-            title="Privacy Policy"
-            description="View our privacy policy"
-            left={(props) => <List.Icon {...props} icon="shield-check" />}
-            right={(props) => <List.Icon {...props} icon="chevron-right" />}
-            disabled
-          />
-          <Divider />
-          <List.Item
-            title="Terms of Service"
-            description="View terms of service"
-            left={(props) => <List.Icon {...props} icon="file-document" />}
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
             disabled
           />
@@ -558,6 +505,14 @@ const handleRemoveAvatar = () => {
             title="App Version"
             description="1.0.0"
             left={(props) => <List.Icon {...props} icon="information" />}
+          />
+          <Divider />
+          <List.Item
+            title="Check for Updates"
+            description="Check for new version"
+            left={(props) => <List.Icon {...props} icon="update" />}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+            onPress={() => updatesService.checkForUpdate()}
           />
           <Divider />
           <List.Item
