@@ -10,8 +10,10 @@ import {
   HelperText,
   Card,
   IconButton,
+  useTheme,
 } from 'react-native-paper';
 import SafeScrollView from '../../components/SafeScrollView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePersonalFinance } from '../../hooks/usePersonalFinance';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
@@ -35,6 +37,8 @@ interface Props {
 }
 
 export default function EditPersonalTransactionScreen({ navigation, route }: Props) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { transactionId } = route.params;
   const { transactions, categories, loading } = usePersonalFinance();
   const { showToast } = useToast();
@@ -227,28 +231,37 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
   };
 
   return (
-    <SafeScrollView contentContainerStyle={{ padding: 16 }} hasTabBar={false}>
+    <SafeScrollView 
+      contentContainerStyle={[
+        { padding: 16 },
+        {
+          paddingTop: insets.top + 16,
+          paddingBottom: insets.bottom + 32,
+        }
+      ]} 
+      hasTabBar={false}
+    >
       {/* Original Transaction Info */}
-      <Card style={styles.originalCard}>
+      <Card style={[styles.originalCard, { backgroundColor: theme.colors.errorContainer }]}>
         <Card.Content>
           <View style={styles.originalHeader}>
-            <Text style={styles.originalTitle}>Original Transaction</Text>
+            <Text style={[styles.originalTitle, { color: theme.colors.onErrorContainer }]}>Original Transaction</Text>
             <IconButton
               icon="delete"
               size={20}
-              iconColor="#F44336"
+              iconColor={theme.colors.error}
               onPress={handleDelete}
             />
           </View>
           <View style={styles.originalRow}>
-            <Text style={styles.originalLabel}>Created:</Text>
-            <Text style={styles.originalValue}>
+            <Text style={[styles.originalLabel, { color: theme.colors.onErrorContainer }]}>Created:</Text>
+            <Text style={[styles.originalValue, { color: theme.colors.onErrorContainer }]}>
               {format(new Date(transaction.created_at), 'MMM dd, yyyy HH:mm')}
             </Text>
           </View>
           <View style={styles.originalRow}>
-            <Text style={styles.originalLabel}>Last Updated:</Text>
-            <Text style={styles.originalValue}>
+            <Text style={[styles.originalLabel, { color: theme.colors.onErrorContainer }]}>Last Updated:</Text>
+            <Text style={[styles.originalValue, { color: theme.colors.onErrorContainer }]}>
               {format(new Date(transaction.updated_at), 'MMM dd, yyyy HH:mm')}
             </Text>
           </View>
@@ -256,7 +269,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       </Card>
 
       {/* Type Selector */}
-      <Text style={styles.sectionTitle}>Transaction Type</Text>
+      <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Transaction Type</Text>
       <SegmentedButtons
         value={type}
         onValueChange={(value) => {
@@ -289,7 +302,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       />
 
       {/* Description */}
-      <Text style={styles.sectionTitle}>What is this {type}?</Text>
+      <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>What is this {type}?</Text>
       <TextInput
         label={`${type === 'income' ? 'Income' : 'Expense'} Description *`}
         value={description}
@@ -328,7 +341,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       ) : null}
 
       {/* Category Selection */}
-      <Text style={styles.sectionTitle}>Category *</Text>
+      <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Category *</Text>
       {filteredCategories.length === 0 ? (
         <Text style={styles.noDataText}>Loading categories...</Text>
       ) : (
@@ -342,11 +355,11 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
                 styles.categoryChip,
                 selectedCategory === category.name &&
                 (type === 'income'
-                  ? styles.selectedIncomeChip
-                  : styles.selectedExpenseChip),
+                  ? { backgroundColor: theme.colors.primaryContainer }
+                  : { backgroundColor: theme.colors.errorContainer }),
               ]}
-              icon={() => <Text style={styles.categoryIcon}>{category.icon}</Text>}
-              textStyle={styles.categoryText}
+              icon={() => <Text style={[styles.categoryIcon, { color: theme.colors.onSurface }]}>{category.icon}</Text>}
+              textStyle={[styles.categoryText, { color: theme.colors.onSurface }]}
             >
               {category.name}
             </Chip>
@@ -360,11 +373,11 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       ) : null}
 
       {/* Date Display */}
-      <Text style={styles.sectionTitle}>Date</Text>
-      <Card style={styles.dateCard}>
+      <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Date</Text>
+      <Card style={[styles.dateCard, { backgroundColor: theme.colors.surface }]}>
         <Card.Content style={styles.dateContent}>
-          <Text style={styles.dateLabel}>Transaction Date</Text>
-          <Text style={styles.dateValue}>{format(date, 'MMMM dd, yyyy')}</Text>
+          <Text style={[styles.dateLabel, { color: theme.colors.onSurfaceVariant }]}>Transaction Date</Text>
+          <Text style={[styles.dateValue, { color: theme.colors.onSurface }]}>{format(date, 'MMMM dd, yyyy')}</Text>
         </Card.Content>
       </Card>
       <HelperText type="info" visible>
@@ -372,7 +385,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       </HelperText>
 
       {/* Notes (Optional) */}
-      <Text style={styles.sectionTitle}>Additional Notes (Optional)</Text>
+      <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Additional Notes (Optional)</Text>
       <TextInput
         label="Notes"
         value={notes}
@@ -386,10 +399,10 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
 
       {/* Changes Indicator */}
       {hasChanges && (
-        <Card style={styles.changesCard}>
+        <Card style={[styles.changesCard, { backgroundColor: theme.colors.errorContainer }]}>
           <Card.Content style={styles.changesContent}>
-            <IconButton icon="alert-circle" size={20} iconColor="#FF9800" />
-            <Text style={styles.changesText}>You have unsaved changes</Text>
+            <IconButton icon="alert-circle" size={20} iconColor={theme.colors.warning || theme.colors.error} />
+            <Text style={[styles.changesText, { color: theme.colors.onErrorContainer }]}>You have unsaved changes</Text>
           </Card.Content>
         </Card>
       )}
@@ -398,14 +411,16 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       <Card
         style={[
           styles.summaryCard,
-          type === 'income' ? styles.incomeSummaryCard : styles.expenseSummaryCard,
+          type === 'income' 
+            ? { backgroundColor: theme.colors.primaryContainer }
+            : { backgroundColor: theme.colors.errorContainer },
         ]}
       >
         <Card.Content>
-          <Text style={styles.summaryTitle}>Updated Transaction Summary</Text>
+          <Text style={[styles.summaryTitle, { color: theme.colors.onSurface }]}>Updated Transaction Summary</Text>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Type:</Text>
-            <Text style={styles.summaryValue}>
+            <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Type:</Text>
+            <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
               {type === 'income' ? '💰 Income' : '💸 Expense'}
             </Text>
           </View>
@@ -429,8 +444,8 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
           )}
           {description && (
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Description:</Text>
-              <Text style={styles.summaryValue} numberOfLines={1}>
+              <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Description:</Text>
+              <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]} numberOfLines={1}>
                 {description}
               </Text>
             </View>
@@ -484,19 +499,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#f5f5f5',
   },
   errorText: {
     fontSize: 18,
-    color: '#F44336',
     marginBottom: 16,
     fontWeight: '600',
   },
   originalCard: {
-    backgroundColor: '#E3F2FD',
     marginBottom: 16,
     borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
   },
   originalHeader: {
     flexDirection: 'row',
@@ -507,7 +518,6 @@ const styles = StyleSheet.create({
   originalTitle: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#1976D2',
   },
   originalRow: {
     flexDirection: 'row',
@@ -516,17 +526,14 @@ const styles = StyleSheet.create({
   },
   originalLabel: {
     fontSize: 12,
-    color: '#666',
   },
   originalValue: {
     fontSize: 12,
-    color: '#333',
     fontWeight: '500',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginTop: 16,
     marginBottom: 12,
   },
@@ -534,14 +541,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   incomeButton: {
-    backgroundColor: '#E8F5E9',
   },
   expenseButton: {
-    backgroundColor: '#FFEBEE',
   },
   input: {
     marginBottom: 8,
-    backgroundColor: '#fff',
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -551,13 +555,10 @@ const styles = StyleSheet.create({
   },
   categoryChip: {
     marginBottom: 8,
-    backgroundColor: '#fff',
   },
   selectedIncomeChip: {
-    backgroundColor: '#4CAF50',
   },
   selectedExpenseChip: {
-    backgroundColor: '#F44336',
   },
   categoryIcon: {
     fontSize: 16,
@@ -566,7 +567,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   dateCard: {
-    backgroundColor: '#fff',
     marginBottom: 4,
   },
   dateContent: {
@@ -576,19 +576,15 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     fontSize: 14,
-    color: '#666',
   },
   dateValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
   },
   changesCard: {
-    backgroundColor: '#FFF3E0',
     marginTop: 8,
     marginBottom: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#FF9800',
   },
   changesContent: {
     flexDirection: 'row',
@@ -596,7 +592,6 @@ const styles = StyleSheet.create({
   },
   changesText: {
     fontSize: 14,
-    color: '#F57C00',
     fontWeight: '600',
     marginLeft: 8,
   },
@@ -606,19 +601,14 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   incomeSummaryCard: {
-    backgroundColor: '#E8F5E9',
     borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
   },
   expenseSummaryCard: {
-    backgroundColor: '#FFEBEE',
     borderLeftWidth: 4,
-    borderLeftColor: '#F44336',
   },
   summaryTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 12,
   },
   summaryRow: {
@@ -629,22 +619,18 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: '#666',
     fontWeight: '500',
   },
   summaryValue: {
     fontSize: 14,
-    color: '#333',
     fontWeight: '600',
   },
   summaryAmount: {
     fontSize: 18,
   },
   incomeText: {
-    color: '#4CAF50',
   },
   expenseText: {
-    color: '#F44336',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -662,12 +648,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   deleteButton: {
-    borderColor: '#F44336',
     marginBottom: 16,
   },
   noDataText: {
     fontSize: 14,
-    color: '#666',
     fontStyle: 'italic',
     marginBottom: 8,
   },

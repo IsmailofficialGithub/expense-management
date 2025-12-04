@@ -1,7 +1,7 @@
 // src/screens/forms/EditExpenseScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { Text, TextInput, Button, SegmentedButtons, Chip, Divider, HelperText, Card, IconButton } from 'react-native-paper';
+import { Text, TextInput, Button, SegmentedButtons, Chip, Divider, HelperText, Card, IconButton, useTheme } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
 import { useExpenses } from '../../hooks/useExpenses';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,6 +15,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import * as ImagePicker from 'expo-image-picker';
 import { format } from 'date-fns';
 import SafeScrollView from '../../components/SafeScrollView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Props {
   navigation: any;
@@ -26,6 +27,8 @@ interface Props {
 }
 
 export default function EditExpenseScreen({ navigation, route }: Props) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { expenseId } = route.params;
   const { selectedExpense, categories, loading } = useExpenses();
   const { selectedGroup } = useGroups();
@@ -302,16 +305,25 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
+      <SafeScrollView 
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 32,
+          }
+        ]} 
+        hasTabBar={false}
+      >
         {/* Info Banner */}
-        <Card style={styles.infoCard}>
+        <Card style={[styles.infoCard, { backgroundColor: theme.colors.primaryContainer }]}>
           <Card.Content>
             <View style={styles.infoContent}>
-              <IconButton icon="information" size={24} iconColor="#1976D2" />
-              <Text style={styles.infoText}>
+              <IconButton icon="information" size={24} iconColor={theme.colors.primary} />
+              <Text style={[styles.infoText, { color: theme.colors.onPrimaryContainer }]}>
                 Editing this expense will update splits for all members
               </Text>
             </View>
@@ -319,16 +331,16 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         </Card>
 
         {/* Group Info (Read-only) */}
-        <Text style={styles.sectionTitle}>Group</Text>
-        <Card style={styles.readOnlyCard}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Group</Text>
+        <Card style={[styles.readOnlyCard, { backgroundColor: theme.colors.surfaceVariant }]}>
           <Card.Content>
-            <Text style={styles.readOnlyLabel}>This expense belongs to:</Text>
-            <Text style={styles.readOnlyValue}>{selectedGroup.name}</Text>
+            <Text style={[styles.readOnlyLabel, { color: theme.colors.onSurfaceVariant }]}>This expense belongs to:</Text>
+            <Text style={[styles.readOnlyValue, { color: theme.colors.onSurface }]}>{selectedGroup.name}</Text>
           </Card.Content>
         </Card>
 
         {/* Description */}
-        <Text style={styles.sectionTitle}>What did you pay for?</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>What did you pay for?</Text>
         <TextInput
           label="Description *"
           value={description}
@@ -365,7 +377,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Category Selection */}
-        <Text style={styles.sectionTitle}>Category *</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Category *</Text>
         {categories.length === 0 ? (
           <Text style={styles.noDataText}>Loading categories...</Text>
         ) : (
@@ -392,7 +404,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Split Type */}
-        <Text style={styles.sectionTitle}>How to split?</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>How to split?</Text>
         <SegmentedButtons
           value={splitType}
           onValueChange={(value) => setSplitType(value as 'equal' | 'unequal')}
@@ -404,7 +416,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         />
 
         {/* Member Selection */}
-        <Text style={styles.sectionTitle}>Split with *</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Split with *</Text>
         <View style={styles.membersContainer}>
           {selectedGroup.members?.map(member => {
             const isSelected = selectedMembers.includes(member.user_id);
@@ -414,7 +426,11 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
             return (
               <Card
                 key={member.user_id}
-                style={[styles.memberCard, isSelected && styles.memberCardSelected]}
+                    style={[
+                      styles.memberCard,
+                      { backgroundColor: theme.colors.surface },
+                      isSelected && { backgroundColor: theme.colors.primaryContainer }
+                    ]}
                 onPress={() => toggleMember(member.user_id)}
               >
                 <Card.Content style={styles.memberCardContent}>
@@ -427,7 +443,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                       {user?.full_name || 'Unknown'}
                     </Chip>
                     {isSelected && (
-                      <Text style={styles.memberSplit}>
+                      <Text style={[styles.memberSplit, { color: theme.colors.primary }]}>
                         ₹{splitAmount.toFixed(2)}
                       </Text>
                     )}
@@ -465,11 +481,11 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Optional: Date, Notes, Receipt */}
-        <Text style={styles.sectionTitle}>Additional Details (Optional)</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Additional Details (Optional)</Text>
 
         {/* Date - Simple display for now */}
-        <Text style={styles.label}>Date</Text>
-        <Text style={styles.dateText}>{format(selectedDate, 'MMMM dd, yyyy')}</Text>
+        <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Date</Text>
+        <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>{format(selectedDate, 'MMMM dd, yyyy')}</Text>
 
         {/* Notes */}
         <TextInput
@@ -484,11 +500,11 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         />
 
         {/* Receipt */}
-        <Text style={styles.label}>Receipt</Text>
+        <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Receipt</Text>
         <View style={styles.receiptContainer}>
           {receiptUri || existingReceiptUrl ? (
-            <View style={styles.receiptPreview}>
-              <Text style={styles.receiptText}>
+            <View style={[styles.receiptPreview, { backgroundColor: theme.colors.primaryContainer }]}>
+              <Text style={[styles.receiptText, { color: theme.colors.onPrimaryContainer }]}>
                 {receiptUri ? 'New receipt selected ✓' : 'Receipt attached ✓'}
               </Text>
               <IconButton
@@ -561,11 +577,9 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
   },
   infoCard: {
     marginBottom: 16,
-    backgroundColor: '#E3F2FD',
     elevation: 2,
   },
   infoContent: {
@@ -575,28 +589,23 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 14,
-    color: '#1565C0',
     lineHeight: 20,
   },
   readOnlyCard: {
     marginBottom: 16,
-    backgroundColor: '#F5F5F5',
     elevation: 1,
   },
   readOnlyLabel: {
     fontSize: 12,
-    color: '#666',
     marginBottom: 4,
   },
   readOnlyValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginTop: 16,
     marginBottom: 12,
   },
@@ -621,10 +630,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   memberCard: {
-    backgroundColor: '#fff',
   },
   memberCardSelected: {
-    backgroundColor: '#E8DEF8',
   },
   memberCardContent: {
     paddingVertical: 8,
@@ -641,7 +648,6 @@ const styles = StyleSheet.create({
   memberSplit: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#6200EE',
     marginLeft: 12,
   },
   splitInput: {
@@ -649,18 +655,15 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     fontSize: 14,
-    color: '#666',
     fontStyle: 'italic',
   },
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#666',
     marginBottom: 8,
   },
   dateText: {
     fontSize: 16,
-    color: '#333',
     marginBottom: 16,
   },
   receiptContainer: {
@@ -670,13 +673,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#E8F5E9',
     padding: 12,
     borderRadius: 8,
   },
   receiptText: {
     fontSize: 14,
-    color: '#2E7D32',
     fontWeight: '500',
   },
   receiptButtons: {

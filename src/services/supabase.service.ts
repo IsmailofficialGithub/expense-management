@@ -459,6 +459,23 @@ export const paymentMethodService = {
    * Set as default payment method
    */
   async setDefaultPaymentMethod(methodId: string): Promise<UserPaymentMethod> {
+    // First, get the method to get user_id
+    const { data: method, error: fetchError } = await supabase
+      .from('user_payment_methods')
+      .select('user_id')
+      .eq('id', methodId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Unset all other defaults for this user
+    await supabase
+      .from('user_payment_methods')
+      .update({ is_default: false })
+      .eq('user_id', method.user_id)
+      .neq('id', methodId);
+
+    // Set this one as default
     const { data, error } = await supabase
       .from('user_payment_methods')
       .update({ is_default: true })

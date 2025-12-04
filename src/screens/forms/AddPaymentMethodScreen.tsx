@@ -2,15 +2,18 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import SafeScrollView from '../../components/SafeScrollView';
-import { Text, TextInput, Button, SegmentedButtons, Card, Switch, HelperText, Divider } from 'react-native-paper';
+import { Text, TextInput, Button, SegmentedButtons, Card, Switch, HelperText, Divider, useTheme } from 'react-native-paper';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { createPaymentMethod } from '../../store/slices/paymentMethodsSlice';
 import { PaymentMethodType } from '../../types/database.types';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AddPaymentMethodScreen({ navigation }: any) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
@@ -258,21 +261,30 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
+      <SafeScrollView 
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 32,
+          }
+        ]} 
+        hasTabBar={false}
+      >
         {/* Info Card */}
-        <Card style={styles.infoCard}>
+        <Card style={[styles.infoCard, { backgroundColor: theme.colors.primaryContainer }]}>
           <Card.Content>
-            <Text style={styles.infoText}>
+            <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
               💡 Add your payment methods to track how you pay for expenses. You can choose to share details with group members for easy settlements.
             </Text>
           </Card.Content>
         </Card>
 
         {/* Payment Method Type */}
-        <Text style={styles.sectionTitle}>Payment Method Type *</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Payment Method Type *</Text>
         <SegmentedButtons
           value={methodType}
           onValueChange={(value) => setMethodType(value as PaymentMethodType)}
@@ -297,11 +309,11 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
         <Divider style={styles.divider} />
 
         {/* Type-specific Fields */}
-        <Text style={styles.sectionTitle}>Payment Details</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Payment Details</Text>
         {methodType === 'cash' && (
-          <Card style={styles.messageCard}>
+          <Card style={[styles.messageCard, { backgroundColor: theme.colors.surfaceVariant }]}>
             <Card.Content>
-              <Text style={styles.messageText}>
+              <Text style={[styles.messageText, { color: theme.colors.onSurface }]}>
                 💵 Cash payments don't require additional details. Just mark this as your payment method when creating expenses.
               </Text>
             </Card.Content>
@@ -315,7 +327,7 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
         <Divider style={styles.divider} />
 
         {/* Notes */}
-        <Text style={styles.sectionTitle}>Notes (Optional)</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Notes (Optional)</Text>
         <TextInput
           label="Additional Notes"
           value={notes}
@@ -330,13 +342,13 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
         <Divider style={styles.divider} />
 
         {/* Settings */}
-        <Text style={styles.sectionTitle}>Settings</Text>
-        <Card style={styles.settingsCard}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Settings</Text>
+        <Card style={[styles.settingsCard, { backgroundColor: theme.colors.surface }]}>
           <Card.Content>
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingTitle}>Set as Default</Text>
-                <Text style={styles.settingDescription}>
+                <Text style={[styles.settingTitle, { color: theme.colors.onSurface }]}>Set as Default</Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
                   Use this method by default when creating expenses
                 </Text>
               </View>
@@ -350,8 +362,8 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
 
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingTitle}>Visible to Group Members</Text>
-                <Text style={styles.settingDescription}>
+                <Text style={[styles.settingTitle, { color: theme.colors.onSurface }]}>Visible to Group Members</Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
                   Allow group members to see this payment method for settlements
                 </Text>
               </View>
@@ -365,9 +377,9 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
 
         {/* Privacy Notice */}
         {isVisibleToGroups && methodType !== 'cash' && (
-          <Card style={styles.warningCard}>
+          <Card style={[styles.warningCard, { backgroundColor: theme.colors.errorContainer }]}>
             <Card.Content>
-              <Text style={styles.warningText}>
+              <Text style={[styles.warningText, { color: theme.colors.onErrorContainer }]}>
                 ⚠️ When visible to groups, members will see your {
                   methodType === 'bank' ? 'bank account details' :
                     methodType === 'jazzcash' || methodType === 'easypaisa' ? 'phone number' :
@@ -404,21 +416,17 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
   },
   infoCard: {
     marginBottom: 16,
-    backgroundColor: '#E8DEF8',
   },
   infoText: {
     fontSize: 14,
-    color: '#333',
     lineHeight: 20,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginTop: 16,
     marginBottom: 12,
   },
@@ -432,15 +440,12 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   messageCard: {
-    backgroundColor: '#FFF9C4',
   },
   messageText: {
     fontSize: 14,
-    color: '#333',
     lineHeight: 20,
   },
   settingsCard: {
-    backgroundColor: '#fff',
   },
   settingRow: {
     flexDirection: 'row',
@@ -469,7 +474,6 @@ const styles = StyleSheet.create({
   },
   warningText: {
     fontSize: 13,
-    color: '#E65100',
     lineHeight: 20,
   },
   submitButton: {

@@ -1,7 +1,8 @@
 // src/screens/main/PaymentMethodsScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, Pressable } from 'react-native';
 import { Text, Card, FAB, IconButton, Chip, Switch, List, Divider } from 'react-native-paper';
+import * as Clipboard from 'expo-clipboard';
 import { usePaymentMethods } from '../../hooks/usePaymentMethods';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
@@ -10,8 +11,11 @@ import { useAppDispatch } from '../../store';
 import { fetchPaymentMethods, setDefaultPaymentMethod, deletePaymentMethod, updatePaymentMethod } from '../../store/slices/paymentMethodsSlice';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import ErrorState from '../../components/ErrorState';
+import { useTheme } from 'react-native-paper';
+import { ErrorHandler } from '../../utils/errorHandler';
 
 export default function PaymentMethodsScreen({ navigation }: any) {
+  const theme = useTheme();
   const { paymentMethods, defaultMethod, loading } = usePaymentMethods();
   const { profile } = useAuth();
   const { showToast } = useToast();
@@ -21,6 +25,7 @@ export default function PaymentMethodsScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedMethods, setExpandedMethods] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadPaymentMethods();
@@ -55,15 +60,14 @@ export default function PaymentMethodsScreen({ navigation }: any) {
   };
 
   const handleSetDefault = async (methodId: string) => {
-    if (!isOnline) {
-      showToast('Cannot update payment method. No internet connection.', 'error');
-      return;
-    }
-
     setIsProcessing(true);
     try {
       await dispatch(setDefaultPaymentMethod(methodId)).unwrap();
-      showToast('Default payment method updated', 'success');
+      if (isOnline) {
+        showToast('Default payment method updated', 'success');
+      } else {
+        showToast('Default payment method saved offline. Will sync when connection is restored.', 'info');
+      }
     } catch (error: any) {
       console.error('Set default error:', error);
       showToast('Failed to set default payment method', 'error');
@@ -73,11 +77,6 @@ export default function PaymentMethodsScreen({ navigation }: any) {
   };
 
   const handleToggleVisibility = async (methodId: string, currentVisibility: boolean) => {
-    if (!isOnline) {
-      showToast('Cannot update payment method. No internet connection.', 'error');
-      return;
-    }
-
     setIsProcessing(true);
     try {
       await dispatch(updatePaymentMethod({
@@ -85,12 +84,16 @@ export default function PaymentMethodsScreen({ navigation }: any) {
         updates: { is_visible_to_groups: !currentVisibility }
       })).unwrap();
       
-      showToast(
-        !currentVisibility 
-          ? 'Payment method is now visible to group members' 
-          : 'Payment method is now hidden from group members',
-        'success'
-      );
+      if (isOnline) {
+        showToast(
+          !currentVisibility 
+            ? 'Payment method is now visible to group members' 
+            : 'Payment method is now hidden from group members',
+          'success'
+        );
+      } else {
+        showToast('Visibility updated offline. Will sync when connection is restored.', 'info');
+      }
     } catch (error: any) {
       console.error('Toggle visibility error:', error);
       showToast('Failed to update visibility', 'error');
@@ -109,15 +112,14 @@ export default function PaymentMethodsScreen({ navigation }: any) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            if (!isOnline) {
-              showToast('Cannot delete payment method. No internet connection.', 'error');
-              return;
-            }
-
             setIsProcessing(true);
             try {
               await dispatch(deletePaymentMethod(methodId)).unwrap();
-              showToast('Payment method deleted', 'success');
+              if (isOnline) {
+                showToast('Payment method deleted', 'success');
+              } else {
+                showToast('Payment method deleted offline. Will sync when connection is restored.', 'info');
+              }
             } catch (error: any) {
               console.error('Delete error:', error);
               showToast('Failed to delete payment method', 'error');
@@ -183,6 +185,121 @@ export default function PaymentMethodsScreen({ navigation }: any) {
     return details.join(' • ');
   };
 
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+      showToast(`${label} copied to clipboard`, 'success');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      showToast('Failed to copy', 'error');
+    }
+  };
+
+  const renderBankAccountDetails = (method: any) => {
+    if (method.method_type !== 'bank') return null;
+
+    return (
+      <View style={styles.accountDetailsContainer}>
+        {method.account_title && (
+          <Pressable
+            onPress={() => copyToClipboard(method.account_title, 'Account Name')}
+            style={styles.detailRow}
+          >
+            <View style={styles.detailContent}>
+              <Text style={styles.detailLabel}>Name:</Text>
+              <Text style={styles.detailValue}>{method.account_title}</Text>
+            </View>
+            <IconButton
+              icon="content-copy"
+              size={18}
+              iconColor={theme.colors.primary}
+              onPress={() => copyToClipboard(method.account_title, 'Account Name')}
+            />
+          </Pressable>
+        )}
+        {method.account_number && (
+          <Pressable
+            onPress={() => copyToClipboard(method.account_number, 'Account Number')}
+            style={styles.detailRow}
+          >
+            <View style={styles.detailContent}>
+              <Text style={styles.detailLabel}>Account No:</Text>
+              <Text style={styles.detailValue}>{method.account_number}</Text>
+            </View>
+            <IconButton
+              icon="content-copy"
+              size={18}
+              iconColor={theme.colors.primary}
+              onPress={() => copyToClipboard(method.account_number, 'Account Number')}
+            />
+          </Pressable>
+        )}
+        {method.iban && (
+          <Pressable
+            onPress={() => copyToClipboard(method.iban, 'IBAN')}
+            style={styles.detailRow}
+          >
+            <View style={styles.detailContent}>
+              <Text style={styles.detailLabel}>IBAN:</Text>
+              <Text style={styles.detailValue}>{method.iban}</Text>
+            </View>
+            <IconButton
+              icon="content-copy"
+              size={18}
+              iconColor={theme.colors.primary}
+              onPress={() => copyToClipboard(method.iban, 'IBAN')}
+            />
+          </Pressable>
+        )}
+        {method.notes && (
+          <View style={styles.detailRow}>
+            <View style={styles.detailContent}>
+              <Text style={styles.detailLabel}>Notes:</Text>
+              <Text style={styles.detailValue}>{method.notes}</Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderPhoneNumberDetails = (method: any) => {
+    if (method.method_type !== 'jazzcash' && method.method_type !== 'easypaisa') return null;
+    if (!method.phone_number) return null;
+
+    return (
+      <Pressable
+        onPress={() => copyToClipboard(method.phone_number, 'Phone Number')}
+        style={styles.detailRow}
+      >
+        <View style={styles.detailContent}>
+          <Text style={styles.detailLabel}>Phone:</Text>
+          <Text style={styles.detailValue}>{method.phone_number}</Text>
+        </View>
+        <IconButton
+          icon="content-copy"
+          size={18}
+          iconColor={theme.colors.primary}
+          onPress={() => copyToClipboard(method.phone_number, 'Phone Number')}
+        />
+      </Pressable>
+    );
+  };
+
+  const toggleMethodExpansion = (methodId: string) => {
+    setExpandedMethods(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(methodId)) {
+        newSet.delete(methodId);
+      } else {
+        newSet.add(methodId);
+      }
+      return newSet;
+    });
+  };
+
+  const isMethodExpanded = (methodId: string) => expandedMethods.has(methodId);
+
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <IconButton icon="credit-card-outline" size={80} iconColor="#ccc" />
@@ -235,113 +352,56 @@ export default function PaymentMethodsScreen({ navigation }: any) {
                 <Text style={styles.sectionTitle}>Default Payment Method</Text>
                 <Card style={styles.defaultCard}>
                   <Card.Content style={styles.cardContent}>
-                    <View style={styles.methodHeader}>
-                      <IconButton
-                        icon={getMethodIcon(defaultMethod.method_type)}
-                        size={32}
-                        iconColor="#6200EE"
-                      />
-                      <View style={styles.methodInfo}>
-                        <Text style={styles.methodName}>
-                          {getMethodName(defaultMethod)}
-                        </Text>
-                        {getMethodDetails(defaultMethod) ? (
-                          <Text style={styles.methodDetails}>
-                            {getMethodDetails(defaultMethod)}
-                          </Text>
-                        ) : null}
-                        <Chip
-                          icon="star"
-                          style={styles.defaultBadge}
-                          textStyle={styles.defaultBadgeText}
-                          compact
-                        >
-                          Default
-                        </Chip>
-                      </View>
-                    </View>
-
-                    <Divider style={styles.divider} />
-
-                    <List.Item
-                      title="Visible to Group Members"
-                      description={defaultMethod.is_visible_to_groups ? 'Group members can see this' : 'Only you can see this'}
-                      left={props => <List.Icon {...props} icon="eye" />}
-                      right={() => (
-                        <Switch
-                          value={defaultMethod.is_visible_to_groups}
-                          onValueChange={() => handleToggleVisibility(defaultMethod.id, defaultMethod.is_visible_to_groups)}
-                          disabled={isProcessing}
+                    <Pressable onPress={() => toggleMethodExpansion(defaultMethod.id)}>
+                      <View style={styles.methodHeader}>
+                        <IconButton
+                          icon={getMethodIcon(defaultMethod.method_type)}
+                          size={32}
+                          iconColor={theme.colors.primary}
                         />
-                      )}
-                    />
-
-                    <Divider style={styles.divider} />
-
-                    <View style={styles.cardActions}>
-                      <IconButton
-                        icon="pencil"
-                        size={20}
-                        onPress={() => navigation.navigate('EditPaymentMethod', { methodId: defaultMethod.id })}
-                      />
-                      <IconButton
-                        icon="delete"
-                        size={20}
-                        iconColor="#F44336"
-                        onPress={() => handleDelete(defaultMethod.id, getMethodName(defaultMethod))}
-                      />
-                    </View>
-                  </Card.Content>
-                </Card>
-              </>
-            )}
-
-            {/* Other Payment Methods */}
-            {paymentMethods.filter(m => !m.is_default).length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>Other Payment Methods</Text>
-                {paymentMethods
-                  .filter(m => !m.is_default)
-                  .map((method) => (
-                    <Card key={method.id} style={styles.methodCard}>
-                      <Card.Content style={styles.cardContent}>
-                        <View style={styles.methodHeader}>
-                          <IconButton
-                            icon={getMethodIcon(method.method_type)}
-                            size={32}
-                            iconColor="#666"
-                          />
-                          <View style={styles.methodInfo}>
-                            <Text style={styles.methodName}>
-                              {getMethodName(method)}
+                        <View style={styles.methodInfo}>
+                          <Text style={styles.methodName}>
+                            {getMethodName(defaultMethod)}
+                          </Text>
+                          {defaultMethod.method_type !== 'bank' && getMethodDetails(defaultMethod) ? (
+                            <Text style={styles.methodDetails}>
+                              {getMethodDetails(defaultMethod)}
                             </Text>
-                            {getMethodDetails(method) ? (
-                              <Text style={styles.methodDetails}>
-                                {getMethodDetails(method)}
-                              </Text>
-                            ) : null}
-                          </View>
+                          ) : null}
+                          <Chip
+                            icon="star"
+                            style={styles.defaultBadge}
+                            textStyle={styles.defaultBadgeText}
+                            compact
+                            mode="flat"
+                          >
+                            Default
+                          </Chip>
                         </View>
+                        <IconButton
+                          icon={isMethodExpanded(defaultMethod.id) ? 'chevron-up' : 'chevron-down'}
+                          size={24}
+                          iconColor={theme.colors.onSurfaceVariant}
+                          onPress={() => toggleMethodExpansion(defaultMethod.id)}
+                        />
+                      </View>
+                    </Pressable>
 
+                    {isMethodExpanded(defaultMethod.id) && (
+                      <>
+                        {defaultMethod.method_type === 'bank' && renderBankAccountDetails(defaultMethod)}
+                        {renderPhoneNumberDetails(defaultMethod)}
+                        
                         <Divider style={styles.divider} />
 
                         <List.Item
-                          title="Set as Default"
-                          description="Use this method by default"
-                          left={props => <List.Icon {...props} icon="star-outline" />}
-                          onPress={() => handleSetDefault(method.id)}
-                        />
-
-                        <Divider />
-
-                        <List.Item
                           title="Visible to Group Members"
-                          description={method.is_visible_to_groups ? 'Group members can see this' : 'Only you can see this'}
+                          description={defaultMethod.is_visible_to_groups ? 'Group members can see this' : 'Only you can see this'}
                           left={props => <List.Icon {...props} icon="eye" />}
                           right={() => (
                             <Switch
-                              value={method.is_visible_to_groups}
-                              onValueChange={() => handleToggleVisibility(method.id, method.is_visible_to_groups)}
+                              value={defaultMethod.is_visible_to_groups}
+                              onValueChange={() => handleToggleVisibility(defaultMethod.id, defaultMethod.is_visible_to_groups)}
                               disabled={isProcessing}
                             />
                           )}
@@ -353,15 +413,103 @@ export default function PaymentMethodsScreen({ navigation }: any) {
                           <IconButton
                             icon="pencil"
                             size={20}
-                            onPress={() => navigation.navigate('EditPaymentMethod', { methodId: method.id })}
+                            onPress={() => navigation.navigate('EditPaymentMethod', { methodId: defaultMethod.id })}
                           />
                           <IconButton
                             icon="delete"
                             size={20}
-                            iconColor="#F44336"
-                            onPress={() => handleDelete(method.id, getMethodName(method))}
+                            iconColor={theme.colors.error}
+                            onPress={() => handleDelete(defaultMethod.id, getMethodName(defaultMethod))}
                           />
                         </View>
+                      </>
+                    )}
+                  </Card.Content>
+                </Card>
+              </>
+            )}
+
+            {/* Other Payment Methods */}
+            {paymentMethods.filter((m: any) => !m.is_default).length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Other Payment Methods</Text>
+                {paymentMethods
+                  .filter((m: any) => !m.is_default)
+                  .map((method: any) => (
+                    <Card key={method.id} style={styles.methodCard}>
+                      <Card.Content style={styles.cardContent}>
+                        <Pressable onPress={() => toggleMethodExpansion(method.id)}>
+                          <View style={styles.methodHeader}>
+                            <IconButton
+                              icon={getMethodIcon(method.method_type)}
+                              size={32}
+                              iconColor={theme.colors.onSurfaceVariant}
+                            />
+                          <View style={styles.methodInfo}>
+                            <Text style={styles.methodName}>
+                              {getMethodName(method)}
+                            </Text>
+                            {method.method_type !== 'bank' && getMethodDetails(method) ? (
+                              <Text style={styles.methodDetails}>
+                                {getMethodDetails(method)}
+                              </Text>
+                            ) : null}
+                          </View>
+                            <IconButton
+                              icon={isMethodExpanded(method.id) ? 'chevron-up' : 'chevron-down'}
+                              size={24}
+                              iconColor={theme.colors.onSurfaceVariant}
+                              onPress={() => toggleMethodExpansion(method.id)}
+                            />
+                          </View>
+                        </Pressable>
+
+                        {isMethodExpanded(method.id) && (
+                          <>
+                            {method.method_type === 'bank' && renderBankAccountDetails(method)}
+                            {renderPhoneNumberDetails(method)}
+                            
+                            <Divider style={styles.divider} />
+
+                            <List.Item
+                              title="Set as Default"
+                              description="Use this method by default"
+                              left={props => <List.Icon {...props} icon="star-outline" />}
+                              onPress={() => handleSetDefault(method.id)}
+                            />
+
+                            <Divider />
+
+                            <List.Item
+                              title="Visible to Group Members"
+                              description={method.is_visible_to_groups ? 'Group members can see this' : 'Only you can see this'}
+                              left={props => <List.Icon {...props} icon="eye" />}
+                              right={() => (
+                                <Switch
+                                  value={method.is_visible_to_groups}
+                                  onValueChange={() => handleToggleVisibility(method.id, method.is_visible_to_groups)}
+                                  disabled={isProcessing}
+                                />
+                              )}
+                            />
+
+                            <Divider style={styles.divider} />
+
+                            <View style={styles.cardActions}>
+                              <IconButton
+                                icon="pencil"
+                                size={20}
+                                onPress={() => navigation.navigate('EditPaymentMethod', { methodId: method.id })}
+                              />
+                              <IconButton
+                                icon="delete"
+                                size={20}
+                                iconColor="#F44336"
+                                onPress={() => handleDelete(method.id, getMethodName(method))}
+                              />
+                            </View>
+                          </>
+                        )}
                       </Card.Content>
                     </Card>
                   ))}
@@ -387,7 +535,6 @@ export default function PaymentMethodsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   content: {
     padding: 16,
@@ -395,29 +542,24 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     marginBottom: 16,
-    backgroundColor: '#E8DEF8',
   },
   infoText: {
     fontSize: 14,
-    color: '#333',
     lineHeight: 20,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
     marginTop: 8,
     marginBottom: 12,
   },
   defaultCard: {
     marginBottom: 24,
-    backgroundColor: '#fff',
     borderWidth: 2,
     borderColor: '#6200EE',
   },
   methodCard: {
     marginBottom: 12,
-    backgroundColor: '#fff',
   },
   cardContent: {
     paddingVertical: 12,
@@ -434,22 +576,22 @@ const styles = StyleSheet.create({
   methodName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 4,
   },
   methodDetails: {
     fontSize: 12,
-    color: '#666',
     marginBottom: 8,
   },
   defaultBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFD700',
     height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   defaultBadgeText: {
     fontSize: 11,
-    color: '#333',
+    lineHeight: 14,
+    textAlignVertical: 'center',
   },
   divider: {
     marginVertical: 8,
@@ -469,13 +611,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
     textAlign: 'center',
   },
   fab: {
@@ -483,6 +623,29 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 0,
-    backgroundColor: '#6200EE',
+  },
+  accountDetailsContainer: {
+    marginVertical: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  detailContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#000',
   },
 });

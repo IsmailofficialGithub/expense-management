@@ -18,6 +18,8 @@ import { fetchCategories, createFoodExpense } from '../../store/slices/expensesS
 import { format } from 'date-fns';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { FoodItemInput, HotelMenuItem } from '../../types/database.types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from 'react-native-paper';
 
 interface Props {
   navigation: any;
@@ -34,6 +36,8 @@ interface SelectedFoodItem extends FoodItemInput {
 
 export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   const preSelectedGroupId = route?.params?.groupId;
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   const { groups } = useGroups();
   const { hotels } = useHotels();
@@ -372,9 +376,18 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
+      <SafeScrollView 
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 32,
+          }
+        ]} 
+        hasTabBar={false}
+      >
         {/* Description */}
-        <Text style={styles.sectionTitle}>What did you eat?</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>What did you eat?</Text>
         <TextInput
           label="Description *"
           value={description}
@@ -391,9 +404,9 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Group Selection */}
-        <Text style={styles.sectionTitle}>Which group?</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Which group?</Text>
         {groups.length === 0 ? (
-          <Text style={styles.noDataText}>No groups available.</Text>
+          <Text style={[styles.noDataText, { color: theme.colors.onSurfaceVariant }]}>No groups available.</Text>
         ) : (
           <View style={styles.chipContainer}>
             {groups.map(group => (
@@ -415,9 +428,9 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Hotel Selection */}
-        <Text style={styles.sectionTitle}>Select Restaurant/Hotel *</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Select Restaurant/Hotel *</Text>
         {hotels.length === 0 ? (
-          <Text style={styles.noDataText}>Loading hotels...</Text>
+          <Text style={[styles.noDataText, { color: theme.colors.onSurfaceVariant }]}>Loading hotels...</Text>
         ) : (
           <View style={styles.chipContainer}>
             {hotels.map(hotel => (
@@ -443,7 +456,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         {selectedHotelId && (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Food Items</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Food Items</Text>
               <View style={styles.addItemButtons}>
                 <Button
                   mode="outlined"
@@ -465,18 +478,18 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
             </View>
 
             {selectedFoodItems.length === 0 ? (
-              <Card style={styles.emptyItemsCard}>
+              <Card style={[styles.emptyItemsCard, { backgroundColor: theme.colors.surface }]}>
                 <Card.Content style={styles.emptyItemsContent}>
                   <Text style={styles.emptyItemsText}>No items added yet</Text>
                 </Card.Content>
               </Card>
             ) : (
               selectedFoodItems.map((item, index) => (
-                <Card key={index} style={styles.foodItemCard}>
+                <Card key={index} style={[styles.foodItemCard, { backgroundColor: theme.colors.surface }]}>
                   <Card.Content style={styles.foodItemContent}>
                     <View style={styles.foodItemLeft}>
-                      <Text style={styles.foodItemName}>{item.item_name}</Text>
-                      <Text style={styles.foodItemPrice}>
+                      <Text style={[styles.foodItemName, { color: theme.colors.onSurface }]}>{item.item_name}</Text>
+                      <Text style={[styles.foodItemPrice, { color: theme.colors.onSurfaceVariant }]}>
                         ₹{item.unit_price} × {item.quantity} = ₹{(item.unit_price * item.quantity).toFixed(2)}
                       </Text>
                     </View>
@@ -486,7 +499,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
                         size={20}
                         onPress={() => handleUpdateQuantity(index, item.quantity - 1)}
                       />
-                      <Text style={styles.quantityText}>{item.quantity}</Text>
+                      <Text style={[styles.quantityText, { color: theme.colors.onSurface }]}>{item.quantity}</Text>
                       <IconButton
                         icon="plus"
                         size={20}
@@ -495,7 +508,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
                       <IconButton
                         icon="delete"
                         size={20}
-                        iconColor="#F44336"
+                        iconColor={theme.colors.error}
                         onPress={() => handleRemoveItem(index)}
                       />
                     </View>
@@ -505,11 +518,11 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
             )}
 
             {selectedFoodItems.length > 0 && (
-              <Card style={styles.totalCard}>
+              <Card style={[styles.totalCard, { backgroundColor: theme.colors.primaryContainer }]}>
                 <Card.Content>
                   <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>Total Amount:</Text>
-                    <Text style={styles.totalAmount}>₹{totalAmount.toFixed(2)}</Text>
+                    <Text style={[styles.totalLabel, { color: theme.colors.onSurface }]}>Total Amount:</Text>
+                    <Text style={[styles.totalAmount, { color: theme.colors.primary }]}>₹{totalAmount.toFixed(2)}</Text>
                   </View>
                 </Card.Content>
               </Card>
@@ -524,7 +537,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         )}
 
         {/* Payment Method */}
-        <Text style={styles.sectionTitle}>Payment Method *</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Payment Method *</Text>
         {paymentMethods.length === 0 ? (
           <Button
             mode="outlined"
@@ -563,7 +576,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Split Type */}
-        <Text style={styles.sectionTitle}>How to split?</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>How to split?</Text>
         <SegmentedButtons
           value={splitType}
           onValueChange={(value) => setSplitType(value as 'equal' | 'unequal')}
@@ -577,7 +590,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         {/* Member Selection */}
         {selectedGroup && totalAmount > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Split with *</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Split with *</Text>
             <View style={styles.membersContainer}>
               {selectedGroup.members?.map(member => {
                 const isSelected = selectedMembers.includes(member.user_id);
@@ -587,7 +600,11 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
                 return (
                   <Card
                     key={member.user_id}
-                    style={[styles.memberCard, isSelected && styles.memberCardSelected]}
+                    style={[
+                      styles.memberCard, 
+                      { backgroundColor: theme.colors.surface },
+                      isSelected && { backgroundColor: theme.colors.primaryContainer }
+                    ]}
                     onPress={() => toggleMember(member.user_id)}
                   >
                     <Card.Content style={styles.memberCardContent}>
@@ -600,7 +617,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
                           {user?.full_name || 'Unknown'}
                         </Chip>
                         {isSelected && (
-                          <Text style={styles.memberSplit}>
+                          <Text style={[styles.memberSplit, { color: theme.colors.primary }]}>
                             ₹{splitAmount.toFixed(2)}
                           </Text>
                         )}
@@ -635,7 +652,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Notes */}
-        <Text style={styles.sectionTitle}>Notes (Optional)</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Notes (Optional)</Text>
         <TextInput
           label="Notes"
           value={notes}
@@ -668,9 +685,9 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
             setMenuItemModalVisible(false);
             setSearchQuery('');
           }}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>Select from Menu</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Select from Menu</Text>
 
           <Searchbar
             placeholder="Search items..."
@@ -681,7 +698,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
 
           <ScrollView style={styles.menuItemsList}>
             {filteredMenuItems.length === 0 ? (
-              <Text style={styles.noItemsText}>No items found</Text>
+              <Text style={[styles.noItemsText, { color: theme.colors.onSurfaceVariant }]}>No items found</Text>
             ) : (
               filteredMenuItems.map(menuItem => (
                 <List.Item
@@ -702,9 +719,9 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         <Modal
           visible={manualItemModalVisible}
           onDismiss={() => setManualItemModalVisible(false)}
-          contentContainerStyle={styles.modalContent}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={styles.modalTitle}>Add Item Manually</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Add Item Manually</Text>
 
           <TextInput
             label="Item Name *"
@@ -763,16 +780,15 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    // Removed hardcoded color to use theme-based colors in components
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    // Removed hardcoded color. Use color from theme in Text component.
     marginTop: 16,
     marginBottom: 12,
   },
@@ -803,11 +819,10 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     fontSize: 14,
-    color: '#666',
     fontStyle: 'italic',
+    // No hardcoded color.
   },
   emptyItemsCard: {
-    backgroundColor: '#fff',
   },
   emptyItemsContent: {
     alignItems: 'center',
@@ -815,11 +830,11 @@ const styles = StyleSheet.create({
   },
   emptyItemsText: {
     fontSize: 14,
-    color: '#666',
+    // No hardcoded color.
   },
   foodItemCard: {
     marginBottom: 8,
-    backgroundColor: '#fff',
+    // Card background handled by theme in component usage.
   },
   foodItemContent: {
     flexDirection: 'row',
@@ -833,11 +848,9 @@ const styles = StyleSheet.create({
   foodItemName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#333',
   },
   foodItemPrice: {
     fontSize: 12,
-    color: '#666',
     marginTop: 2,
   },
   foodItemRight: {
@@ -847,13 +860,11 @@ const styles = StyleSheet.create({
   quantityText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
     minWidth: 24,
     textAlign: 'center',
   },
   totalCard: {
     marginTop: 12,
-    backgroundColor: '#E8DEF8',
   },
   totalRow: {
     flexDirection: 'row',
@@ -863,12 +874,10 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
   },
   totalAmount: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#6200EE',
   },
   segmentedButtons: {
     marginBottom: 16,
@@ -877,10 +886,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   memberCard: {
-    backgroundColor: '#fff',
   },
   memberCardSelected: {
-    backgroundColor: '#E8DEF8',
   },
   memberCardContent: {
     paddingVertical: 8,
@@ -897,7 +904,6 @@ const styles = StyleSheet.create({
   memberSplit: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#6200EE',
     marginLeft: 12,
   },
   splitInput: {
@@ -910,7 +916,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   modalContent: {
-    backgroundColor: 'white',
     padding: 24,
     margin: 20,
     borderRadius: 8,
@@ -919,7 +924,6 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 20,
   },
   searchBar: {
@@ -930,7 +934,6 @@ const styles = StyleSheet.create({
   },
   noItemsText: {
     fontSize: 14,
-    color: '#666',
     textAlign: 'center',
     marginTop: 24,
   },

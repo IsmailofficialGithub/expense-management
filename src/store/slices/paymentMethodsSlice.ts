@@ -130,8 +130,57 @@ export const updatePaymentMethod = createAsyncThunk(
 
 export const setDefaultPaymentMethod = createAsyncThunk(
   'paymentMethods/setDefaultPaymentMethod',
-  async (methodId: string) => {
-    return await paymentMethodService.setDefaultPaymentMethod(methodId);
+  async (methodId: string, { getState }) => {
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+    
+    if (isOnline) {
+      try {
+        const method = await paymentMethodService.setDefaultPaymentMethod(methodId);
+        // Update local storage
+        const currentMethods = await storageService.getPaymentMethods() || [];
+        const updatedMethods = currentMethods.map((m: any) => ({
+          ...m,
+          is_default: m.id === methodId
+        }));
+        await storageService.setPaymentMethods(updatedMethods);
+        return method;
+      } catch (error: any) {
+        console.warn('Online set default payment method failed, queueing for sync:', error);
+      }
+    }
+    
+    // Offline or online failed: update local storage and queue for sync
+    const currentMethods = await storageService.getPaymentMethods() || [];
+    const methodToUpdate = currentMethods.find((m: any) => m.id === methodId);
+    
+    if (methodToUpdate) {
+      // Update all methods: set the selected one as default, unset others
+      const updatedMethods = currentMethods.map((m: any) => ({
+        ...m,
+        is_default: m.id === methodId
+      }));
+      
+      await syncService.addToQueue('update', 'payment_method', { 
+        id: methodId, 
+        updates: { is_default: true } 
+      });
+      
+      // Also unset other defaults
+      for (const method of currentMethods) {
+        if (method.id !== methodId && method.is_default) {
+          await syncService.addToQueue('update', 'payment_method', { 
+            id: method.id, 
+            updates: { is_default: false } 
+          });
+        }
+      }
+      
+      await storageService.setPaymentMethods(updatedMethods);
+      return { ...methodToUpdate, is_default: true };
+    }
+    
+    throw new Error('Payment method not found');
   }
 );
 

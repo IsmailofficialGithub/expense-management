@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
@@ -37,15 +36,21 @@ import LoadingOverlay from "../../components/LoadingOverlay";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
+// import { useTheme } from 'react-native-paper';
+
+
+
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import SafeScrollView from "../../components/SafeScrollView";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 type Props = NativeStackScreenProps<RootStackParamList, 'AddExpense'>;
 
 export default function AddExpenseScreen({ navigation, route }: Props) {
   const theme = useTheme();
-  console.log(theme);
+  const insets = useSafeAreaInsets();
   const { groups } = useGroups();
   const { categories, loading } = useExpenses();
   const { profile } = useAuth();
@@ -303,13 +308,23 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+      <StatusBar 
+        barStyle="light-content" 
+        backgroundColor={theme.colors.primary} 
+        translucent={false} 
+      />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <SafeScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: insets.top + 16,
+              paddingBottom: insets.bottom + 32,
+            }
+          ]}
           keyboardShouldPersistTaps="handled"
           hasTabBar={false}
         >
@@ -322,7 +337,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
                 mode="outlined"
                 placeholder="e.g., Groceries, Dinner, Rent"
                 error={!!errors.description}
-                style={[styles.input, { backgroundColor: theme.colors.surface }]}
+                style={styles.input}
                 left={<TextInput.Icon icon="format-text" />}
               />
               {errors.description ? (
@@ -560,8 +575,8 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
               <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Receipt</Text>
               <View style={styles.receiptContainer}>
                 {receiptUri ? (
-                  <View style={styles.receiptPreview}>
-                    <Text style={styles.receiptText}>Receipt attached ✓</Text>
+                  <View style={[styles.receiptPreview, { backgroundColor: theme.colors.primaryContainer }]}>
+                    <Text style={[styles.receiptText, { color: theme.colors.onPrimaryContainer }]}>Receipt attached ✓</Text>
                     <IconButton
                       icon="close"
                       size={20}
@@ -621,7 +636,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
   },
   card: {
     marginBottom: 16,
@@ -693,13 +707,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#E8F5E9",
     padding: 12,
     borderRadius: 8,
   },
   receiptText: {
     fontSize: 14,
-    color: "#2E7D32",
     fontWeight: "500",
   },
   receiptButtons: {

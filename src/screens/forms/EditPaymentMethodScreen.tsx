@@ -2,13 +2,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import SafeScrollView from '../../components/SafeScrollView';
-import { Text, TextInput, Button, Card, Switch, HelperText, Divider } from 'react-native-paper';
+import { Text, TextInput, Button, Card, Switch, HelperText, Divider, useTheme } from 'react-native-paper';
 import { usePaymentMethods } from '../../hooks/usePaymentMethods';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { updatePaymentMethod } from '../../store/slices/paymentMethodsSlice';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Props {
   navigation: any;
@@ -20,6 +21,8 @@ interface Props {
 }
 
 export default function EditPaymentMethodScreen({ navigation, route }: Props) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { methodId } = route.params;
   const { paymentMethods } = usePaymentMethods();
   const { showToast } = useToast();
@@ -325,24 +328,33 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeScrollView contentContainerStyle={styles.content} hasTabBar={false}>
+      <SafeScrollView 
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 32,
+          }
+        ]} 
+        hasTabBar={false}
+      >
         {/* Method Type Info */}
-        <Card style={styles.infoCard}>
+        <Card style={[styles.infoCard, { backgroundColor: theme.colors.primaryContainer }]}>
           <Card.Content>
-            <Text style={styles.infoLabel}>Payment Method Type</Text>
-            <Text style={styles.infoValue}>{getMethodTypeName()}</Text>
+            <Text style={[styles.infoLabel, { color: theme.colors.onSurfaceVariant }]}>Payment Method Type</Text>
+            <Text style={[styles.infoValue, { color: theme.colors.primary }]}>{getMethodTypeName()}</Text>
           </Card.Content>
         </Card>
 
         {/* Type-specific Fields */}
-        <Text style={styles.sectionTitle}>Payment Details</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Payment Details</Text>
         {paymentMethod.method_type === 'cash' && (
-          <Card style={styles.messageCard}>
+          <Card style={[styles.messageCard, { backgroundColor: theme.colors.surfaceVariant }]}>
             <Card.Content>
-              <Text style={styles.messageText}>
+              <Text style={[styles.messageText, { color: theme.colors.onSurface }]}>
                 💵 Cash payments don't require additional details.
               </Text>
             </Card.Content>
@@ -356,7 +368,7 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Notes */}
-        <Text style={styles.sectionTitle}>Notes (Optional)</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Notes (Optional)</Text>
         <TextInput
           label="Additional Notes"
           value={notes}
@@ -371,13 +383,13 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
         <Divider style={styles.divider} />
 
         {/* Settings */}
-        <Text style={styles.sectionTitle}>Settings</Text>
-        <Card style={styles.settingsCard}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Settings</Text>
+        <Card style={[styles.settingsCard, { backgroundColor: theme.colors.surface }]}>
           <Card.Content>
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingTitle}>Set as Default</Text>
-                <Text style={styles.settingDescription}>
+                <Text style={[styles.settingTitle, { color: theme.colors.onSurface }]}>Set as Default</Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
                   Use this method by default when creating expenses
                 </Text>
               </View>
@@ -391,8 +403,8 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
 
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingTitle}>Visible to Group Members</Text>
-                <Text style={styles.settingDescription}>
+                <Text style={[styles.settingTitle, { color: theme.colors.onSurface }]}>Visible to Group Members</Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
                   Allow group members to see this payment method for settlements
                 </Text>
               </View>
@@ -445,26 +457,21 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
   },
   infoCard: {
     marginBottom: 16,
-    backgroundColor: '#E8DEF8',
   },
   infoLabel: {
     fontSize: 12,
-    color: '#666',
     marginBottom: 4,
   },
   infoValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#6200EE',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginTop: 16,
     marginBottom: 12,
   },
@@ -475,15 +482,12 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   messageCard: {
-    backgroundColor: '#FFF9C4',
   },
   messageText: {
     fontSize: 14,
-    color: '#333',
     lineHeight: 20,
   },
   settingsCard: {
-    backgroundColor: '#fff',
   },
   settingRow: {
     flexDirection: 'row',
@@ -498,21 +502,17 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#333',
     marginBottom: 4,
   },
   settingDescription: {
     fontSize: 12,
-    color: '#666',
     lineHeight: 18,
   },
   warningCard: {
     marginTop: 16,
-    backgroundColor: '#FFE0B2',
   },
   warningText: {
     fontSize: 13,
-    color: '#E65100',
     lineHeight: 20,
   },
   submitButton: {
