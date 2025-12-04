@@ -11,6 +11,7 @@ import uiReducer from './slices/uiSlice';
 import personalFinanceReducer from './slices/personalFinanceSlice';
 import paymentMethodsReducer from './slices/paymentMethodsSlice';
 import hotelsReducer from './slices/hotelsSlice';
+import bulkPaymentsReducer from './slices/bulkPaymentsSlice';
 import { offlineMiddleware } from './middleware/offlineMiddleware';
 
 export const store = configureStore({
@@ -19,10 +20,11 @@ export const store = configureStore({
     groups: groupsReducer,
     expenses: expensesReducer,
     notifications: notificationsReducer,
-     paymentMethods: paymentMethodsReducer,
-      hotels: hotelsReducer,
+    paymentMethods: paymentMethodsReducer,
+    hotels: hotelsReducer,
     ui: uiReducer,
-      personalFinance: personalFinanceReducer,
+    personalFinance: personalFinanceReducer,
+    bulkPayments: bulkPaymentsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

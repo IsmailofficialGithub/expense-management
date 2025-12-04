@@ -28,6 +28,9 @@ import {
   CreatePaymentMethodRequest,
   HotelMenuItem,
   CreateMenuItemRequest,
+  GroupAdvanceCollection,
+  AdvanceCollectionContribution,
+  BulkSettlementSummary,
   Hotel,
   CreateHotelRequest,
   HotelWithMenu,
@@ -1614,6 +1617,415 @@ export const settlementService = {
     const { data, error } = await query;
     if (error) throw error;
     return data;
+  },
+};
+
+// ============================================
+// BULK PAYMENTS
+// ============================================
+
+export const bulkPaymentService = {
+  /**
+   * Create advance collection
+   */
+  createAdvanceCollection: async (request: {
+    group_id: string;
+    recipient_id: string;
+    total_amount?: number;
+    per_member_amount?: number;
+    description?: string;
+  }): Promise<GroupAdvanceCollection> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Get group members count
+    const { data: members, error: membersError } = await supabase
+      .from('group_members')
+      .select('user_id')
+      .eq('group_id', request.group_id);
+
+    if (membersError || !members) throw new Error('Failed to fetch group members');
+
+    const memberCount = members.length;
+    if (memberCount === 0) throw new Error('Group has no members');
+
+    // Calculate amounts
+    let totalAmount = request.total_amount;
+    let perMemberAmount = request.per_member_amount;
+
+    if (totalAmount && !perMemberAmount) {
+      perMemberAmount = totalAmount / memberCount;
+    } else if (perMemberAmount && !totalAmount) {
+      totalAmount = perMemberAmount * memberCount;
+    } else if (!totalAmount && !perMemberAmount) {
+      throw new Error('Either total_amount or per_member_amount must be provided');
+    }
+
+    // Create collection
+    const { data: collection, error: collectionError } = await supabase
+      .from('group_advance_collections')
+      .insert({
+        group_id: request.group_id,
+        recipient_id: request.recipient_id,
+        total_amount: totalAmount!,
+        per_member_amount: perMemberAmount!,
+        description: request.description || null,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (collectionError) throw collectionError;
+
+    // Create contribution records for all members (except recipient if they're a member)
+    const contributions = members
+      .filter(m => m.user_id !== request.recipient_id || !members.some(mem => mem.user_id === request.recipient_id))
+      .map(member => ({
+        collection_id: collection.id,
+        user_id: member.user_id,
+        amount: perMemberAmount!,
+        status: 'pending' as const,
+      }));
+
+    // Also add recipient if they're a member
+    if (members.some(m => m.user_id === request.recipient_id)) {
+      contributions.push({
+        collection_id: collection.id,
+        user_id: request.recipient_id,
+        amount: perMemberAmount!,
+        status: 'pending' as const,
+      });
+    }
+
+    if (contributions.length > 0) {
+      const { error: contributionsError } = await supabase
+        .from('advance_collection_contributions')
+        .insert(contributions);
+
+      if (contributionsError) throw contributionsError;
+    }
+
+    // Fetch complete collection with relations
+    const completeCollection = await this.getAdvanceCollection(collection.id);
+
+    // Send notifications to all group members
+    try {
+      const { data: members } = await supabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', request.group_id);
+
+      if (members) {
+        const { data: recipient } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', request.recipient_id)
+          .single();
+
+        const recipientName = recipient?.full_name || 'Someone';
+
+        for (const member of members) {
+          if (member.user_id === user.id) continue; // Skip creator
+
+          await notificationService.createNotification({
+            user_id: member.user_id,
+            title: 'New Advance Collection',
+            message: `A new advance collection of ₹${perMemberAmount!.toFixed(2)} per member has been created. Recipient: ${recipientName}`,
+            type: 'payment_received',
+            related_id: collection.id,
+            metadata: {
+              collection_id: collection.id,
+              group_id: request.group_id,
+              recipient_id: request.recipient_id,
+              per_member_amount: perMemberAmount,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error sending advance collection notifications:', error);
+    }
+
+    return completeCollection;
+  },
+
+  /**
+   * Get advance collection by ID
+   */
+  getAdvanceCollection: async (collectionId: string): Promise<GroupAdvanceCollection> => {
+    const { data, error } = await supabase
+      .from('group_advance_collections')
+      .select(`
+        *,
+        recipient:profiles!group_advance_collections_recipient_id_fkey(*),
+        created_by_user:profiles!group_advance_collections_created_by_fkey(*),
+        contributions:advance_collection_contributions(
+          *,
+          user:profiles(*)
+        )
+      `)
+      .eq('id', collectionId)
+      .single();
+
+    if (error) throw error;
+    return data as any;
+  },
+
+  /**
+   * Get all advance collections for a group
+   */
+  getAdvanceCollections: async (groupId: string): Promise<GroupAdvanceCollection[]> => {
+    const { data, error } = await supabase
+      .from('group_advance_collections')
+      .select(`
+        *,
+        recipient:profiles!group_advance_collections_recipient_id_fkey(*),
+        created_by_user:profiles!group_advance_collections_created_by_fkey(*),
+        contributions:advance_collection_contributions(
+          *,
+          user:profiles(*)
+        )
+      `)
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data as any;
+  },
+
+  /**
+   * Contribute to advance collection
+   */
+  contributeToCollection: async (contributionId: string, notes?: string): Promise<AdvanceCollectionContribution> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('advance_collection_contributions')
+      .update({
+        status: 'paid',
+        contributed_at: new Date().toISOString(),
+        notes: notes || null,
+      })
+      .eq('id', contributionId)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Check if all contributions are paid, then mark collection as completed
+    const { data: collection } = await supabase
+      .from('group_advance_collections')
+      .select('id, recipient_id, total_amount')
+      .eq('id', data.collection_id)
+      .single();
+
+    if (collection) {
+      const { data: contributions } = await supabase
+        .from('advance_collection_contributions')
+        .select('status')
+        .eq('collection_id', collection.id);
+
+      const allPaid = contributions?.every(c => c.status === 'paid');
+      if (allPaid) {
+        await supabase
+          .from('group_advance_collections')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', collection.id);
+
+        // Notify recipient that collection is complete
+        try {
+          await notificationService.createNotification({
+            user_id: collection.recipient_id,
+            title: 'Advance Collection Completed',
+            message: `All members have contributed. Total received: ₹${collection.total_amount.toFixed(2)}`,
+            type: 'payment_received',
+            related_id: collection.id,
+            metadata: {
+              collection_id: collection.id,
+              total_amount: collection.total_amount,
+            },
+          });
+        } catch (error) {
+          console.error('Error sending collection completion notification:', error);
+        }
+      }
+    }
+
+    return data;
+  },
+
+  /**
+   * Get bulk settlement summary
+   */
+  getBulkSettlementSummary: async (groupId: string, recipientId: string): Promise<BulkSettlementSummary> => {
+    // Get all group balances
+    const balances = await groupService.getGroupBalances(groupId);
+
+    // Get recipient info
+    const { data: recipient } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('id', recipientId)
+      .single();
+
+    if (!recipient) throw new Error('Recipient not found');
+
+    // Get all expenses with splits for this group
+    const { data: expenses } = await supabase
+      .from('expenses')
+      .select(`
+        id,
+        splits:expense_splits(
+          user_id,
+          is_settled
+        )
+      `)
+      .eq('group_id', groupId);
+
+    // Calculate debts owed to recipient
+    const memberDebts = balances
+      .filter(b => b.user_id !== recipientId && b.balance < 0)
+      .map(balance => {
+        // Get expense count for this user (unsettled splits)
+        const expenseCount = expenses?.filter(e => 
+          e.splits?.some((s: any) => s.user_id === balance.user_id && !s.is_settled)
+        ).length || 0;
+
+        return {
+          user_id: balance.user_id,
+          user_name: '', // Will be populated from members
+          total_owed: Math.abs(balance.balance),
+          expense_count: expenseCount,
+        };
+      });
+
+    // Get user names
+    const userIds = memberDebts.map(d => d.user_id);
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+
+      memberDebts.forEach(debt => {
+        const user = users?.find(u => u.id === debt.user_id);
+        debt.user_name = user?.full_name || 'Unknown';
+      });
+    }
+
+    const totalAmount = memberDebts.reduce((sum, debt) => sum + debt.total_owed, 0);
+
+    return {
+      recipient_id: recipientId,
+      recipient_name: recipient.full_name || 'Unknown',
+      total_amount: totalAmount,
+      member_debts: memberDebts,
+    };
+  },
+
+  /**
+   * Create bulk settlement
+   */
+  createBulkSettlement: async (request: {
+    group_id: string;
+    recipient_id: string;
+    notes?: string;
+  }): Promise<Settlement[]> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Get settlement summary
+    const summary = await this.getBulkSettlementSummary(request.group_id, request.recipient_id);
+
+    if (summary.member_debts.length === 0) {
+      throw new Error('No debts to settle');
+    }
+
+    // Generate bulk settlement ID
+    const bulkSettlementId = `bulk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create settlements for each member
+    const settlements = summary.member_debts.map(debt => ({
+      group_id: request.group_id,
+      from_user: debt.user_id,
+      to_user: request.recipient_id,
+      amount: debt.total_owed,
+      notes: request.notes || `Bulk settlement - ${debt.expense_count} expenses`,
+      is_bulk: true,
+      bulk_settlement_id: bulkSettlementId,
+      settled_at: new Date().toISOString(),
+    }));
+
+    const { data: createdSettlements, error: settlementsError } = await supabase
+      .from('settlements')
+      .insert(settlements)
+      .select();
+
+    if (settlementsError) throw settlementsError;
+
+    // Mark all expense splits as settled for these users
+    const userIds = summary.member_debts.map(d => d.user_id);
+    const { data: expenses } = await supabase
+      .from('expenses')
+      .select('id')
+      .eq('group_id', request.group_id);
+
+    const expenseIds = expenses?.map(e => e.id) || [];
+
+    if (expenseIds.length > 0) {
+      await supabase
+        .from('expense_splits')
+        .update({
+          is_settled: true,
+          settled_at: new Date().toISOString(),
+        })
+        .in('expense_id', expenseIds)
+        .in('user_id', userIds)
+        .eq('is_settled', false);
+    }
+
+    // Create notifications for all members
+    try {
+      // Notify recipient
+      await notificationService.createNotification({
+        user_id: request.recipient_id,
+        title: 'Bulk Settlement Received',
+        message: `You received ₹${summary.total_amount.toFixed(2)} from ${summary.member_debts.length} member(s)`,
+        type: 'payment_received',
+        related_id: null,
+        metadata: {
+          group_id: request.group_id,
+          total_amount: summary.total_amount,
+          is_bulk: true,
+        },
+      });
+
+      // Notify each member who paid
+      for (const debt of summary.member_debts) {
+        await notificationService.createNotification({
+          user_id: debt.user_id,
+          title: 'Bulk Settlement',
+          message: `You paid ₹${debt.total_owed.toFixed(2)} to ${summary.recipient_name} (${debt.expense_count} expenses)`,
+          type: 'payment_received',
+          related_id: null,
+          metadata: {
+            group_id: request.group_id,
+            recipient_id: request.recipient_id,
+            amount: debt.total_owed,
+            is_bulk: true,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Error creating bulk settlement notifications:', error);
+    }
+
+    return createdSettlements || [];
   },
 };
 

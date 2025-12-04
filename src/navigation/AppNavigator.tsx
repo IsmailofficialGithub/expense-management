@@ -38,6 +38,8 @@ import InvitationsScreen from '../screens/main/InvitationsScreen';
 import MessagesScreen from '../screens/main/MessagesScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import NotificationsScreen from '../screens/main/NotificationsScreen';
+import AdvanceCollectionScreen from '../screens/details/AdvanceCollectionScreen';
+import BulkSettlementScreen from '../screens/details/BulkSettlementScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -78,6 +80,8 @@ export type RootStackParamList = {
   Messages: undefined;
   Chat: { conversationId: string };
   Notifications: undefined;
+  AdvanceCollection: { groupId: string };
+  BulkSettlement: { groupId: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -294,6 +298,16 @@ export default function AppNavigator() {
             name="Chat"
             component={ChatScreen}
             options={{ ...detailScreenOptions, title: 'Chat' }}
+          />
+          <RootStack.Screen
+            name="AdvanceCollection"
+            component={AdvanceCollectionScreen}
+            options={{ ...detailScreenOptions, title: 'Advance Collection' }}
+          />
+          <RootStack.Screen
+            name="BulkSettlement"
+            component={BulkSettlementScreen}
+            options={{ ...detailScreenOptions, title: 'Bulk Settlement' }}
           />
         </>
       ) : (

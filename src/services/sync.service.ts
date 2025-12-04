@@ -25,7 +25,9 @@ export type SyncEntityType =
   | 'category'
   | 'settlement'
   | 'personal_category'
-  | 'message';
+  | 'message'
+  | 'advance_collection'
+  | 'bulk_settlement';
 
 export interface SyncOperation {
   id: string;
@@ -203,6 +205,23 @@ class SyncService {
             await notificationService.markAsRead(data.id);
           } else if (type === 'delete') {
             await notificationService.deleteNotification(data.id);
+          }
+          break;
+
+        case 'advance_collection':
+          if (type === 'create') {
+            const { bulkPaymentService } = await import('./supabase.service');
+            await bulkPaymentService.createAdvanceCollection(data);
+          } else if (type === 'update') {
+            const { bulkPaymentService } = await import('./supabase.service');
+            await bulkPaymentService.contributeToCollection(data.contributionId, data.notes);
+          }
+          break;
+
+        case 'bulk_settlement':
+          if (type === 'create') {
+            const { bulkPaymentService } = await import('./supabase.service');
+            await bulkPaymentService.createBulkSettlement(data);
           }
           break;
 

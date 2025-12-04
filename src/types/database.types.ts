@@ -218,7 +218,50 @@ export interface Settlement {
   settled_at: string
   notes: string | null
   related_expense_ids: string[] | null
+  is_bulk: boolean
+  bulk_settlement_id: string | null
   created_at: string
+}
+
+export interface GroupAdvanceCollection {
+  id: string
+  group_id: string
+  recipient_id: string
+  total_amount: number
+  per_member_amount: number | null
+  status: 'active' | 'completed' | 'cancelled'
+  description: string | null
+  created_by: string
+  created_at: string
+  completed_at: string | null
+  updated_at: string
+  recipient?: Profile
+  created_by_user?: Profile
+  contributions?: AdvanceCollectionContribution[]
+}
+
+export interface AdvanceCollectionContribution {
+  id: string
+  collection_id: string
+  user_id: string
+  amount: number
+  status: 'pending' | 'paid' | 'cancelled'
+  contributed_at: string | null
+  notes: string | null
+  created_at: string
+  user?: Profile
+}
+
+export interface BulkSettlementSummary {
+  recipient_id: string
+  recipient_name: string
+  total_amount: number
+  member_debts: Array<{
+    user_id: string
+    user_name: string
+    total_owed: number
+    expense_count: number
+  }>
 }
 
 export interface PersonalDebt {

@@ -417,6 +417,43 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
           })}
         </View>
 
+        {/* Bulk Payment Features */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+            Bulk Payments
+          </Text>
+          <View style={styles.bulkPaymentRow}>
+            <Card
+              style={[styles.bulkPaymentCard, { backgroundColor: theme.colors.surface }]}
+              onPress={() => navigation.navigate('AdvanceCollection', { groupId })}
+            >
+              <Card.Content style={styles.bulkPaymentContent}>
+                <Text style={[styles.bulkPaymentIcon, { color: theme.colors.primary }]}>💰</Text>
+                <Text style={[styles.bulkPaymentTitle, { color: theme.colors.onSurface }]}>
+                  Advance Collection
+                </Text>
+                <Text style={[styles.bulkPaymentDescription, { color: theme.colors.onSurfaceVariant }]}>
+                  Collect money in advance from all members
+                </Text>
+              </Card.Content>
+            </Card>
+            <Card
+              style={[styles.bulkPaymentCard, { backgroundColor: theme.colors.surface }]}
+              onPress={() => navigation.navigate('BulkSettlement', { groupId })}
+            >
+              <Card.Content style={styles.bulkPaymentContent}>
+                <Text style={[styles.bulkPaymentIcon, { color: theme.colors.primary }]}>⚡</Text>
+                <Text style={[styles.bulkPaymentTitle, { color: theme.colors.onSurface }]}>
+                  Bulk Settlement
+                </Text>
+                <Text style={[styles.bulkPaymentDescription, { color: theme.colors.onSurfaceVariant }]}>
+                  Settle all debts at once
+                </Text>
+              </Card.Content>
+            </Card>
+          </View>
+        </View>
+
         {/* Recent Expenses */}
         {/* Recent Expenses */}
         <View style={styles.section}>
@@ -795,6 +832,32 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 14,
+  },
+  bulkPaymentRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bulkPaymentCard: {
+    flex: 1,
+    marginBottom: 12,
+  },
+  bulkPaymentContent: {
+    alignItems: 'center',
+    padding: 16,
+  },
+  bulkPaymentIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  bulkPaymentTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  bulkPaymentDescription: {
+    fontSize: 12,
+    textAlign: 'center',
   },
   fabContainer: {
     position: 'absolute',
