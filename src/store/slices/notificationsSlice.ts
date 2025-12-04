@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction, createAction } from '@red
 import { notificationService } from '../../services/supabase.service';
 import { Notification } from '../../types/database.types';
 import { storageService } from '../../services/storage.service';
+import { syncService } from '../../services/sync.service';
 
 interface NotificationsState {
   notifications: Notification[];
@@ -44,9 +45,34 @@ export const fetchNotifications = createAsyncThunk('notifications/fetchNotificat
   }
 });
 
-export const markAsRead = createAsyncThunk('notifications/markAsRead', async (notificationId: string, { rejectWithValue }) => {
+export const markAsRead = createAsyncThunk('notifications/markAsRead', async (notificationId: string, { rejectWithValue, getState }) => {
   try {
-    await notificationService.markAsRead(notificationId);
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+    
+    if (isOnline) {
+      try {
+        await notificationService.markAsRead(notificationId);
+        // Update local cache
+        const notifications = await storageService.getNotifications() || [];
+        const updated = notifications.map((n: Notification) =>
+          n.id === notificationId ? { ...n, is_read: true } : n
+        );
+        await storageService.setNotifications(updated);
+        return notificationId;
+      } catch (error: any) {
+        console.warn('Online mark as read failed, queueing for sync:', error);
+      }
+    }
+    
+    // Offline: queue for sync and update local state
+    await syncService.addToQueue('update', 'notification', { id: notificationId });
+    const notifications = await storageService.getNotifications() || [];
+    const updated = notifications.map((n: Notification) =>
+      n.id === notificationId ? { ...n, is_read: true } : n
+    );
+    await storageService.setNotifications(updated);
+    
     return notificationId;
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -64,9 +90,30 @@ export const markAllAsRead = createAsyncThunk('notifications/markAllAsRead', asy
 // Cache setter action - load data directly from cache without API calls
 export const setNotificationsFromCache = createAction<Notification[]>('notifications/setFromCache');
 
-export const deleteNotification = createAsyncThunk('notifications/deleteNotification', async (notificationId: string, { rejectWithValue }) => {
+export const deleteNotification = createAsyncThunk('notifications/deleteNotification', async (notificationId: string, { rejectWithValue, getState }) => {
   try {
-    await notificationService.deleteNotification(notificationId);
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+    
+    if (isOnline) {
+      try {
+        await notificationService.deleteNotification(notificationId);
+        // Update local cache
+        const notifications = await storageService.getNotifications() || [];
+        const updated = notifications.filter((n: Notification) => n.id !== notificationId);
+        await storageService.setNotifications(updated);
+        return notificationId;
+      } catch (error: any) {
+        console.warn('Online delete failed, queueing for sync:', error);
+      }
+    }
+    
+    // Offline: queue for sync and update local state
+    await syncService.addToQueue('delete', 'notification', { id: notificationId });
+    const notifications = await storageService.getNotifications() || [];
+    const updated = notifications.filter((n: Notification) => n.id !== notificationId);
+    await storageService.setNotifications(updated);
+    
     return notificationId;
   } catch (error: any) {
     return rejectWithValue(error.message);

@@ -236,6 +236,7 @@ export interface PersonalDebt {
 
 export type NotificationType =
   | 'expense_added'
+  | 'expense_split_assigned'
   | 'payment_received'
   | 'reminder'
   | 'group_invite'
@@ -248,6 +249,12 @@ export interface Notification {
   type: NotificationType
   is_read: boolean
   related_id: string | null
+  metadata: {
+    expense_id?: string
+    group_id?: string
+    split_amount?: number
+    [key: string]: any
+  } | null
   created_at: string
 }
 

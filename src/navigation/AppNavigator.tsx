@@ -3,7 +3,10 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
+import { useNotifications } from '../hooks/useNotifications';
+import NotificationBadge from '../components/NotificationBadge';
 
 // Import screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -34,6 +37,7 @@ import EditPaymentMethodScreen from '../screens/forms/EditPaymentMethodScreen';
 import InvitationsScreen from '../screens/main/InvitationsScreen';
 import MessagesScreen from '../screens/main/MessagesScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
+import NotificationsScreen from '../screens/main/NotificationsScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -46,6 +50,7 @@ export type MainTabParamList = {
   Groups: undefined;
   Expenses: undefined;
   Messages: undefined;
+  Notifications: undefined;
   Profile: undefined;
 };
 
@@ -72,6 +77,7 @@ export type RootStackParamList = {
   Invitations: undefined;
   Messages: undefined;
   Chat: { conversationId: string };
+  Notifications: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -91,8 +97,9 @@ function AuthNavigator() {
 }
 
 // Main Tab Navigator (Dashboard, Groups, Expenses, Profile)
-// *** THIS FUNCTION IS 100% UNCHANGED ***
 function MainNavigator() {
+  const { unreadCount } = useNotifications();
+
   return (
     <MainTab.Navigator
       screenOptions={({ route }) => ({
@@ -107,13 +114,27 @@ function MainNavigator() {
             iconName = focused ? 'wallet' : 'wallet-outline';
           } else if (route.name === 'Messages') {
             iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
+          } else if (route.name === 'Notifications') {
+            iconName = focused ? 'notifications' : 'notifications-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           } else {
             iconName = 'help-outline';
           }
 
-          return <Ionicons name={iconName} size={size} color={color} />;
+          const icon = <Ionicons name={iconName} size={size} color={color} />;
+
+          // Add badge for Notifications tab
+          if (route.name === 'Notifications') {
+            return (
+              <View style={{ position: 'relative' }}>
+                {icon}
+                <NotificationBadge count={unreadCount} size={18} />
+              </View>
+            );
+          }
+
+          return icon;
         },
         tabBarActiveTintColor: '#6200EE',
         tabBarInactiveTintColor: 'gray',
@@ -139,6 +160,11 @@ function MainNavigator() {
         name="Messages"
         component={MessagesScreen}
         options={{ title: 'Messages' }}
+      />
+      <MainTab.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: 'Notifications' }}
       />
       <MainTab.Screen
         name="Profile"

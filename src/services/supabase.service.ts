@@ -1058,6 +1058,14 @@ export const foodExpenseService = {
 
     if (splitsError) throw splitsError;
 
+    // Trigger notifications for group members
+    try {
+      await notificationService.triggerExpenseNotifications(expense.id, request.group_id);
+    } catch (error) {
+      console.error('Failed to trigger notifications:', error);
+      // Don't fail expense creation if notifications fail
+    }
+
     // Fetch complete expense with details
     return expenseService.getExpense(expense.id);
   },
@@ -1434,6 +1442,14 @@ export const expenseService = {
 
     if (splitsError) throw splitsError;
 
+    // Trigger notifications for group members
+    try {
+      await notificationService.triggerExpenseNotifications(expense.id, request.group_id);
+    } catch (error) {
+      console.error('Failed to trigger notifications:', error);
+      // Don't fail expense creation if notifications fail
+    }
+
     return expense;
   },
   getExpenses: async (filters?: ExpenseFilters): Promise<ExpenseWithDetails[]> => {
@@ -1666,18 +1682,222 @@ export const personalDebtService = {
 // ============================================
 
 export const notificationService = {
-  getNotifications: async (): Promise<Notification[]> => {
+  getNotifications: async (limit?: number, offset?: number): Promise<Notification[]> => {
     const user = await authService.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
+    if (limit) {
+      query = query.limit(limit);
+    }
+    if (offset) {
+      query = query.range(offset, offset + (limit || 50) - 1);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  },
+
+  getUnreadCount: async (): Promise<number> => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_read', false);
+
+    if (error) throw error;
+    return count || 0;
+  },
+
+  createNotification: async (notification: {
+    user_id: string;
+    title: string;
+    message: string;
+    type: string;
+    related_id?: string | null;
+    metadata?: any;
+  }): Promise<Notification> => {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        ...notification,
+        is_read: false,
+      })
+      .select()
+      .single();
+
     if (error) throw error;
     return data;
+  },
+
+  triggerExpenseNotifications: async (expenseId: string, groupId: string): Promise<void> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Fetch expense details with splits and paid_by user
+      const { data: expense, error: expenseError } = await supabase
+        .from('expenses')
+        .select(`
+          *,
+          paid_by_user:profiles!expenses_paid_by_fkey(id, full_name),
+          splits:expense_splits(user_id, amount)
+        `)
+        .eq('id', expenseId)
+        .single();
+
+      if (expenseError || !expense) {
+        console.error('Error fetching expense:', expenseError);
+        return;
+      }
+
+      // Fetch all group members
+      const { data: groupMembers, error: membersError } = await supabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId);
+
+      if (membersError || !groupMembers) {
+        console.error('Error fetching group members:', membersError);
+        return;
+      }
+
+      const notifications = [];
+      const paidByName = (expense.paid_by_user as any)?.full_name || 'Someone';
+
+      // Create notifications for all group members (except the creator)
+      for (const member of groupMembers) {
+        if (member.user_id === expense.paid_by) {
+          continue; // Skip the expense creator
+        }
+
+        // Find split for this user
+        const userSplit = Array.isArray(expense.splits) 
+          ? (expense.splits as any[]).find((s: any) => s.user_id === member.user_id)
+          : null;
+
+        // Notification 1: New expense added to group
+        notifications.push({
+          user_id: member.user_id,
+          title: 'New Expense Added',
+          message: `${paidByName} added "${expense.description}" - ₹${Number(expense.amount).toFixed(2)}`,
+          type: 'expense_added',
+          is_read: false,
+          related_id: expenseId,
+          metadata: {
+            expense_id: expenseId,
+            group_id: groupId,
+            amount: expense.amount,
+          },
+        });
+
+        // Notification 2: Split amount assigned (if user has a split)
+        if (userSplit && userSplit.amount > 0) {
+          notifications.push({
+            user_id: member.user_id,
+            title: 'Amount Assigned to You',
+            message: `You owe ₹${Number(userSplit.amount).toFixed(2)} for "${expense.description}"`,
+            type: 'expense_split_assigned',
+            is_read: false,
+            related_id: expenseId,
+            metadata: {
+              expense_id: expenseId,
+              group_id: groupId,
+              split_amount: userSplit.amount,
+              total_amount: expense.amount,
+            },
+          });
+        }
+      }
+
+      // Insert all notifications in batch
+      if (notifications.length > 0) {
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert(notifications);
+
+        if (notificationError) {
+          console.error('Error creating notifications:', notificationError);
+          // Don't throw - notifications are not critical for expense creation
+        } else {
+          // Send Expo push notifications for each notification
+          try {
+            const { sendExpoPushNotification, getGroupMemberPushTokens } = await import('./push-notifications.service');
+            
+            // Get push tokens for all recipients
+            const pushTokens = await getGroupMemberPushTokens(groupId, expense.paid_by);
+            
+            if (pushTokens.length > 0) {
+              // Send push notifications for expense_added type
+              const expenseAddedNotifications = notifications.filter(n => n.type === 'expense_added');
+              if (expenseAddedNotifications.length > 0) {
+                const firstNotification = expenseAddedNotifications[0];
+                // Get unread count for badge
+                const { notificationService } = await import('./supabase.service');
+                const unreadCount = await notificationService.getUnreadCount();
+                
+                await sendExpoPushNotification(
+                  pushTokens,
+                  firstNotification.title,
+                  firstNotification.message,
+                  {
+                    type: firstNotification.type,
+                    expense_id: expenseId,
+                    group_id: groupId,
+                  },
+                  unreadCount
+                );
+              }
+
+              // Send push notifications for expense_split_assigned type
+              const splitNotifications = notifications.filter(n => n.type === 'expense_split_assigned');
+              for (const splitNotif of splitNotifications) {
+                // Get push token for this specific user
+                const { data: userProfile } = await supabase
+                  .from('profiles')
+                  .select('push_token')
+                  .eq('id', splitNotif.user_id)
+                  .single();
+
+                if (userProfile?.push_token && userProfile.push_token.startsWith('ExponentPushToken')) {
+                  // Get unread count for badge
+                  const { notificationService } = await import('./supabase.service');
+                  const unreadCount = await notificationService.getUnreadCount();
+                  
+                  await sendExpoPushNotification(
+                    userProfile.push_token,
+                    splitNotif.title,
+                    splitNotif.message,
+                    {
+                      type: splitNotif.type,
+                      expense_id: expenseId,
+                      group_id: groupId,
+                      split_amount: splitNotif.metadata?.split_amount,
+                    },
+                    unreadCount
+                  );
+                }
+              }
+            }
+          } catch (pushError) {
+            console.error('Error sending push notifications:', pushError);
+            // Don't throw - push notifications are not critical
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error triggering expense notifications:', error);
+      // Don't throw - notifications are not critical for expense creation
+    }
   },
 
   markAsRead: async (notificationId: string) => {
@@ -1746,7 +1966,7 @@ export const realtimeService = {
   },
 
   subscribeToNotifications: (userId: string, callback: (payload: any) => void) => {
-    return supabase
+    const channel = supabase
       .channel(`notifications:${userId}`)
       .on(
         'postgres_changes',
@@ -1756,9 +1976,21 @@ export const realtimeService = {
           table: 'notifications',
           filter: `user_id=eq.${userId}`,
         },
-        callback
+        (payload) => {
+          console.log('Realtime notification received:', payload);
+          callback(payload);
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Notification subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to notifications for user:', userId);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Error subscribing to notifications channel');
+        }
+      });
+    
+    return channel;
   },
 
   unsubscribe: (channel: any) => {

@@ -47,32 +47,48 @@ export const notificationsService = {
   },
 
   /**
-   * Get Expo push token (only for remote push notifications)
-   * Note: Local notifications work perfectly without this token
+   * Get Expo push token (for remote push notifications)
+   * This token is required for push notifications when app is closed
    */
   async getPushToken(): Promise<string | null> {
     try {
       if (Platform.OS === 'android') {
+        // Configure Android notification channel with sound
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
+          name: 'Expense Notifications',
+          description: 'Notifications for expenses and splits',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+          sound: 'default', // Android channel sound
+          enableVibrate: true,
+          showBadge: true,
+          enableLights: true,
+        });
+        
+        // Also create a high-priority channel for expense notifications
+        await Notifications.setNotificationChannelAsync('expense_notifications', {
+          name: 'Expense Alerts',
+          description: 'High priority notifications for expense updates',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
           sound: 'default',
           enableVibrate: true,
           showBadge: true,
+          enableLights: true,
         });
       }
 
-      // Get project ID from Constants - must be a valid UUID
+      // Get project ID from Constants
       const Constants = require('expo-constants').default;
       const projectId = Constants.expoConfig?.extra?.eas?.projectId || 
-                       Constants.expoConfig?.extra?.EXPO_PROJECT_ID;
+                       Constants.expoConfig?.extra?.EXPO_PROJECT_ID ||
+                       Constants.expoConfig?.extra?.expo?.projectId;
       
-      // Only try to get push token if we have a valid UUID project ID
-      // Local notifications work without push token
-      if (!projectId || !this.isValidUUID(projectId)) {
-        // Silently skip - local notifications will work fine
+      if (!projectId) {
+        console.warn('Expo project ID not found. Push notifications may not work when app is closed.');
+        console.warn('Add projectId to app.config.ts or app.json extra section');
         return null;
       }
       
@@ -80,13 +96,15 @@ export const notificationsService = {
         const { data: token } = await Notifications.getExpoPushTokenAsync({
           projectId: projectId,
         });
+        console.log('Expo push token obtained:', token);
         return token;
-      } catch (error) {
-        // Silently fail - local notifications will still work
+      } catch (error: any) {
+        console.error('Error getting Expo push token:', error.message);
+        // Still return null - local notifications will work
         return null;
       }
-    } catch (error) {
-      // Silently fail - local notifications will still work
+    } catch (error: any) {
+      console.error('Error in getPushToken:', error.message);
       return null;
     }
   },
@@ -103,17 +121,51 @@ export const notificationsService = {
    * Save push token to user profile
    */
   async savePushToken(token: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.warn('Cannot save push token: User not authenticated');
+        return;
+      }
 
-    // Store token in user metadata or a separate table
-    await supabase
-      .from('profiles')
-      .update({
-        push_token: token,
-        push_token_updated_at: new Date().toISOString(),
-      })
-      .eq('id', user.id);
+      // Store token in user profile
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          push_token: token,
+          push_token_updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Error saving push token:', error);
+      } else {
+        console.log('Push token saved successfully for user:', user.id);
+      }
+    } catch (error) {
+      console.error('Error in savePushToken:', error);
+    }
+  },
+
+  /**
+   * Get current user's push token
+   */
+  async getCurrentUserPushToken(): Promise<string | null> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('push_token')
+        .eq('id', user.id)
+        .single();
+
+      return profile?.push_token || null;
+    } catch (error) {
+      console.error('Error getting current user push token:', error);
+      return null;
+    }
   },
 
   /**
@@ -139,6 +191,11 @@ export const notificationsService = {
           navigation.navigate('Chat', { conversationId: data.conversationId });
         } else if (data?.groupId) {
           navigation.navigate('GroupDetails', { groupId: data.groupId });
+        } else if (data?.expense_id) {
+          navigation.navigate('ExpenseDetails', { expenseId: data.expense_id });
+        } else if (data?.type === 'expense_added' || data?.type === 'expense_split_assigned') {
+          // Navigate to notifications screen
+          navigation.navigate('Main', { screen: 'Notifications' });
         }
       }
     );
@@ -158,9 +215,11 @@ export const notificationsService = {
         title,
         body,
         data,
-        sound: true,
+        sound: 'default', // Use 'default' for both platforms - works better
         priority: Notifications.AndroidNotificationPriority.HIGH,
-        vibrate: [0, 250, 250, 250],
+        vibrate: Platform.OS === 'android' ? [0, 250, 250, 250] : undefined,
+        // Use expense_notifications channel on Android for better sound
+        ...(Platform.OS === 'android' && { channelId: 'expense_notifications' }),
       },
       trigger: null, // Show immediately
     });
@@ -193,9 +252,10 @@ export const notificationsService = {
           conversationId,
           type: 'message',
         },
-        sound: true, // Play sound
+        sound: 'default', // Use 'default' for both platforms
         priority: Notifications.AndroidNotificationPriority.HIGH,
         vibrate: Platform.OS === 'android' ? [0, 250, 250, 250] : undefined,
+        ...(Platform.OS === 'android' && { channelId: 'default' }),
       },
       trigger: null, // Show immediately
     });

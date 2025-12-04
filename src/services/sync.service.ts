@@ -197,6 +197,15 @@ class SyncService {
           }
           break;
 
+        case 'notification':
+          if (type === 'update') {
+            // Mark notification as read
+            await notificationService.markAsRead(data.id);
+          } else if (type === 'delete') {
+            await notificationService.deleteNotification(data.id);
+          }
+          break;
+
         default:
           console.warn(`Unknown entity type: ${entity}`);
           return false;

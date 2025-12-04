@@ -10,6 +10,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import Toast from './src/components/Toast';
 import OfflineIndicator from './src/components/OfflineIndicator';
+import NotificationInitializer from './src/components/NotificationInitializer';
 import { useUI } from './src/hooks/useUI';
 
 // Combine Paper theme with Navigation theme
@@ -67,6 +68,7 @@ function AppContent() {
         theme={navigationTheme}
       >
         <OfflineIndicator />
+        <NotificationInitializer />
         <AppNavigator />
         <Toast />
         <StatusBar style={actualTheme === 'dark' ? 'light' : 'dark'} />

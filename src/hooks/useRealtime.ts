@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { realtimeService } from '../services/supabase.service';
 import {
   addExpenseRealtime,
@@ -7,6 +8,7 @@ import {
 } from '../store/slices/expensesSlice';
 import { addNotificationRealtime } from '../store/slices/notificationsSlice';
 import { useAppDispatch } from '../store';
+import { notificationsService } from '../services/notifications.service';
 
 export const useRealtimeExpenses = (groupId: string) => {
   const dispatch = useAppDispatch();
@@ -45,16 +47,65 @@ export const useRealtimeNotifications = (userId: string) => {
   const dispatch = useAppDispatch();
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      console.log('useRealtimeNotifications: No userId provided');
+      return;
+    }
 
-    const channel = realtimeService.subscribeToNotifications(userId, (payload) => {
-      const { new: newNotification } = payload;
-      if (newNotification) {
+    console.log('Setting up real-time notification subscription for user:', userId);
+
+    const channel = realtimeService.subscribeToNotifications(userId, async (payload) => {
+      console.log('Notification payload received:', payload);
+      
+      // Handle different payload structures
+      const newNotification = payload.new || payload.record || payload;
+      
+      if (newNotification && newNotification.id) {
+        console.log('Processing new notification:', newNotification);
+        
+        // Dispatch to Redux
         dispatch(addNotificationRealtime(newNotification));
+
+        // Cache notification locally
+        try {
+          const { storageService } = await import('../services/storage.service');
+          const cachedNotifications = await storageService.getNotifications() || [];
+          // Avoid duplicates
+          const exists = cachedNotifications.some((n: any) => n.id === newNotification.id);
+          if (!exists) {
+            await storageService.setNotifications([newNotification, ...cachedNotifications]);
+          }
+        } catch (error) {
+          console.error('Error caching notification:', error);
+        }
+
+        // Update badge count
+        try {
+          const { notificationService } = await import('../services/supabase.service');
+          const unreadCount = await notificationService.getUnreadCount();
+          await notificationsService.setBadgeCount(unreadCount);
+        } catch (error) {
+          console.error('Error updating badge count:', error);
+        }
+
+        // Always send local notification (even in foreground) with sound
+        // This ensures notifications are always visible and audible
+        await notificationsService.sendLocalNotification(
+          newNotification.title,
+          newNotification.message,
+          {
+            type: newNotification.type,
+            expense_id: newNotification.metadata?.expense_id,
+            group_id: newNotification.metadata?.group_id,
+          }
+        );
+      } else {
+        console.warn('Invalid notification payload structure:', payload);
       }
     });
 
     return () => {
+      console.log('Cleaning up notification subscription for user:', userId);
       realtimeService.unsubscribe(channel);
     };
   }, [userId, dispatch]);
