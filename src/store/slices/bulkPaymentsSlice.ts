@@ -4,9 +4,20 @@ import { bulkPaymentService } from '../../services/supabase.service';
 import { GroupAdvanceCollection, BulkSettlementSummary } from '../../types/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+interface BulkPaymentStats {
+  activeCount: number;
+  totalCount: number;
+  completedCount: number;
+  pendingCount: number;
+  totalAmount: number;
+  pendingAmount: number;
+  activeAmount: number;
+}
+
 interface BulkPaymentsState {
   advanceCollections: GroupAdvanceCollection[];
   bulkSettlementSummary: BulkSettlementSummary | null;
+  bulkPaymentStats: BulkPaymentStats | null;
   loading: boolean;
   error: string | null;
 }
@@ -14,6 +25,7 @@ interface BulkPaymentsState {
 const initialState: BulkPaymentsState = {
   advanceCollections: [],
   bulkSettlementSummary: null,
+  bulkPaymentStats: null,
   loading: false,
   error: null,
 };
@@ -123,6 +135,45 @@ export const createBulkSettlement = createAsyncThunk(
   }
 );
 
+export const approveContribution = createAsyncThunk(
+  'bulkPayments/approveContribution',
+  async (contributionId: string, { rejectWithValue }) => {
+    try {
+      const contribution = await bulkPaymentService.approveContribution(contributionId);
+      return contribution;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const rejectContribution = createAsyncThunk(
+  'bulkPayments/rejectContribution',
+  async (request: { contributionId: string; reason?: string }, { rejectWithValue }) => {
+    try {
+      const contribution = await bulkPaymentService.rejectContribution(
+        request.contributionId,
+        request.reason
+      );
+      return contribution;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const fetchBulkPaymentStats = createAsyncThunk(
+  'bulkPayments/fetchBulkPaymentStats',
+  async (groupId: string, { rejectWithValue }) => {
+    try {
+      const stats = await bulkPaymentService.getBulkPaymentStats(groupId);
+      return stats;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 const bulkPaymentsSlice = createSlice({
   name: 'bulkPayments',
   initialState,
@@ -178,7 +229,7 @@ const bulkPaymentsSlice = createSlice({
             c => c.id === action.payload.id
           );
           if (contribution) {
-            contribution.status = action.payload.status;
+            contribution.status = action.payload.status; // Now 'pending_approval'
             contribution.contributed_at = action.payload.contributed_at;
             contribution.notes = action.payload.notes;
           }
@@ -205,6 +256,54 @@ const bulkPaymentsSlice = createSlice({
         state.bulkSettlementSummary = null; // Clear summary after settlement
       })
       .addCase(createBulkSettlement.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      .addCase(approveContribution.fulfilled, (state, action) => {
+        // Update contribution in state
+        const collectionId = action.payload.collection_id;
+        const collection = state.advanceCollections.find(c => c.id === collectionId);
+        if (collection && collection.contributions) {
+          const contribution = collection.contributions.find(
+            c => c.id === action.payload.id
+          );
+          if (contribution) {
+            contribution.status = action.payload.status;
+            contribution.approved_by = action.payload.approved_by;
+            contribution.approved_at = action.payload.approved_at;
+          }
+          // Check if collection should be marked as completed
+          const allPaid = collection.contributions.every(c => c.status === 'paid');
+          if (allPaid) {
+            collection.status = 'completed';
+            collection.completed_at = new Date().toISOString();
+          }
+        }
+      })
+      .addCase(rejectContribution.fulfilled, (state, action) => {
+        // Update contribution in state
+        const collectionId = action.payload.collection_id;
+        const collection = state.advanceCollections.find(c => c.id === collectionId);
+        if (collection && collection.contributions) {
+          const contribution = collection.contributions.find(
+            c => c.id === action.payload.id
+          );
+          if (contribution) {
+            contribution.status = action.payload.status;
+            contribution.contributed_at = action.payload.contributed_at;
+            contribution.notes = action.payload.notes;
+          }
+        }
+      })
+      .addCase(fetchBulkPaymentStats.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchBulkPaymentStats.fulfilled, (state, action) => {
+        state.loading = false;
+        state.bulkPaymentStats = action.payload;
+      })
+      .addCase(fetchBulkPaymentStats.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       });

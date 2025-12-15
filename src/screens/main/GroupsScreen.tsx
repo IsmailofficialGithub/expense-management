@@ -93,8 +93,15 @@ export default function GroupsScreen({ navigation }: any) {
     }
   };
 
+  // Filter groups: only show groups where current user is a member
+  const myGroups = groups.filter(group => {
+    // Check if current user is a member of this group
+    const isMember = group.members?.some((member: any) => member.user_id === profile?.id);
+    return isMember;
+  });
+
   // Filter groups based on search
-  const filteredGroups = groups.filter(group =>
+  const filteredGroups = myGroups.filter(group =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -161,7 +168,7 @@ export default function GroupsScreen({ navigation }: any) {
   );
 
   // Show error state if there's an error and no groups
-  if (error && groups.length === 0 && !loading) {
+  if (error && myGroups.length === 0 && !loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <ErrorState
@@ -198,7 +205,7 @@ export default function GroupsScreen({ navigation }: any) {
       />
 
       {/* Floating Action Button */}
-      {groups.length > 0 && (
+      {myGroups.length > 0 && (
         <FAB
           icon="plus"
           style={styles.fab}

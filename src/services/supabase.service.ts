@@ -1281,6 +1281,23 @@ export const groupService = {
   },
 
   getGroups: async (): Promise<GroupWithMembers[]> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // First, get all group IDs where user is a member
+    const { data: memberGroups, error: memberError } = await supabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', user.id);
+
+    if (memberError) throw memberError;
+    if (!memberGroups || memberGroups.length === 0) return [];
+
+    // Extract group IDs
+    const groupIds = memberGroups.map((m: any) => m.group_id);
+
+    // Fetch groups where current user is a member
+    // RLS policies should also filter this, but we filter explicitly for safety
     const { data, error } = await supabase
       .from('groups')
       .select(`
@@ -1290,10 +1307,17 @@ export const groupService = {
           *,
           user:profiles(*)
         )
-      `);
+      `)
+      .in('id', groupIds);
 
     if (error) throw error;
-    return data as any;
+    
+    // Additional client-side filter to ensure only groups with current user as member
+    const filtered = (data || []).filter((group: any) => {
+      return group.members?.some((member: any) => member.user_id === user.id);
+    });
+    
+    return filtered as any;
   },
 
   getGroup: async (groupId: string): Promise<GroupWithMembers> => {
@@ -1706,44 +1730,172 @@ export const bulkPaymentService = {
     }
 
     // Fetch complete collection with relations
-    const completeCollection = await this.getAdvanceCollection(collection.id);
+    const { data: completeCollection, error: fetchError } = await supabase
+      .from('group_advance_collections')
+      .select(`
+        *,
+        recipient:profiles!group_advance_collections_recipient_id_fkey(*),
+        created_by_user:profiles!group_advance_collections_created_by_fkey(*),
+        contributions:advance_collection_contributions(
+          *,
+          user:profiles(*)
+        )
+      `)
+      .eq('id', collection.id)
+      .single();
 
-    // Send notifications to all group members
+    if (fetchError) throw fetchError;
+
+    // Get group and recipient info for emails
+    const { data: group } = await supabase
+      .from('groups')
+      .select('name')
+      .eq('id', request.group_id)
+      .single();
+
+    const { data: recipient } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', request.recipient_id)
+      .single();
+
+    const { data: creator } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single();
+
+    const recipientName = recipient?.full_name || 'Someone';
+    const groupName = group?.name || 'the group';
+    const creatorName = creator?.full_name || 'A member';
+
+    // Send notifications and emails to all group members
     try {
       const { data: members } = await supabase
         .from('group_members')
-        .select('user_id')
+        .select('user_id, user:profiles(email, full_name)')
         .eq('group_id', request.group_id);
 
       if (members) {
-        const { data: recipient } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', request.recipient_id)
-          .single();
-
-        const recipientName = recipient?.full_name || 'Someone';
-
         for (const member of members) {
-          if (member.user_id === user.id) continue; // Skip creator
+          const memberProfile = member.user as any;
+          
+          // Send in-app notification
+          if (member.user_id !== user.id) {
+            try {
+              await notificationService.createNotification({
+                user_id: member.user_id,
+                title: 'New Advance Collection',
+                message: `A new advance collection of ₹${perMemberAmount!.toFixed(2)} per member has been created. Recipient: ${recipientName}`,
+                type: 'payment_received',
+                related_id: collection.id,
+                metadata: {
+                  collection_id: collection.id,
+                  group_id: request.group_id,
+                  recipient_id: request.recipient_id,
+                  per_member_amount: perMemberAmount,
+                },
+              });
+            } catch (error) {
+              console.error('Error sending notification:', error);
+            }
+          }
 
-          await notificationService.createNotification({
-            user_id: member.user_id,
-            title: 'New Advance Collection',
-            message: `A new advance collection of ₹${perMemberAmount!.toFixed(2)} per member has been created. Recipient: ${recipientName}`,
-            type: 'payment_received',
-            related_id: collection.id,
-            metadata: {
-              collection_id: collection.id,
-              group_id: request.group_id,
-              recipient_id: request.recipient_id,
-              per_member_amount: perMemberAmount,
-            },
-          });
+          // Send email to all members
+          if (memberProfile?.email) {
+            try {
+              const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                </head>
+                <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+                  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 40px 20px; text-align: center;">
+                        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                          <!-- Header -->
+                          <tr>
+                            <td style="background-color: #6200EE; padding: 30px 20px; text-align: center;">
+                              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">💰 New Advance Collection</h1>
+                            </td>
+                          </tr>
+                          
+                          <!-- Content -->
+                          <tr>
+                            <td style="padding: 30px 20px;">
+                              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Hi ${memberProfile.full_name || 'there'},</p>
+                              
+                              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                                <strong>${creatorName}</strong> has created a new advance collection in <strong>"${groupName}"</strong>.
+                              </p>
+                              
+                              <div style="background-color: #f5f5f5; border-left: 4px solid #6200EE; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                                <p style="color: #333333; font-size: 14px; margin: 5px 0; font-weight: bold;">Collection Details:</p>
+                                <p style="color: #333333; font-size: 14px; margin: 5px 0;"><strong>Recipient:</strong> ${recipientName}</p>
+                                <p style="color: #333333; font-size: 14px; margin: 5px 0;"><strong>Amount per Member:</strong> ₹${perMemberAmount!.toFixed(2)}</p>
+                                <p style="color: #333333; font-size: 14px; margin: 5px 0;"><strong>Total Amount:</strong> ₹${totalAmount!.toFixed(2)}</p>
+                                ${request.description ? `<p style="color: #333333; font-size: 14px; margin: 5px 0;"><strong>Description:</strong> ${request.description}</p>` : ''}
+                              </div>
+                              
+                              <div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                                <p style="color: #1565c0; font-size: 14px; margin: 0 0 10px 0; line-height: 1.6; font-weight: bold;">
+                                  📱 Next Steps:
+                                </p>
+                                <ol style="color: #1565c0; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
+                                  <li>Open the Flatmates Expense Tracker app</li>
+                                  <li>Go to the group "${groupName}"</li>
+                                  <li>Navigate to Advance Collections</li>
+                                  <li>Mark your contribution as paid (₹${perMemberAmount!.toFixed(2)})</li>
+                                  <li>Wait for ${recipientName} to approve your payment</li>
+                                </ol>
+                              </div>
+                            </td>
+                          </tr>
+                          
+                          <!-- Footer -->
+                          <tr>
+                            <td style="padding: 20px; text-align: center; border-top: 1px solid #eeeeee;">
+                              <p style="color: #999999; font-size: 12px; margin: 0;">
+                                This is an automated notification from Flatmates Expense Tracker.
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </body>
+                </html>
+              `;
+
+              const response = await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  to: memberProfile.email,
+                  subject: `New Advance Collection in "${groupName}" - ₹${perMemberAmount!.toFixed(2)} per member`,
+                  html: emailHtml,
+                }),
+              });
+
+              if (!response.ok) {
+                console.error('Email API error:', await response.text());
+              }
+            } catch (error) {
+              console.error('Error sending email to member:', error);
+              // Don't throw - continue with other members
+            }
+          }
         }
       }
     } catch (error) {
-      console.error('Error sending advance collection notifications:', error);
+      console.error('Error sending advance collection notifications/emails:', error);
+      // Don't throw - collection is already created
     }
 
     return completeCollection;
@@ -1794,7 +1946,7 @@ export const bulkPaymentService = {
   },
 
   /**
-   * Contribute to advance collection
+   * Contribute to advance collection (marks as pending_approval, requires recipient approval)
    */
   contributeToCollection: async (contributionId: string, notes?: string): Promise<AdvanceCollectionContribution> => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -1803,7 +1955,7 @@ export const bulkPaymentService = {
     const { data, error } = await supabase
       .from('advance_collection_contributions')
       .update({
-        status: 'paid',
+        status: 'pending_approval',
         contributed_at: new Date().toISOString(),
         notes: notes || null,
       })
@@ -1814,49 +1966,222 @@ export const bulkPaymentService = {
 
     if (error) throw error;
 
-    // Check if all contributions are paid, then mark collection as completed
+    // Get collection details to notify recipient
     const { data: collection } = await supabase
       .from('group_advance_collections')
-      .select('id, recipient_id, total_amount')
+      .select('id, recipient_id, total_amount, per_member_amount')
       .eq('id', data.collection_id)
       .single();
 
     if (collection) {
-      const { data: contributions } = await supabase
-        .from('advance_collection_contributions')
-        .select('status')
-        .eq('collection_id', collection.id);
+      // Get contributor info for notification
+      const { data: contributor } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
 
-      const allPaid = contributions?.every(c => c.status === 'paid');
-      if (allPaid) {
-        await supabase
-          .from('group_advance_collections')
-          .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-          })
-          .eq('id', collection.id);
-
-        // Notify recipient that collection is complete
-        try {
-          await notificationService.createNotification({
-            user_id: collection.recipient_id,
-            title: 'Advance Collection Completed',
-            message: `All members have contributed. Total received: ₹${collection.total_amount.toFixed(2)}`,
-            type: 'payment_received',
-            related_id: collection.id,
-            metadata: {
-              collection_id: collection.id,
-              total_amount: collection.total_amount,
-            },
-          });
-        } catch (error) {
-          console.error('Error sending collection completion notification:', error);
-        }
+      // Notify recipient that a contribution needs approval
+      try {
+        await notificationService.createNotification({
+          user_id: collection.recipient_id,
+          title: 'Contribution Pending Approval',
+          message: `${contributor?.full_name || 'A member'} has marked their contribution (₹${data.amount.toFixed(2)}) as paid. Please approve.`,
+          type: 'payment_received',
+          related_id: collection.id,
+          metadata: {
+            collection_id: collection.id,
+            contribution_id: contributionId,
+            amount: data.amount,
+          },
+        });
+      } catch (error) {
+        console.error('Error sending approval notification:', error);
       }
     }
 
     return data;
+  },
+
+  /**
+   * Approve a contribution (recipient only)
+   */
+  approveContribution: async (contributionId: string): Promise<AdvanceCollectionContribution> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Get contribution and collection to verify recipient
+    const { data: contribution, error: contribError } = await supabase
+      .from('advance_collection_contributions')
+      .select('*, collection:group_advance_collections!inner(recipient_id)')
+      .eq('id', contributionId)
+      .single();
+
+    if (contribError || !contribution) throw new Error('Contribution not found');
+
+    const collection = contribution.collection as any;
+    if (collection.recipient_id !== user.id) {
+      throw new Error('Only the recipient can approve contributions');
+    }
+
+    // Update contribution to paid
+    const { data: updated, error: updateError } = await supabase
+      .from('advance_collection_contributions')
+      .update({
+        status: 'paid',
+        approved_by: user.id,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', contributionId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Check if all contributions are paid, then mark collection as completed
+    const { data: allContributions } = await supabase
+      .from('advance_collection_contributions')
+      .select('status')
+      .eq('collection_id', collection.id);
+
+    const allPaid = allContributions?.every(c => c.status === 'paid');
+    if (allPaid) {
+      await supabase
+        .from('group_advance_collections')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', collection.id);
+
+      // Notify recipient that collection is complete
+      try {
+        await notificationService.createNotification({
+          user_id: collection.recipient_id,
+          title: 'Advance Collection Completed',
+          message: `All members have contributed. Total received: ₹${collection.total_amount?.toFixed(2) || '0.00'}`,
+          type: 'payment_received',
+          related_id: collection.id,
+          metadata: {
+            collection_id: collection.id,
+            total_amount: collection.total_amount,
+          },
+        });
+      } catch (error) {
+        console.error('Error sending collection completion notification:', error);
+      }
+    }
+
+    return updated;
+  },
+
+  /**
+   * Reject a contribution (recipient only)
+   */
+  rejectContribution: async (contributionId: string, reason?: string): Promise<AdvanceCollectionContribution> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Get contribution and collection to verify recipient
+    const { data: contribution, error: contribError } = await supabase
+      .from('advance_collection_contributions')
+      .select('*, collection:group_advance_collections!inner(recipient_id)')
+      .eq('id', contributionId)
+      .single();
+
+    if (contribError || !contribution) throw new Error('Contribution not found');
+
+    const collection = contribution.collection as any;
+    if (collection.recipient_id !== user.id) {
+      throw new Error('Only the recipient can reject contributions');
+    }
+
+    // Update contribution back to pending
+    const { data: updated, error: updateError } = await supabase
+      .from('advance_collection_contributions')
+      .update({
+        status: 'pending',
+        contributed_at: null,
+        notes: reason ? `Rejected: ${reason}` : 'Rejected by recipient',
+      })
+      .eq('id', contributionId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Notify contributor that their contribution was rejected
+    try {
+      await notificationService.createNotification({
+        user_id: contribution.user_id,
+        title: 'Contribution Rejected',
+        message: reason || 'Your contribution was rejected. Please contact the recipient.',
+        type: 'payment_received',
+        related_id: collection.id,
+        metadata: {
+          collection_id: collection.id,
+          contribution_id: contributionId,
+        },
+      });
+    } catch (error) {
+      console.error('Error sending rejection notification:', error);
+    }
+
+    return updated;
+  },
+
+  /**
+   * Get bulk payment statistics for a group
+   */
+  getBulkPaymentStats: async (groupId: string): Promise<{
+    activeCount: number;
+    totalCount: number;
+    completedCount: number;
+    pendingCount: number;
+    totalAmount: number;
+    pendingAmount: number;
+    activeAmount: number;
+  }> => {
+    // Get all collections for the group
+    const { data: collections, error: collectionsError } = await supabase
+      .from('group_advance_collections')
+      .select('id, status, total_amount, contributions:advance_collection_contributions(status, amount)')
+      .eq('group_id', groupId);
+
+    if (collectionsError) throw collectionsError;
+
+    const stats = {
+      activeCount: 0,
+      totalCount: collections?.length || 0,
+      completedCount: 0,
+      pendingCount: 0,
+      totalAmount: 0,
+      pendingAmount: 0,
+      activeAmount: 0,
+    };
+
+    collections?.forEach(collection => {
+      const contributions = collection.contributions as any[] || [];
+      
+      if (collection.status === 'active') {
+        stats.activeCount++;
+        stats.activeAmount += Number(collection.total_amount || 0);
+      } else if (collection.status === 'completed') {
+        stats.completedCount++;
+      }
+
+      stats.totalAmount += Number(collection.total_amount || 0);
+
+      // Count pending contributions
+      contributions.forEach(contrib => {
+        if (contrib.status === 'pending' || contrib.status === 'pending_approval') {
+          stats.pendingCount++;
+          stats.pendingAmount += Number(contrib.amount || 0);
+        }
+      });
+    });
+
+    return stats;
   },
 
   /**
@@ -1890,9 +2215,9 @@ export const bulkPaymentService = {
     // Calculate debts owed to recipient
     const memberDebts = balances
       .filter(b => b.user_id !== recipientId && b.balance < 0)
-      .map(balance => {
+      .map((balance: any) => {
         // Get expense count for this user (unsettled splits)
-        const expenseCount = expenses?.filter(e => 
+        const expenseCount = expenses?.filter((e: any) => 
           e.splits?.some((s: any) => s.user_id === balance.user_id && !s.is_settled)
         ).length || 0;
 
@@ -1939,10 +2264,65 @@ export const bulkPaymentService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Get settlement summary
-    const summary = await this.getBulkSettlementSummary(request.group_id, request.recipient_id);
+    // Get settlement summary using the method (it's defined earlier in the object)
+    // We'll use a workaround to avoid circular reference
+    const getSummary = async () => {
+      const balances = await groupService.getGroupBalances(request.group_id);
+      const { data: recipient } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('id', request.recipient_id)
+        .single();
+      if (!recipient) throw new Error('Recipient not found');
 
-    if (summary.member_debts.length === 0) {
+      const { data: expensesData } = await supabase
+        .from('expenses')
+        .select(`
+          id,
+          splits:expense_splits(
+            user_id,
+            is_settled
+          )
+        `)
+        .eq('group_id', request.group_id);
+
+      const memberDebts = balances
+        .filter((b: any) => b.user_id !== request.recipient_id && b.balance < 0)
+        .map((balance: any) => {
+          const expenseCount = expensesData?.filter((e: any) => 
+            e.splits?.some((s: any) => s.user_id === balance.user_id && !s.is_settled)
+          ).length || 0;
+          return {
+            user_id: balance.user_id,
+            user_name: '',
+            total_owed: Math.abs(balance.balance),
+            expense_count: expenseCount,
+          };
+        });
+
+      const userIds = memberDebts.map((d: any) => d.user_id);
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', userIds);
+        memberDebts.forEach((debt: any) => {
+          const user = users?.find((u: any) => u.id === debt.user_id);
+          debt.user_name = user?.full_name || 'Unknown';
+        });
+      }
+
+      return {
+        recipient_id: request.recipient_id,
+        recipient_name: recipient.full_name || 'Unknown',
+        total_amount: memberDebts.reduce((sum: number, debt: any) => sum + debt.total_owed, 0),
+        member_debts: memberDebts,
+      };
+    };
+
+    const summary = await getSummary();
+
+    if (!summary || !summary.member_debts || summary.member_debts.length === 0) {
       throw new Error('No debts to settle');
     }
 
@@ -1950,7 +2330,7 @@ export const bulkPaymentService = {
     const bulkSettlementId = `bulk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Create settlements for each member
-    const settlements = summary.member_debts.map(debt => ({
+    const settlements = summary.member_debts.map((debt: any) => ({
       group_id: request.group_id,
       from_user: debt.user_id,
       to_user: request.recipient_id,
@@ -1969,13 +2349,13 @@ export const bulkPaymentService = {
     if (settlementsError) throw settlementsError;
 
     // Mark all expense splits as settled for these users
-    const userIds = summary.member_debts.map(d => d.user_id);
-    const { data: expenses } = await supabase
+    const userIds = summary.member_debts.map((d: any) => d.user_id);
+    const { data: expensesData } = await supabase
       .from('expenses')
       .select('id')
       .eq('group_id', request.group_id);
 
-    const expenseIds = expenses?.map(e => e.id) || [];
+    const expenseIds = expensesData?.map((e: any) => e.id) || [];
 
     if (expenseIds.length > 0) {
       await supabase

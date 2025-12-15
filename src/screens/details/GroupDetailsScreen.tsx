@@ -9,6 +9,8 @@ import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember } from '../../store/slices/groupsSlice';
 import { fetchExpenses } from '../../store/slices/expensesSlice';
+import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
+import { useAppSelector } from '../../store';
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
@@ -35,6 +37,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
+  const { bulkPaymentStats } = useAppSelector(state => state.bulkPayments);
 
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -67,6 +70,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         dispatch(fetchGroup(groupId)).unwrap(),
         dispatch(fetchGroupBalances(groupId)).unwrap(),
         dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+        dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
       ]);
     } catch (error) {
       ErrorHandler.handleError(error, showToast, 'Load Group Details');
@@ -338,6 +342,60 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
           </Card.Content>
         </Card>
 
+        {/* Bulk Payment Highlights */}
+        {bulkPaymentStats && (
+          <Card style={styles.balanceCard}>
+            <Card.Content>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+                  Bulk Payments
+                </Text>
+                <Button
+                  mode="text"
+                  compact
+                  onPress={() => navigation.navigate('BulkPaymentStats', { groupId })}
+                >
+                  View Stats
+                </Button>
+              </View>
+
+              <View style={styles.balanceRow}>
+                <View style={styles.balanceItem}>
+                  <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>
+                    Active Collections
+                  </Text>
+                  <Text style={[styles.balanceAmount, { color: theme.colors.primary }]}>
+                    {bulkPaymentStats.activeCount}
+                  </Text>
+                  <Text style={[styles.balanceSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                    ₹{bulkPaymentStats.activeAmount.toFixed(2)}
+                  </Text>
+                </View>
+
+                <View style={styles.balanceItem}>
+                  <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>
+                    Balance Left
+                  </Text>
+                  <Text style={[styles.balanceAmount, { color: '#FF9800' }]}>
+                    ₹{bulkPaymentStats.pendingAmount.toFixed(2)}
+                  </Text>
+                  <Text style={[styles.balanceSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                    {bulkPaymentStats.pendingCount} pending
+                  </Text>
+                </View>
+              </View>
+
+              <Button
+                mode="outlined"
+                icon="chart-bar"
+                onPress={() => navigation.navigate('BulkPaymentStats', { groupId })}
+                style={{ marginTop: 12 }}
+              >
+                View All Statistics
+              </Button>
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Members Section */}
         <View style={styles.section}>
@@ -720,6 +778,10 @@ const styles = StyleSheet.create({
   balanceAmount: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  balanceSubtext: {
+    fontSize: 12,
+    marginTop: 4,
   },
   positiveBalance: {
     color: '#4CAF50',

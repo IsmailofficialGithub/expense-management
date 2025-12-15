@@ -40,6 +40,8 @@ import ChatScreen from '../screens/chat/ChatScreen';
 import NotificationsScreen from '../screens/main/NotificationsScreen';
 import AdvanceCollectionScreen from '../screens/details/AdvanceCollectionScreen';
 import BulkSettlementScreen from '../screens/details/BulkSettlementScreen';
+import BulkPaymentStatsScreen from '../screens/details/BulkPaymentStatsScreen';
+import SplashScreen from '../screens/SplashScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -58,6 +60,7 @@ export type MainTabParamList = {
 
 // *** ADD THIS TYPE FOR THE NEW ROOT STACK ***
 export type RootStackParamList = {
+  Splash: undefined;
   Auth: undefined;
   Main: undefined;
   GroupDetails: { groupId: string };
@@ -82,6 +85,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   AdvanceCollection: { groupId: string };
   BulkSettlement: { groupId: string };
+  BulkPaymentStats: { groupId: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -184,11 +188,6 @@ function MainNavigator() {
 export default function AppNavigator() {
   const { isAuthenticated, initialized } = useAuth();
 
-  // Show loading screen while checking auth status
-  if (!initialized) {
-    return <LoadingScreen />;
-  }
-
   // Screen options for detail and form screens
   const detailScreenOptions = {
     headerShown: true,
@@ -202,9 +201,17 @@ export default function AppNavigator() {
     },
   };
 
-  // Now, we return ONE stack, and let IT manage auth
+  // Show splash screen immediately - it will handle auth initialization in background
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+    <RootStack.Navigator 
+      screenOptions={{ headerShown: false }}
+      initialRouteName="Splash"
+    >
+      <RootStack.Screen 
+        name="Splash" 
+        component={SplashScreen}
+        options={{ headerShown: false }}
+      />
       {isAuthenticated ? (
         // User is Logged In: Show Main app and all detail screens
         <>
@@ -308,6 +315,11 @@ export default function AppNavigator() {
             name="BulkSettlement"
             component={BulkSettlementScreen}
             options={{ ...detailScreenOptions, title: 'Bulk Settlement' }}
+          />
+          <RootStack.Screen
+            name="BulkPaymentStats"
+            component={BulkPaymentStatsScreen}
+            options={{ ...detailScreenOptions, title: 'Bulk Payment Stats' }}
           />
         </>
       ) : (

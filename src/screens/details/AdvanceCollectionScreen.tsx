@@ -19,17 +19,23 @@ import {
   Chip,
   Avatar,
   IconButton,
+  Portal,
+  Modal,
 } from 'react-native-paper';
 import { useAppDispatch, useAppSelector } from '../../store';
 import {
   fetchAdvanceCollections,
   createAdvanceCollection,
   contributeToCollection,
+  approveContribution,
+  rejectContribution,
 } from '../../store/slices/bulkPaymentsSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { useGroups } from '../../hooks/useGroups';
 import { useToast } from '../../hooks/useToast';
 import { ErrorHandler } from '../../utils/errorHandler';
+import { paymentMethodService } from '../../services/supabase.service';
+import { usePersonalFinance } from '../../hooks/usePersonalFinance';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import LoadingOverlay from '../../components/LoadingOverlay';
@@ -44,6 +50,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
   const { profile } = useAuth();
   const { selectedGroup } = useGroups();
   const { showToast } = useToast();
+  const { completeBalance } = usePersonalFinance();
   const { advanceCollections, loading } = useAppSelector(
     state => state.bulkPayments
   );
@@ -56,10 +63,30 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
   const [selectedRecipient, setSelectedRecipient] = useState<string>('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+  const [pendingContributionId, setPendingContributionId] = useState<string | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
 
   useEffect(() => {
     loadCollections();
-  }, [groupId]);
+    loadPaymentMethods();
+  }, [groupId, profile?.id]);
+
+  const loadPaymentMethods = async () => {
+    if (!profile?.id) return;
+    try {
+      const methods = await paymentMethodService.getPaymentMethods(profile.id);
+      setPaymentMethods(methods);
+      // Auto-select default payment method if available
+      const defaultMethod = methods.find(m => m.is_default);
+      if (defaultMethod) {
+        setSelectedPaymentMethod(defaultMethod.id);
+      }
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+    }
+  };
 
   const loadCollections = async () => {
     try {
@@ -118,9 +145,38 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
   };
 
   const handleContribute = async (contributionId: string) => {
+    // Get contribution amount
+    const collection = advanceCollections.find(c => 
+      c.contributions?.some(contrib => contrib.id === contributionId)
+    );
+    const contribution = collection?.contributions?.find(c => c.id === contributionId);
+    const amount = contribution?.amount || 0;
+
+    // Check if user has sufficient balance
+    const hasBalance = completeBalance && completeBalance >= amount;
+    const hasPaymentMethods = paymentMethods.length > 0;
+
+    // If no balance and no payment methods, show error
+    if (!hasBalance && !hasPaymentMethods) {
+      showToast('No payment method available. Please add a payment method first.', 'error');
+      return;
+    }
+
+    // If no balance but has payment methods, show selection modal
+    if (!hasBalance && hasPaymentMethods) {
+      setPendingContributionId(contributionId);
+      setShowPaymentMethodModal(true);
+      return;
+    }
+
+    // If has balance or no payment method needed, proceed directly
+    proceedWithContribution(contributionId);
+  };
+
+  const proceedWithContribution = async (contributionId: string) => {
     Alert.alert(
       'Confirm Contribution',
-      'Have you paid your contribution?',
+      'Have you paid your contribution? It will be marked as pending approval and the recipient will need to approve it.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -128,7 +184,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
           onPress: async () => {
             try {
               await dispatch(contributeToCollection({ contributionId })).unwrap();
-              showToast('Contribution recorded!', 'success');
+              showToast('Contribution submitted! Waiting for recipient approval.', 'success');
               await loadCollections();
             } catch (error) {
               ErrorHandler.handleError(error, showToast, 'Contribute');
@@ -136,6 +192,63 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
           },
         },
       ]
+    );
+  };
+
+  const handlePaymentMethodSelected = async () => {
+    if (!pendingContributionId || !selectedPaymentMethod) {
+      showToast('Please select a payment method', 'error');
+      return;
+    }
+
+    setShowPaymentMethodModal(false);
+    // Proceed with contribution using selected payment method
+    await proceedWithContribution(pendingContributionId);
+    setPendingContributionId(null);
+  };
+
+  const handleApprove = async (contributionId: string) => {
+    Alert.alert(
+      'Approve Contribution',
+      'Are you sure you want to approve this contribution?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Approve',
+          onPress: async () => {
+            try {
+              await dispatch(approveContribution(contributionId)).unwrap();
+              showToast('Contribution approved!', 'success');
+              await loadCollections();
+            } catch (error) {
+              ErrorHandler.handleError(error, showToast, 'Approve');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReject = async (contributionId: string) => {
+    Alert.prompt(
+      'Reject Contribution',
+      'Please provide a reason for rejection (optional):',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          onPress: async (reason) => {
+            try {
+              await dispatch(rejectContribution({ contributionId, reason: reason || undefined })).unwrap();
+              showToast('Contribution rejected.', 'info');
+              await loadCollections();
+            } catch (error) {
+              ErrorHandler.handleError(error, showToast, 'Reject');
+            }
+          },
+        },
+      ],
+      'plain-text'
     );
   };
 
@@ -254,7 +367,9 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
             const myContribution = collection.contributions?.find(
               c => c.user_id === profile?.id
             );
+            const isRecipient = collection.recipient_id === profile?.id;
             const paidCount = collection.contributions?.filter(c => c.status === 'paid').length || 0;
+            const pendingApprovalCount = collection.contributions?.filter(c => c.status === 'pending_approval').length || 0;
             const totalCount = collection.contributions?.length || 0;
 
             return (
@@ -272,7 +387,8 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                         To: {collection.recipient?.full_name || 'Unknown'}
                       </Text>
                       <Text style={[styles.collectionProgress, { color: theme.colors.onSurfaceVariant }]}>
-                        {paidCount}/{totalCount} members contributed
+                        {paidCount}/{totalCount} members paid
+                        {pendingApprovalCount > 0 && ` • ${pendingApprovalCount} pending approval`}
                       </Text>
                     </View>
                   </View>
@@ -298,13 +414,27 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                         </Text>
                       </View>
                       <Chip
-                        icon={contribution.status === 'paid' ? 'check-circle' : 'clock-outline'}
+                        icon={
+                          contribution.status === 'paid' 
+                            ? 'check-circle' 
+                            : contribution.status === 'pending_approval'
+                            ? 'clock-alert-outline'
+                            : 'clock-outline'
+                        }
                         style={[
                           styles.statusChip,
-                          contribution.status === 'paid' && { backgroundColor: theme.colors.primaryContainer }
+                          contribution.status === 'paid' && { backgroundColor: theme.colors.primaryContainer },
+                          contribution.status === 'pending_approval' && { backgroundColor: '#FFF3E0' }
                         ]}
+                        textStyle={
+                          contribution.status === 'pending_approval' ? { color: '#FF9800' } : undefined
+                        }
                       >
-                        {contribution.status === 'paid' ? 'Paid' : 'Pending'}
+                        {contribution.status === 'paid' 
+                          ? 'Paid' 
+                          : contribution.status === 'pending_approval'
+                          ? 'Pending Approval'
+                          : 'Pending'}
                       </Chip>
                       {contribution.user_id === profile?.id && contribution.status === 'pending' && (
                         <Button
@@ -312,8 +442,30 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                           compact
                           onPress={() => handleContribute(contribution.id)}
                         >
-                          Mark Paid
+                          I Paid
                         </Button>
+                      )}
+                      {isRecipient && contribution.status === 'pending_approval' && (
+                        <View style={styles.approvalButtons}>
+                          <Button
+                            mode="contained"
+                            compact
+                            buttonColor="#4CAF50"
+                            onPress={() => handleApprove(contribution.id)}
+                            style={styles.approveButton}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            mode="outlined"
+                            compact
+                            textColor="#F44336"
+                            onPress={() => handleReject(contribution.id)}
+                            style={styles.rejectButton}
+                          >
+                            Reject
+                          </Button>
+                        </View>
                       )}
                     </View>
                   ))}
@@ -326,6 +478,13 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                     >
                       I've Paid My Share
                     </Button>
+                  )}
+                  {myContribution?.status === 'pending_approval' && (
+                    <View style={styles.pendingApprovalNotice}>
+                      <Text style={[styles.pendingApprovalText, { color: '#FF9800' }]}>
+                        ⏳ Your payment is pending approval from {collection.recipient?.full_name || 'the recipient'}
+                      </Text>
+                    </View>
                   )}
                 </Card.Content>
               </Card>
@@ -374,6 +533,69 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
       )}
 
       <LoadingOverlay visible={loading && !refreshing} message="Loading collections..." />
+
+      {/* Payment Method Selection Modal */}
+      <Portal>
+        <Modal
+          visible={showPaymentMethodModal}
+          onDismiss={() => {
+            setShowPaymentMethodModal(false);
+            setPendingContributionId(null);
+          }}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
+        >
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
+            Select Payment Method
+          </Text>
+          <Text style={[styles.modalSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+            Your account balance is insufficient. Please select a payment method:
+          </Text>
+          
+          {paymentMethods.map(method => (
+            <Card
+              key={method.id}
+              style={[
+                styles.paymentMethodCard,
+                selectedPaymentMethod === method.id && { borderColor: theme.colors.primary, borderWidth: 2 }
+              ]}
+              onPress={() => setSelectedPaymentMethod(method.id)}
+            >
+              <Card.Content style={styles.paymentMethodContent}>
+                <View style={styles.paymentMethodInfo}>
+                  <Text style={[styles.paymentMethodName, { color: theme.colors.onSurface }]}>
+                    {method.name}
+                  </Text>
+                  <Text style={[styles.paymentMethodType, { color: theme.colors.onSurfaceVariant }]}>
+                    {method.type}
+                  </Text>
+                </View>
+                {method.is_default && (
+                  <Chip icon="star" style={styles.defaultChip}>Default</Chip>
+                )}
+              </Card.Content>
+            </Card>
+          ))}
+
+          <View style={styles.modalActions}>
+            <Button
+              mode="outlined"
+              onPress={() => {
+                setShowPaymentMethodModal(false);
+                setPendingContributionId(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handlePaymentMethodSelected}
+              disabled={!selectedPaymentMethod}
+            >
+              Continue
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
     </ScrollView>
   );
 }
@@ -495,6 +717,72 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  approvalButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 8,
+  },
+  approveButton: {
+    flex: 1,
+  },
+  rejectButton: {
+    flex: 1,
+  },
+  pendingApprovalNotice: {
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  pendingApprovalText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  modalContent: {
+    padding: 20,
+    margin: 20,
+    borderRadius: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  paymentMethodCard: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  paymentMethodContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  paymentMethodInfo: {
+    flex: 1,
+  },
+  paymentMethodName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  paymentMethodType: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  defaultChip: {
+    backgroundColor: '#E3F2FD',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 16,
   },
 });
 

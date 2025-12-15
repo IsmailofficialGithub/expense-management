@@ -48,7 +48,7 @@ export const useRealtimeNotifications = (userId: string) => {
 
   useEffect(() => {
     if (!userId) {
-      console.log('useRealtimeNotifications: No userId provided');
+      // User not authenticated yet - this is expected during app initialization
       return;
     }
 
