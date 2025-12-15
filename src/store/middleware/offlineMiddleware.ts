@@ -1,6 +1,6 @@
 // src/store/middleware/offlineMiddleware.ts
 import { Middleware } from '@reduxjs/toolkit';
-import { RootState } from '../index';
+import { RootState } from '../rootReducer';
 import { storageService } from '../../services/storage.service';
 import { syncService, SyncOperationType, SyncEntityType } from '../../services/sync.service';
 
@@ -64,7 +64,7 @@ export const offlineMiddleware: Middleware<{}, RootState> = (store) => (next) =>
   const result = next(action);
   const state = store.getState();
   const isOnline = state.ui.isOnline;
-  const actionType = action.type;
+  const actionType = (action as any).type;
 
   // Handle fulfilled actions - save to local storage
   if (PERSIST_ACTIONS.includes(actionType)) {
