@@ -231,14 +231,14 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
   };
 
   return (
-    <SafeScrollView 
+    <SafeScrollView
       contentContainerStyle={[
         { padding: 16 },
         {
           paddingTop: insets.top + 16,
           paddingBottom: insets.bottom + 32,
         }
-      ]} 
+      ]}
       hasTabBar={false}
     >
       {/* Original Transaction Info */}
@@ -401,7 +401,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       {hasChanges && (
         <Card style={[styles.changesCard, { backgroundColor: theme.colors.errorContainer }]}>
           <Card.Content style={styles.changesContent}>
-            <IconButton icon="alert-circle" size={20} iconColor={theme.colors.warning || theme.colors.error} />
+            <IconButton icon="alert-circle" size={20} iconColor={theme.colors.error} />
             <Text style={[styles.changesText, { color: theme.colors.onErrorContainer }]}>You have unsaved changes</Text>
           </Card.Content>
         </Card>
@@ -411,7 +411,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       <Card
         style={[
           styles.summaryCard,
-          type === 'income' 
+          type === 'income'
             ? { backgroundColor: theme.colors.primaryContainer }
             : { backgroundColor: theme.colors.errorContainer },
         ]}
