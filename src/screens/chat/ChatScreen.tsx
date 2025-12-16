@@ -148,18 +148,20 @@ export default function ChatScreen({ route, navigation }: Props) {
       navigation.setOptions({
         title: isSelectionMode ? `${selectedMessages.size} selected` : title,
         headerRight: isSelectionMode ? () => (
-          <View style={{ flexDirection: 'row', marginRight: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: -8 }}>
             <IconButton
               icon="delete"
               iconColor={theme.colors.error}
               size={24}
               onPress={handleDeleteSelected}
+              style={{ margin: 0 }}
             />
             <IconButton
               icon="close"
               iconColor={theme.colors.onSurface}
               size={24}
               onPress={exitSelectionMode}
+              style={{ margin: 0 }}
             />
           </View>
         ) : undefined,
