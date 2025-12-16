@@ -37,7 +37,7 @@ export default function MessagesScreen({ navigation }: any) {
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useUI();
-  
+
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
   const [filteredConversations, setFilteredConversations] = useState<ConversationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,70 +64,123 @@ export default function MessagesScreen({ navigation }: any) {
     };
   }, []);
 
-  useEffect(() => {
-    loadConversations();
+  // 1. Define Helper Functions (needed by listeners and render)
+  const getConversationTitle = useCallback((conversation: ConversationWithDetails): string => {
+    if (conversation.type === 'group' && conversation.group) {
+      return conversation.group.name;
+    } else {
+      const otherParticipant = conversation.participants.find(p => p.user_id !== profile?.id);
+      return otherParticipant?.user?.full_name || otherParticipant?.user?.email || 'Unknown';
+    }
+  }, [profile?.id]);
 
-    return () => {
-      // Cleanup subscriptions
-      channelsRef.current.forEach(channel => {
-        supabase.removeChannel(channel);
-      });
-      channelsRef.current = [];
-    };
+  const getLastMessagePreview = useCallback((conversation: ConversationWithDetails): string => {
+    if (conversation.last_message_text) {
+      const isSelf = conversation.last_message_sender_id === profile?.id;
+      const prefix = isSelf ? 'You: ' : '';
+      return prefix + conversation.last_message_text;
+    }
+    return 'No messages yet';
+  }, [profile?.id]);
+
+  const getLastMessageTime = useCallback((conversation: ConversationWithDetails): string => {
+    if (conversation.last_message_at) {
+      const date = new Date(conversation.last_message_at);
+      const now = new Date();
+      const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+      if (diffInHours < 24) {
+        return format(date, 'HH:mm');
+      } else if (diffInHours < 168) {
+        return format(date, 'EEE');
+      } else {
+        return format(date, 'MMM dd');
+      }
+    }
+    return '';
   }, []);
 
-  useEffect(() => {
-    // Setup subscriptions when conversations are loaded
-    if (conversations.length > 0 && !loading) {
-      setupRealtimeSubscriptions();
+  const getConversationAvatar = useCallback((conversation: ConversationWithDetails) => {
+    if (conversation.type === 'group' && conversation.group) {
+      return (
+        <Avatar.Text
+          size={48}
+          label={conversation.group.name.substring(0, 2).toUpperCase()}
+          style={{ backgroundColor: theme.colors.primaryContainer }}
+          color={theme.colors.onPrimaryContainer}
+        />
+      );
+    } else {
+      const otherParticipant = conversation.participants.find(p => p.user_id !== profile?.id);
+      const user = otherParticipant?.user;
+      if (user?.avatar_url) {
+        return <Avatar.Image size={48} source={{ uri: user.avatar_url }} />;
+      } else {
+        return (
+          <Avatar.Text
+            size={48}
+            label={user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
+            style={{ backgroundColor: theme.colors.secondaryContainer }}
+            color={theme.colors.onSecondaryContainer}
+          />
+        );
+      }
     }
+  }, [profile?.id, theme.colors.primaryContainer, theme.colors.onPrimaryContainer, theme.colors.secondaryContainer, theme.colors.onSecondaryContainer]);
 
-    return () => {
-      // Cleanup when conversations change
-      channelsRef.current.forEach(channel => {
-        supabase.removeChannel(channel);
-      });
-      channelsRef.current = [];
-    };
-  }, [conversations.length, loading, setupRealtimeSubscriptions]);
-
-  useEffect(() => {
-    applyFilters();
-  }, [conversations, searchQuery, filter]);
-
-  const loadConversations = async () => {
+  // 2. Define Core Logic Functions
+  const loadConversations = useCallback(async () => {
     setError(null);
     let shouldContinueToAPI = true;
-    
+
     try {
       // First, try to load from cache immediately
       const { storageService } = await import('../../services/storage.service');
       const cachedConversations = await storageService.getConversations() || [];
+
       if (cachedConversations.length > 0) {
-        setConversations(cachedConversations);
+        setConversations(cachedConversations as ConversationWithDetails[]);
         setLoading(false);
-        
-        // Then sync in background if online
+
+        // If offline, stop here
         if (!isOnline) {
-          shouldContinueToAPI = false; // Offline, use cache only
+          shouldContinueToAPI = false;
         }
+      } else {
+        // Only show loading spinner if no cache
+        if (conversations.length === 0) setLoading(true);
       }
-      
-      // Fetch from API if needed
+
+      // Fetch from API in background if needed
       if (shouldContinueToAPI) {
-        const data = await chatService.getConversations();
-        setConversations(data);
+        // Don't await if we already displayed cached data - let it update in background
+        const apiPromise = chatService.getConversations().then(data => {
+          setConversations(data);
+          setLoading(false);
+          setRefreshing(false);
+        }).catch(err => {
+          console.error('Background chat sync error:', err);
+          // Silent fail for background sync
+        });
+
+        if (cachedConversations.length === 0) {
+          await apiPromise;
+        }
       }
     } catch (error: any) {
       const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
-      setError(errorMessage);
-      ErrorHandler.handleError(error, showToast, 'Messages');
+      if (conversations.length === 0) {
+        setError(errorMessage);
+        ErrorHandler.handleError(error, showToast, 'Messages');
+      }
     } finally {
-      // Always clear loading states
-      setLoading(false);
-      setRefreshing(false);
+      // Ensure loading is cleared if we have data or if explicit wait finished
+      if (conversations.length > 0) {
+        setLoading(false);
+      }
+      setRefreshing(false); // Always clear refreshing
     }
-  };
+  }, [conversations.length, isOnline, showToast]);
 
   const setupRealtimeSubscriptions = useCallback(() => {
     // Clean up existing subscriptions
@@ -138,7 +191,7 @@ export default function MessagesScreen({ navigation }: any) {
 
     // Subscribe to messages for all conversations
     const conversationIds = conversations.map(c => c.id);
-    
+
     if (conversationIds.length === 0) return;
 
     // Subscribe to new messages in any of the user's conversations
@@ -153,12 +206,10 @@ export default function MessagesScreen({ navigation }: any) {
         },
         async (payload) => {
           const newMessage = payload.new as any;
-          
-          // Only update if this message is for one of our conversations
+
           if (conversationIds.includes(newMessage.conversation_id)) {
-            // Check if current user sent this message
             const isMyMessage = newMessage.sender_id === profile?.id;
-            
+
             // Get sender info
             const { data: sender } = await supabase
               .from('profiles')
@@ -168,14 +219,9 @@ export default function MessagesScreen({ navigation }: any) {
 
             // Find the conversation
             const conversation = conversations.find(c => c.id === newMessage.conversation_id);
-            
+
             // Send notification if message is not from current user
-            // (Notifications will always play sound due to handler config)
             if (!isMyMessage) {
-              const conversationName = conversation?.type === 'group' && conversation?.group
-                ? conversation.group.name
-                : sender?.full_name || 'Someone';
-              
               try {
                 await notificationsService.notifyNewMessage(
                   sender?.full_name || 'Someone',
@@ -189,7 +235,7 @@ export default function MessagesScreen({ navigation }: any) {
               }
             }
 
-            // Update the conversation that received the message
+            // Update conversations list locally
             setConversations(prev => {
               const updated = prev.map(conv => {
                 if (conv.id === newMessage.conversation_id) {
@@ -206,7 +252,6 @@ export default function MessagesScreen({ navigation }: any) {
                 return conv;
               });
 
-              // Sort by last_message_at (most recent first)
               return updated.sort((a, b) => {
                 const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
                 const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
@@ -220,43 +265,26 @@ export default function MessagesScreen({ navigation }: any) {
 
     channelsRef.current.push(messagesChannel);
 
-    // Subscribe to conversation updates (when last_message_at changes)
+    // Subscribe to conversation updates
     const conversationsChannel = supabase
       .channel(`conversations-updates-${Date.now()}`)
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'conversations',
-        },
+        { event: 'UPDATE', schema: 'public', table: 'conversations' },
         async (payload) => {
           const updatedConv = payload.new as any;
-          
-          // Only update if this is one of our conversations
           if (conversationIds.includes(updatedConv.id)) {
-            // Reload the specific conversation
-            try {
-              const updated = await chatService.getConversation(updatedConv.id);
-              if (updated) {
-                setConversations(prev => {
-                  const index = prev.findIndex(c => c.id === updatedConv.id);
-                  if (index >= 0) {
-                    const newList = [...prev];
-                    newList[index] = updated;
-                    // Re-sort
-                    return newList.sort((a, b) => {
-                      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-                      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-                      return bTime - aTime;
-                    });
-                  }
-                  return prev;
-                });
-              }
-            } catch (error) {
-              // If error, just reload all
-              loadConversations();
+            const updated = await chatService.getConversation(updatedConv.id);
+            if (updated) {
+              setConversations(prev => {
+                const idx = prev.findIndex(c => c.id === updated.id);
+                if (idx === -1) return prev;
+                const newArr = [...prev];
+                newArr[idx] = updated;
+                return newArr.sort((a, b) =>
+                  (new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
+                );
+              });
             }
           }
         }
@@ -266,12 +294,7 @@ export default function MessagesScreen({ navigation }: any) {
     channelsRef.current.push(conversationsChannel);
   }, [conversations, profile?.id]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadConversations();
-  }, []);
-
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...conversations];
 
     // Apply type filter
@@ -290,75 +313,50 @@ export default function MessagesScreen({ navigation }: any) {
         } else if (conv.type === 'individual') {
           const otherParticipant = conv.participants.find(p => p.user_id !== profile?.id);
           return otherParticipant?.user?.full_name?.toLowerCase().includes(query) ||
-                 otherParticipant?.user?.email?.toLowerCase().includes(query);
+            otherParticipant?.user?.email?.toLowerCase().includes(query);
         }
         return false;
       });
     }
 
     setFilteredConversations(filtered);
-  };
+  }, [conversations, filter, searchQuery, profile?.id]);
 
-  const getConversationTitle = (conversation: ConversationWithDetails): string => {
-    if (conversation.type === 'group' && conversation.group) {
-      return conversation.group.name;
-    } else {
-      const otherParticipant = conversation.participants.find(p => p.user_id !== profile?.id);
-      return otherParticipant?.user?.full_name || otherParticipant?.user?.email || 'Unknown';
-    }
-  };
+  // 3. Define Effects
+  useEffect(() => {
+    // Initial load
+    loadConversations();
 
-  const getConversationAvatar = (conversation: ConversationWithDetails) => {
-    if (conversation.type === 'group' && conversation.group) {
-      return (
-        <Avatar.Text
-          size={48}
-          label={conversation.group.name.substring(0, 2).toUpperCase()}
-          style={styles.avatar}
-        />
-      );
-    } else {
-      const otherParticipant = conversation.participants.find(p => p.user_id !== profile?.id);
-      const user = otherParticipant?.user;
-      if (user?.avatar_url) {
-        return <Avatar.Image size={48} source={{ uri: user.avatar_url }} style={styles.avatar} />;
-      } else {
-        return (
-          <Avatar.Text
-            size={48}
-            label={user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-            style={styles.avatar}
-          />
-        );
-      }
-    }
-  };
+    return () => {
+      channelsRef.current.forEach(c => supabase.removeChannel(c));
+      channelsRef.current = [];
+    };
+  }, [loadConversations]); // Run once on mount
 
-  const getLastMessagePreview = (conversation: ConversationWithDetails): string => {
-    if (conversation.last_message_text) {
-      return conversation.last_message_text;
+  useEffect(() => {
+    if (conversations.length > 0 && !loading) {
+      setupRealtimeSubscriptions();
     }
-    return 'No messages yet';
-  };
+  }, [conversations.length, loading, setupRealtimeSubscriptions]);
 
-  const getLastMessageTime = (conversation: ConversationWithDetails): string => {
-    if (conversation.last_message_at) {
-      const date = new Date(conversation.last_message_at);
-      const now = new Date();
-      const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-      
-      if (diffInHours < 24) {
-        return format(date, 'HH:mm');
-      } else if (diffInHours < 168) {
-        return format(date, 'EEE');
-      } else {
-        return format(date, 'MMM dd');
-      }
-    }
-    return '';
-  };
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+
+  // 4. Interaction Handlers
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadConversations();
+  }, [loadConversations]);
 
   const handleConversationPress = (conversation: ConversationWithDetails) => {
+    // Reset unread count when opening conversation
+    setConversations(prev =>
+      prev.map(conv =>
+        conv.id === conversation.id ? { ...conv, unread_count: 0 } : conv,
+      ),
+    );
     // Navigate to Chat screen in RootStack
     navigation.getParent()?.navigate('Chat', { conversationId: conversation.id });
   };
@@ -370,7 +368,7 @@ export default function MessagesScreen({ navigation }: any) {
 
   const handleStartNewChat = async () => {
     setEmailError('');
-    
+
     if (!userEmail.trim()) {
       setEmailError('Email is required');
       return;
@@ -391,14 +389,14 @@ export default function MessagesScreen({ navigation }: any) {
       const conversation = await chatService.getOrCreateIndividualConversation({
         other_user_email: userEmail.trim(),
       });
-      
+
       setNewChatModalVisible(false);
       setUserEmail('');
       setEmailError('');
-      
+
       // Reload conversations to show the new one
       await loadConversations();
-      
+
       // Navigate to the chat (use parent navigator to access RootStack)
       navigation.getParent()?.navigate('Chat', { conversationId: conversation.id });
     } catch (error: any) {
@@ -460,25 +458,6 @@ export default function MessagesScreen({ navigation }: any) {
         </Card.Content>
       </Card>
     );
-  };
-
-  // Show error state if there's an error and no conversations
-  if (error && conversations.length === 0 && !loading) {
-    return (
-      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.colors.background }]}>
-        <ErrorState
-          message={error}
-          onRetry={() => {
-            setError(null);
-            setLoading(true);
-            loadConversations();
-          }}
-        />
-      </View>
-    );
-  }
-
-  if (loading) {
     return (
       <View style={[styles.container, styles.centerContent, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />

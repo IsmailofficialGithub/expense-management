@@ -29,11 +29,11 @@ export const chatService = {
     // Check if offline and load from local storage
     const { isOnline } = await import('../utils/networkAware');
     const { storageService } = await import('./storage.service');
-    
+
     if (!isOnline()) {
       // Load from local storage
       const cachedConversations = await storageService.getConversations() || [];
-      return cachedConversations;
+      return cachedConversations as unknown as ConversationWithDetails[];
     }
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -174,7 +174,7 @@ export const chatService = {
 
     if (myConversations && myConversations.length > 0) {
       const myConversationIds = myConversations.map(cp => cp.conversation_id);
-      
+
       // Get conversations where other user is also a participant
       const { data: sharedConversations } = await supabase
         .from('conversation_participants')
@@ -328,7 +328,7 @@ export const chatService = {
         // If online call fails, queue for sync
         console.warn('Failed to send message online, queueing for sync:', error);
         await syncService.addToQueue('create', 'message', request);
-        
+
         // Create temporary message for offline display
         const tempMessage: MessageWithStatus = {
           id: `temp-${Date.now()}-${Math.random()}`,
@@ -344,17 +344,17 @@ export const chatService = {
           total_participants: 0,
           status: 'sending',
         };
-        
+
         // Save to local storage
         const existingMessages = await storageService.getMessages(request.conversation_id) || [];
         await storageService.setMessages([...existingMessages, tempMessage], request.conversation_id);
-        
+
         return tempMessage;
       }
     } else {
       // Offline: queue the message
       await syncService.addToQueue('create', 'message', request);
-      
+
       // Create temporary message for offline display
       const tempMessage: MessageWithStatus = {
         id: `temp-${Date.now()}-${Math.random()}`,
@@ -370,11 +370,11 @@ export const chatService = {
         total_participants: 0,
         status: 'sending',
       };
-      
+
       // Save to local storage
       const existingMessages = await storageService.getMessages(request.conversation_id) || [];
       await storageService.setMessages([...existingMessages, tempMessage], request.conversation_id);
-      
+
       return tempMessage;
     }
   },
@@ -383,31 +383,31 @@ export const chatService = {
    * Get messages for a conversation with pagination
    */
   async getMessages(
-    conversationId: string, 
+    conversationId: string,
     limit: number = 20,
     beforeTimestamp?: string
   ): Promise<{ messages: MessageWithStatus[]; hasMore: boolean }> {
     // Check if offline and load from local storage
     const { isOnline } = await import('../utils/networkAware');
     const { storageService } = await import('./storage.service');
-    
+
     if (!isOnline()) {
       // Load from local storage
       const localMessages = await storageService.getMessages(conversationId) || [];
       // Sort by created_at descending (newest first)
-      const sorted = localMessages.sort((a: any, b: any) => 
+      const sorted = localMessages.sort((a: any, b: any) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       // Apply pagination if needed
-      const paginated = beforeTimestamp 
+      const paginated = beforeTimestamp
         ? sorted.filter((m: any) => new Date(m.created_at).getTime() < new Date(beforeTimestamp).getTime()).slice(0, limit)
         : sorted.slice(0, limit);
       return {
-        messages: paginated,
+        messages: paginated as MessageWithStatus[],
         hasMore: sorted.length > paginated.length,
       };
     }
-    
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -743,7 +743,7 @@ export const chatService = {
         },
         async (payload) => {
           console.log('Read receipt INSERT event:', payload.new);
-          
+
           // Get message to check if it's in this conversation
           const { data: message, error: messageError } = await supabase
             .from('messages')
@@ -784,9 +784,9 @@ export const chatService = {
             console.error('Error getting read count:', countError);
           }
 
-          console.log('Calling callback with:', { 
-            messageId: payload.new.message_id, 
-            readCount: readCount || 0, 
+          console.log('Calling callback with:', {
+            messageId: payload.new.message_id,
+            readCount: readCount || 0,
             participantCount: participantCount || 0,
             senderId: message.sender_id,
             readerId: payload.new.user_id
@@ -794,8 +794,8 @@ export const chatService = {
 
           // Always call callback - let the UI component decide if it should process it
           callback(
-            payload.new.message_id, 
-            readCount || 0, 
+            payload.new.message_id,
+            readCount || 0,
             participantCount || 0,
             message.sender_id
           );
@@ -829,8 +829,8 @@ export const chatService = {
               .neq('user_id', message.sender_id);
 
             callback(
-              payload.new.message_id, 
-              readCount || 0, 
+              payload.new.message_id,
+              readCount || 0,
               participantCount || 0,
               message.sender_id
             );

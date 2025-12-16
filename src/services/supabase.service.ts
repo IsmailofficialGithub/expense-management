@@ -1311,12 +1311,12 @@ export const groupService = {
       .in('id', groupIds);
 
     if (error) throw error;
-    
+
     // Additional client-side filter to ensure only groups with current user as member
     const filtered = (data || []).filter((group: any) => {
       return group.members?.some((member: any) => member.user_id === user.id);
     });
-    
+
     return filtered as any;
   },
 
@@ -1779,7 +1779,7 @@ export const bulkPaymentService = {
       if (members) {
         for (const member of members) {
           const memberProfile = member.user as any;
-          
+
           // Send in-app notification
           if (member.user_id !== user.id) {
             try {
@@ -2162,7 +2162,7 @@ export const bulkPaymentService = {
 
     collections?.forEach(collection => {
       const contributions = collection.contributions as any[] || [];
-      
+
       if (collection.status === 'active') {
         stats.activeCount++;
         stats.activeAmount += Number(collection.total_amount || 0);
@@ -2217,7 +2217,7 @@ export const bulkPaymentService = {
       .filter(b => b.user_id !== recipientId && b.balance < 0)
       .map((balance: any) => {
         // Get expense count for this user (unsettled splits)
-        const expenseCount = expenses?.filter((e: any) => 
+        const expenseCount = expenses?.filter((e: any) =>
           e.splits?.some((s: any) => s.user_id === balance.user_id && !s.is_settled)
         ).length || 0;
 
@@ -2289,7 +2289,7 @@ export const bulkPaymentService = {
       const memberDebts = balances
         .filter((b: any) => b.user_id !== request.recipient_id && b.balance < 0)
         .map((balance: any) => {
-          const expenseCount = expensesData?.filter((e: any) => 
+          const expenseCount = expensesData?.filter((e: any) =>
             e.splits?.some((s: any) => s.user_id === balance.user_id && !s.is_settled)
           ).length || 0;
           return {
@@ -2573,7 +2573,7 @@ export const notificationService = {
         }
 
         // Find split for this user
-        const userSplit = Array.isArray(expense.splits) 
+        const userSplit = Array.isArray(expense.splits)
           ? (expense.splits as any[]).find((s: any) => s.user_id === member.user_id)
           : null;
 
@@ -2624,10 +2624,10 @@ export const notificationService = {
           // Send Expo push notifications for each notification
           try {
             const { sendExpoPushNotification, getGroupMemberPushTokens } = await import('./push-notifications.service');
-            
+
             // Get push tokens for all recipients
             const pushTokens = await getGroupMemberPushTokens(groupId, expense.paid_by);
-            
+
             if (pushTokens.length > 0) {
               // Send push notifications for expense_added type
               const expenseAddedNotifications = notifications.filter(n => n.type === 'expense_added');
@@ -2636,7 +2636,7 @@ export const notificationService = {
                 // Get unread count for badge
                 const { notificationService } = await import('./supabase.service');
                 const unreadCount = await notificationService.getUnreadCount();
-                
+
                 await sendExpoPushNotification(
                   pushTokens,
                   firstNotification.title,
@@ -2664,7 +2664,7 @@ export const notificationService = {
                   // Get unread count for badge
                   const { notificationService } = await import('./supabase.service');
                   const unreadCount = await notificationService.getUnreadCount();
-                  
+
                   await sendExpoPushNotification(
                     userProfile.push_token,
                     splitNotif.title,
@@ -2781,7 +2781,7 @@ export const realtimeService = {
           console.error('Error subscribing to notifications channel');
         }
       });
-    
+
     return channel;
   },
 

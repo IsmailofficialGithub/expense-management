@@ -12,7 +12,9 @@ import {
   UserPaymentMethod,
   Notification,
   Message,
-  Conversation
+  MessageWithStatus,
+  Conversation,
+  ConversationWithDetails
 } from '../types/database.types';
 
 // Storage keys
@@ -330,8 +332,8 @@ export const storageService = {
   },
 
   // Messages
-  async getMessages(conversationId?: string): Promise<Message[] | null> {
-    const messages = await storage.get<Message[]>(STORAGE_KEYS.MESSAGES);
+  async getMessages(conversationId?: string): Promise<MessageWithStatus[] | null> {
+    const messages = await storage.get<MessageWithStatus[]>(STORAGE_KEYS.MESSAGES);
     if (!messages) return null;
     if (conversationId) {
       return messages.filter((m: any) => m.conversation_id === conversationId);
@@ -364,8 +366,8 @@ export const storageService = {
   },
 
   // Conversations
-  async getConversations(): Promise<Conversation[] | null> {
-    return storage.get<Conversation[]>(STORAGE_KEYS.CONVERSATIONS);
+  async getConversations(): Promise<ConversationWithDetails[] | null> {
+    return storage.get<ConversationWithDetails[]>(STORAGE_KEYS.CONVERSATIONS);
   },
 
   async setConversations(conversations: any[]) {
