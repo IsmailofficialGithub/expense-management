@@ -181,7 +181,25 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
 
     // Check if user has sufficient balance
     const hasBalance = completeBalance && completeBalance.net_balance >= amount;
-    const hasPaymentMethods = paymentMethods.length > 0;
+
+    // Check if payment methods are loaded, if not fetch them
+    let currentPaymentMethods = paymentMethods;
+    if (currentPaymentMethods.length === 0 && profile?.id) {
+      try {
+        currentPaymentMethods = await paymentMethodService.getPaymentMethods(profile.id);
+        setPaymentMethods(currentPaymentMethods);
+
+        // Auto-select default payment method if available
+        const defaultMethod = currentPaymentMethods.find((m: any) => m.is_default);
+        if (defaultMethod) {
+          setSelectedPaymentMethod(defaultMethod.id);
+        }
+      } catch (error) {
+        console.error('Error fetching payment methods:', error);
+      }
+    }
+
+    const hasPaymentMethods = currentPaymentMethods.length > 0;
 
     // If no balance and no payment methods, show error
     if (!hasBalance && !hasPaymentMethods) {
@@ -634,7 +652,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
           }}
           contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
-          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]} onPress={() => { console.log(paymentMethods) }}>
             Select Payment Method
           </Text>
           <Text style={[styles.modalSubtitle, { color: theme.colors.onSurfaceVariant }]}>
@@ -653,10 +671,14 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
               <Card.Content style={styles.paymentMethodContent}>
                 <View style={styles.paymentMethodInfo}>
                   <Text style={[styles.paymentMethodName, { color: theme.colors.onSurface }]}>
-                    {method.name}
+                    {method.custom_name ||
+                      (method.method_type === 'bank' ? method.bank_name :
+                        method.method_type === 'card' ? `Card ending in ${method.card_last_four}` :
+                          method.method_type === 'jazzcash' || method.method_type === 'easypaisa' ? method.phone_number :
+                            method.method_type)}
                   </Text>
                   <Text style={[styles.paymentMethodType, { color: theme.colors.onSurfaceVariant }]}>
-                    {method.type}
+                    {method.method_type.charAt(0).toUpperCase() + method.method_type.slice(1)}
                   </Text>
                 </View>
                 {method.is_default && (
