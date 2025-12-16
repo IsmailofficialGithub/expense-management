@@ -1,5 +1,5 @@
 // src/screens/main/PersonalFinanceScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,6 +16,7 @@ import {
   FAB,
   SegmentedButtons,
   Divider,
+  useTheme,
 } from 'react-native-paper';
 import { usePersonalFinance } from '../../hooks/usePersonalFinance';
 import { useAuth } from '../../hooks/useAuth';
@@ -42,6 +43,8 @@ export default function PersonalFinanceScreen({ navigation }: any) {
     showToast: true,
     onOnline: () => loadData(),
   });
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [refreshing, setRefreshing] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
@@ -165,7 +168,7 @@ export default function PersonalFinanceScreen({ navigation }: any) {
     groupedTransactions[dateKey].push(transaction);
   });
 
-  const sortedDates = Object.keys(groupedTransactions).sort((a, b) => 
+  const sortedDates = Object.keys(groupedTransactions).sort((a, b) =>
     new Date(b).getTime() - new Date(a).getTime()
   );
 
@@ -218,8 +221,8 @@ export default function PersonalFinanceScreen({ navigation }: any) {
                 totalSavings > 0
                   ? styles.positiveBalance
                   : totalSavings < 0
-                  ? styles.negativeBalance
-                  : styles.neutralBalance,
+                    ? styles.negativeBalance
+                    : styles.neutralBalance,
               ]}
             >
               ₹{totalSavings.toFixed(2)}
@@ -296,8 +299,8 @@ export default function PersonalFinanceScreen({ navigation }: any) {
                       monthlySavings > 0
                         ? styles.incomeText
                         : monthlySavings < 0
-                        ? styles.expenseText
-                        : styles.neutralText,
+                          ? styles.expenseText
+                          : styles.neutralText,
                     ]}
                   >
                     ₹{monthlySavings.toFixed(0)}
@@ -419,10 +422,10 @@ export default function PersonalFinanceScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   content: {
     padding: 16,
@@ -430,12 +433,12 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     marginBottom: 16,
-    backgroundColor: '#6200EE',
+    backgroundColor: theme.colors.primary,
     elevation: 4,
   },
   summaryTitle: {
     fontSize: 14,
-    color: '#fff',
+    color: theme.colors.onPrimary,
     opacity: 0.8,
     marginBottom: 8,
   },
@@ -443,15 +446,16 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     marginBottom: 16,
+    color: theme.colors.onPrimary,
   },
   positiveBalance: {
-    color: '#4CAF50',
+    color: '#A5D6A7', // Light green for visibility on primary dark
   },
   negativeBalance: {
-    color: '#F44336',
+    color: '#EF9A9A', // Light red for visibility on primary dark
   },
   neutralBalance: {
-    color: '#fff',
+    color: theme.colors.onPrimary,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -464,7 +468,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 11,
-    color: '#fff',
+    color: theme.colors.onPrimary,
     opacity: 0.8,
   },
   summaryValue: {
@@ -473,23 +477,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   incomeText: {
-    color: '#4CAF50',
+    color: '#4CAF50', // Keep distinct green
   },
   expenseText: {
-    color: '#F44336',
+    color: theme.colors.error,
   },
   neutralText: {
-    color: '#666',
+    color: theme.colors.onSurfaceVariant,
   },
   verticalDivider: {
     width: 1,
     height: 40,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.onPrimary,
     opacity: 0.3,
   },
   monthCard: {
     marginBottom: 16,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
   },
   monthSelector: {
@@ -501,7 +505,7 @@ const styles = StyleSheet.create({
   monthText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: theme.colors.onSurface,
   },
   monthlyStats: {
     flexDirection: 'row',
@@ -514,7 +518,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 11,
-    color: '#666',
+    color: theme.colors.onSurfaceVariant,
   },
   statValue: {
     fontSize: 16,
@@ -527,7 +531,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
   },
   emptyContent: {
     alignItems: 'center',
@@ -536,12 +540,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#666',
+    color: theme.colors.onSurfaceVariant,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
+    color: theme.colors.onSurfaceDisabled,
   },
   dateGroup: {
     marginBottom: 24,
@@ -549,13 +553,13 @@ const styles = StyleSheet.create({
   dateHeader: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#666',
+    color: theme.colors.onSurfaceVariant,
     marginBottom: 8,
     textTransform: 'uppercase',
   },
   transactionCard: {
     marginBottom: 8,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
   },
   transactionContent: {
@@ -571,6 +575,7 @@ const styles = StyleSheet.create({
   categoryIcon: {
     fontSize: 32,
     marginRight: 12,
+    color: theme.colors.onSurface,
   },
   transactionInfo: {
     flex: 1,
@@ -578,21 +583,23 @@ const styles = StyleSheet.create({
   transactionDescription: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.onSurface,
     marginBottom: 4,
   },
   categoryChip: {
     alignSelf: 'flex-start',
     height: 24,
     marginBottom: 4,
+    borderColor: theme.colors.outline,
   },
   categoryChipText: {
     fontSize: 10,
     marginVertical: 0,
+    color: theme.colors.onSurfaceVariant,
   },
   transactionNotes: {
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.onSurfaceVariant,
     fontStyle: 'italic',
   },
   transactionRight: {
@@ -609,6 +616,6 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 0,
-    backgroundColor: '#6200EE',
+    backgroundColor: theme.colors.primary,
   },
 });
