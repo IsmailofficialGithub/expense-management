@@ -150,12 +150,12 @@ export default function ProfileScreen({ navigation }: any) {
       return;
     }
 
- const result = await ImagePicker.launchImageLibraryAsync({
-  mediaTypes: ['images'],
-  allowsEditing: true,
-  aspect: [1, 1],
-  quality: 0.8,
-});
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
     if (!result.canceled && result.assets[0]) {
       setSelectedImageUri(result.assets[0].uri);
       setAvatarModalVisible(true);
@@ -169,12 +169,12 @@ export default function ProfileScreen({ navigation }: any) {
       return;
     }
 
- const result = await ImagePicker.launchCameraAsync({
-  mediaTypes: ['images'],
-  allowsEditing: true,
-  aspect: [1, 1],
-  quality: 0.8,
-});
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
 
     if (!result.canceled && result.assets[0]) {
       setSelectedImageUri(result.assets[0].uri);
@@ -182,72 +182,72 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
- const handleUploadAvatar = async () => {
-  if (!selectedImageUri || !isOnline) {
-    showToast('Cannot upload avatar. No internet connection.', 'error');
-    return;
-  }
+  const handleUploadAvatar = async () => {
+    if (!selectedImageUri || !isOnline) {
+      showToast('Cannot upload avatar. No internet connection.', 'error');
+      return;
+    }
 
-  setUploadingAvatar(true);
-  try {
-    // Pass the URI directly - the service will handle conversion
-    await dispatch(uploadAvatar(selectedImageUri)).unwrap();
+    setUploadingAvatar(true);
+    try {
+      // Pass the URI directly - the service will handle conversion
+      await dispatch(uploadAvatar(selectedImageUri)).unwrap();
 
-    setAvatarModalVisible(false);
-    setSelectedImageUri(null);
-    showToast('Avatar updated successfully!', 'success');
-  } catch (error) {
-    ErrorHandler.handleError(error, showToast, 'Upload Avatar');
-  } finally {
-    setUploadingAvatar(false);
-  }
-};
-const handleRemoveAvatar = () => {
-  Alert.alert('Remove Avatar', 'Are you sure you want to remove your profile picture?', [
-    { text: 'Cancel', style: 'cancel' },
-    {
-      text: 'Remove',
-      style: 'destructive',
-      onPress: async () => {
-        if (!isOnline) {
-          showToast('Cannot remove avatar. No internet connection.', 'error');
-          return;
-        }
-
-        setIsProcessing(true);
-        try {
-          // Delete file from storage first
-          if (profile?.avatar_url) {
-            const urlParts = profile.avatar_url.split('/avatars/');
-            if (urlParts.length > 1) {
-              const fileName = urlParts[1];
-              
-              // Import supabase
-              const { supabase } = await import('../../services/supabase');
-              
-              await supabase.storage
-                .from('avatars')
-                .remove([fileName]);
-            }
+      setAvatarModalVisible(false);
+      setSelectedImageUri(null);
+      showToast('Avatar updated successfully!', 'success');
+    } catch (error) {
+      ErrorHandler.handleError(error, showToast, 'Upload Avatar');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+  const handleRemoveAvatar = () => {
+    Alert.alert('Remove Avatar', 'Are you sure you want to remove your profile picture?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          if (!isOnline) {
+            showToast('Cannot remove avatar. No internet connection.', 'error');
+            return;
           }
 
-          // Then update profile to remove URL
-          await dispatch(
-            updateProfile({
-              avatar_url: null,
-            })
-          ).unwrap();
-          
-          showToast('Avatar removed successfully', 'success');
-        } catch (error) {
-          ErrorHandler.handleError(error, showToast, 'Remove Avatar');
-        } finally {
-          setIsProcessing(false);
-        }
+          setIsProcessing(true);
+          try {
+            // Delete file from storage first
+            if (profile?.avatar_url) {
+              const urlParts = profile.avatar_url.split('/avatars/');
+              if (urlParts.length > 1) {
+                const fileName = urlParts[1];
+
+                // Import supabase
+                const { supabase } = await import('../../services/supabase');
+
+                await supabase.storage
+                  .from('avatars')
+                  .remove([fileName]);
+              }
+            }
+
+            // Then update profile to remove URL
+            await dispatch(
+              updateProfile({
+                avatar_url: null,
+              })
+            ).unwrap();
+
+            showToast('Avatar removed successfully', 'success');
+          } catch (error) {
+            ErrorHandler.handleError(error, showToast, 'Remove Avatar');
+          } finally {
+            setIsProcessing(false);
+          }
+        },
       },
-    },
-  ]);
-};
+    ]);
+  };
 
   // Validate password form
   const validatePasswordForm = (): boolean => {
@@ -355,32 +355,32 @@ const handleRemoveAvatar = () => {
             {profile.avatar_url ? (
               <Avatar.Image size={100} source={{ uri: profile.avatar_url }} />
             ) : (
-    <Avatar.Text
-      size={100}
-      label={profile.full_name?.substring(0, 2).toUpperCase() || 'U'}
-      style={styles.avatar}
-    />
-  )}
-  <View style={styles.avatarButtons}>
-    <IconButton
-      icon="camera"
-      size={20}
-      mode="contained"
-      containerColor="#6200EE"
-      iconColor="#fff"
-      onPress={() => {
-        Alert.alert('Change Avatar', 'Choose an option', [
-          { text: 'Take Photo', onPress: handleTakePhoto },
-          { text: 'Choose from Gallery', onPress: handlePickAvatar },
-          { text: 'Cancel', style: 'cancel' },
-          ...(profile.avatar_url
-            ? [{ text: 'Remove Avatar', onPress: handleRemoveAvatar, style: 'destructive' as const }]
-            : []),
-        ]);
-      }}
-    />
-  </View>
-</View>
+              <Avatar.Text
+                size={100}
+                label={profile.full_name?.substring(0, 2).toUpperCase() || 'U'}
+                style={styles.avatar}
+              />
+            )}
+            <View style={styles.avatarButtons}>
+              <IconButton
+                icon="camera"
+                size={20}
+                mode="contained"
+                containerColor="#6200EE"
+                iconColor="#fff"
+                onPress={() => {
+                  Alert.alert('Change Avatar', 'Choose an option', [
+                    { text: 'Take Photo', onPress: handleTakePhoto },
+                    { text: 'Choose from Gallery', onPress: handlePickAvatar },
+                    { text: 'Cancel', style: 'cancel' },
+                    ...(profile.avatar_url
+                      ? [{ text: 'Remove Avatar', onPress: handleRemoveAvatar, style: 'destructive' as const }]
+                      : []),
+                  ]);
+                }}
+              />
+            </View>
+          </View>
 
           <View style={styles.headerText}>
             <Text style={[styles.userName, { color: theme.colors.onSurface }]}>{profile.full_name}</Text>
@@ -555,7 +555,7 @@ const handleRemoveAvatar = () => {
             left={<TextInput.Icon icon="account" />}
           />
           {errors.name ? (
-            <HelperText type="error" visible={!!errors.name}>
+            <HelperText type="error" visible={!!errors.name} style={{ color: theme.colors.error }}>
               {errors.name}
             </HelperText>
           ) : null}
@@ -572,7 +572,7 @@ const handleRemoveAvatar = () => {
             left={<TextInput.Icon icon="email" />}
             editable={false}
           />
-          <HelperText type="info" visible>
+          <HelperText type="info" visible style={{ color: theme.colors.onSurfaceVariant }}>
             Email cannot be changed
           </HelperText>
 
@@ -587,7 +587,7 @@ const handleRemoveAvatar = () => {
             left={<TextInput.Icon icon="phone" />}
           />
           {errors.phone ? (
-            <HelperText type="error" visible={!!errors.phone}>
+            <HelperText type="error" visible={!!errors.phone} style={{ color: theme.colors.error }}>
               {errors.phone}
             </HelperText>
           ) : null}
@@ -717,7 +717,7 @@ const handleRemoveAvatar = () => {
             mode="outlined"
             secureTextEntry={!showConfirmPassword}
             error={!!errors.confirmPassword}
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.surface }]}
             left={<TextInput.Icon icon="lock-check" />}
             right={
               <TextInput.Icon
@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 8,
-    backgroundColor: '#fff',
+    // backgroundColor: '#fff',
   },
   modalActions: {
     flexDirection: 'row',
