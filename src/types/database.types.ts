@@ -637,6 +637,7 @@ export interface SignUpData {
   password: string
   full_name: string
   phone?: string
+  invitationToken?: string
 }
 
 export interface SignInData {
