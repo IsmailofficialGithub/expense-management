@@ -21,7 +21,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
 
   const { showToast } = useToast();
@@ -39,7 +39,7 @@ export default function LoginScreen({ navigation }: Props) {
     setErrors({ email: '', password: '' });
 
 
-     if (!isOnline) {
+    if (!isOnline) {
       showToast('No internet connection. Please check your network.', 'error');
       return;
     }
@@ -62,7 +62,7 @@ export default function LoginScreen({ navigation }: Props) {
       hasError = true;
     }
 
-       if (hasError) return;
+    if (hasError) return;
 
     // Show loading overlay
     setShowLoadingOverlay(true);
@@ -151,8 +151,8 @@ export default function LoginScreen({ navigation }: Props) {
             <Button
               mode="contained"
               onPress={handleLogin}
-              loading={loading}
-              disabled={loading}
+              loading={showLoadingOverlay}
+              disabled={showLoadingOverlay}
               style={styles.button}
               contentStyle={styles.buttonContent}
             >
@@ -185,9 +185,9 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
         </View>
       </ScrollView>
-       <LoadingOverlay 
-        visible={showLoadingOverlay || loading} 
-        message="Signing in..." 
+      <LoadingOverlay
+        visible={showLoadingOverlay}
+        message="Signing in..."
       />
     </KeyboardAvoidingView>
   );
