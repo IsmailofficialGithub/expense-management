@@ -660,7 +660,14 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                   </Text>
                 </View>
                 {method.is_default && (
-                  <Chip icon="star" style={styles.defaultChip}>Default</Chip>
+                  <Chip
+                    icon="star"
+                    mode="flat"
+                    style={{ backgroundColor: theme.colors.primaryContainer }}
+                    textStyle={{ color: theme.colors.onPrimaryContainer }}
+                  >
+                    Default
+                  </Chip>
                 )}
               </Card.Content>
             </Card>
