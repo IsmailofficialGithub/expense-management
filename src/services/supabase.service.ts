@@ -1738,7 +1738,7 @@ export const bulkPaymentService = {
         created_by_user:profiles!group_advance_collections_created_by_fkey(*),
         contributions:advance_collection_contributions(
           *,
-          user:profiles(*)
+          user:profiles!advance_collection_contributions_user_id_fkey(*)
         )
       `)
       .eq('id', collection.id)
@@ -1913,7 +1913,7 @@ export const bulkPaymentService = {
         created_by_user:profiles!group_advance_collections_created_by_fkey(*),
         contributions:advance_collection_contributions(
           *,
-          user:profiles(*)
+          user:profiles!advance_collection_contributions_user_id_fkey(*)
         )
       `)
       .eq('id', collectionId)
@@ -1924,10 +1924,19 @@ export const bulkPaymentService = {
   },
 
   /**
-   * Get all advance collections for a group
+   * Get all advance collections for a group with optional filtering and pagination
    */
-  getAdvanceCollections: async (groupId: string): Promise<GroupAdvanceCollection[]> => {
-    const { data, error } = await supabase
+  getAdvanceCollections: async (
+    groupId: string,
+    options?: {
+      page?: number;
+      limit?: number;
+      status?: 'active' | 'completed' | 'all';
+      dateFrom?: string;
+      dateTo?: string;
+    }
+  ): Promise<GroupAdvanceCollection[]> => {
+    let query = supabase
       .from('group_advance_collections')
       .select(`
         *,
@@ -1935,12 +1944,36 @@ export const bulkPaymentService = {
         created_by_user:profiles!group_advance_collections_created_by_fkey(*),
         contributions:advance_collection_contributions(
           *,
-          user:profiles(*)
+          user:profiles!advance_collection_contributions_user_id_fkey(*)
         )
       `)
       .eq('group_id', groupId)
       .order('created_at', { ascending: false });
 
+    // Apply filters
+    if (options?.status && options.status !== 'all') {
+      query = query.eq('status', options.status);
+    }
+
+    if (options?.dateFrom) {
+      query = query.gte('created_at', options.dateFrom);
+    }
+
+    if (options?.dateTo) {
+      // Add one day to dateTo to include the whole day
+      const nextDay = new Date(options.dateTo);
+      nextDay.setDate(nextDay.getDate() + 1);
+      query = query.lt('created_at', nextDay.toISOString());
+    }
+
+    // Apply pagination
+    if (options?.page !== undefined && options?.limit !== undefined) {
+      const from = (options.page - 1) * options.limit;
+      const to = from + options.limit - 1;
+      query = query.range(from, to);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data as any;
   },
@@ -1952,11 +1985,14 @@ export const bulkPaymentService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // 1. Mark as PAID immediately (auto-approval)
     const { data, error } = await supabase
       .from('advance_collection_contributions')
       .update({
-        status: 'pending_approval',
+        status: 'paid', // Changed from 'pending_approval' to 'paid'
         contributed_at: new Date().toISOString(),
+        approved_at: new Date().toISOString(), // Auto-approved
+        approved_by: user.id, // Auto-approved by self/system
         notes: notes || null,
       })
       .eq('id', contributionId)
@@ -1966,37 +2002,76 @@ export const bulkPaymentService = {
 
     if (error) throw error;
 
-    // Get collection details to notify recipient
+    // Get collection details
     const { data: collection } = await supabase
       .from('group_advance_collections')
-      .select('id, recipient_id, total_amount, per_member_amount')
+      .select('id, recipient_id, total_amount')
       .eq('id', data.collection_id)
       .single();
 
     if (collection) {
-      // Get contributor info for notification
+      // Get contributor info
       const { data: contributor } = await supabase
         .from('profiles')
         .select('full_name')
         .eq('id', user.id)
         .single();
 
-      // Notify recipient that a contribution needs approval
-      try {
-        await notificationService.createNotification({
-          user_id: collection.recipient_id,
-          title: 'Contribution Pending Approval',
-          message: `${contributor?.full_name || 'A member'} has marked their contribution (₹${data.amount.toFixed(2)}) as paid. Please approve.`,
-          type: 'payment_received',
-          related_id: collection.id,
-          metadata: {
-            collection_id: collection.id,
-            contribution_id: contributionId,
-            amount: data.amount,
-          },
-        });
-      } catch (error) {
-        console.error('Error sending approval notification:', error);
+      // Notify recipient that payment was received (instead of pending approval)
+      if (user.id !== collection.recipient_id) {
+        try {
+          await notificationService.createNotification({
+            user_id: collection.recipient_id,
+            title: 'Payment Received',
+            message: `${contributor?.full_name || 'A member'} has paid their contribution (₹${data.amount.toFixed(2)}).`,
+            type: 'payment_received',
+            related_id: collection.id,
+            metadata: {
+              collection_id: collection.id,
+              contribution_id: contributionId,
+              amount: data.amount,
+            },
+          });
+        } catch (error) {
+          console.error('Error sending payment notification:', error);
+        }
+      }
+
+      // 2. Check if collection is COMPLETED
+      const { data: allContributions } = await supabase
+        .from('advance_collection_contributions')
+        .select('status')
+        .eq('collection_id', collection.id);
+
+      const allPaid = allContributions?.every(c => c.status === 'paid');
+
+      if (allPaid) {
+        await supabase
+          .from('group_advance_collections')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', collection.id);
+
+        // Notify recipient of completion
+        if (user.id !== collection.recipient_id) {
+          try {
+            await notificationService.createNotification({
+              user_id: collection.recipient_id,
+              title: 'Advance Collection Completed',
+              message: `All members have contributed. Total received: ₹${collection.total_amount?.toFixed(2) || '0.00'}`,
+              type: 'payment_received',
+              related_id: collection.id,
+              metadata: {
+                collection_id: collection.id,
+                total_amount: collection.total_amount,
+              },
+            });
+          } catch (error) {
+            console.error('Error sending completion notification:', error);
+          }
+        }
       }
     }
 

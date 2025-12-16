@@ -55,6 +55,11 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
     state => state.bulkPayments
   );
 
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [page, setPage] = useState(1);
+  const [expandedCollections, setExpandedCollections] = useState<string[]>([]);
+
+  // Existing state...
   const [refreshing, setRefreshing] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [amountType, setAmountType] = useState<'total' | 'per_member'>('per_member');
@@ -71,7 +76,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
   useEffect(() => {
     loadCollections();
     loadPaymentMethods();
-  }, [groupId, profile?.id]);
+  }, [groupId, profile?.id, statusFilter, page]); // Reload when filters change
 
   const loadPaymentMethods = async () => {
     if (!profile?.id) return;
@@ -90,15 +95,37 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
 
   const loadCollections = async () => {
     try {
-      await dispatch(fetchAdvanceCollections(groupId)).unwrap();
+      await dispatch(fetchAdvanceCollections({
+        groupId,
+        status: statusFilter,
+        page,
+        limit: 20 // Default limit
+      })).unwrap();
     } catch (error) {
       ErrorHandler.handleError(error, showToast, 'Load Collections');
     }
   };
 
+  const toggleExpand = (id: string) => {
+    setExpandedCollections(prev =>
+      prev.includes(id) ? prev.filter(cId => cId !== id) : [...prev, id]
+    );
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadCollections();
+    setPage(1);
+    // Force fetch page 1 even if state hasn't updated yet or was already 1
+    try {
+      await dispatch(fetchAdvanceCollections({
+        groupId,
+        status: statusFilter,
+        page: 1,
+        limit: 20
+      })).unwrap();
+    } catch (error) {
+      ErrorHandler.handleError(error, showToast, 'Refresh Collections');
+    }
     setRefreshing(false);
   };
 
@@ -146,14 +173,14 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
 
   const handleContribute = async (contributionId: string) => {
     // Get contribution amount
-    const collection = advanceCollections.find(c => 
+    const collection = advanceCollections.find(c =>
       c.contributions?.some(contrib => contrib.id === contributionId)
     );
     const contribution = collection?.contributions?.find(c => c.id === contributionId);
     const amount = contribution?.amount || 0;
 
     // Check if user has sufficient balance
-    const hasBalance = completeBalance && completeBalance >= amount;
+    const hasBalance = completeBalance && completeBalance.net_balance >= amount;
     const hasPaymentMethods = paymentMethods.length > 0;
 
     // If no balance and no payment methods, show error
@@ -176,7 +203,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
   const proceedWithContribution = async (contributionId: string) => {
     Alert.alert(
       'Confirm Contribution',
-      'Have you paid your contribution? It will be marked as pending approval and the recipient will need to approve it.',
+      'Have you paid your contribution? It will be marked as paid.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -184,7 +211,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
           onPress: async () => {
             try {
               await dispatch(contributeToCollection({ contributionId })).unwrap();
-              showToast('Contribution submitted! Waiting for recipient approval.', 'success');
+              showToast('Contribution marked as paid!', 'success');
               await loadCollections();
             } catch (error) {
               ErrorHandler.handleError(error, showToast, 'Contribute');
@@ -237,7 +264,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Reject',
-          onPress: async (reason) => {
+          onPress: async (reason?: string) => {
             try {
               await dispatch(rejectContribution({ contributionId, reason: reason || undefined })).unwrap();
               showToast('Contribution rejected.', 'info');
@@ -252,8 +279,9 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
     );
   };
 
-  const activeCollections = advanceCollections.filter(c => c.status === 'active');
-  const completedCollections = advanceCollections.filter(c => c.status === 'completed');
+  const collectionsToDisplay = advanceCollections; // Now we display what's in store, filtered by API
+  // const activeCollections = advanceCollections.filter(c => c.status === 'active');
+  // const completedCollections = advanceCollections.filter(c => c.status === 'completed');
 
   const groupMembers = selectedGroup?.members || [];
 
@@ -263,15 +291,15 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.colors.onSurface }]}>
+        {/* <Text style={[styles.title, { color: theme.colors.onSurface }]}>
           Advance Collections
-        </Text>
+        </Text> */}
         <Button
           mode="contained"
           onPress={() => setShowCreateForm(!showCreateForm)}
           icon={showCreateForm ? 'close' : 'plus'}
         >
-          {showCreateForm ? 'Cancel' : 'New Collection'}
+          {showCreateForm ? 'Cancel' : 'New'}
         </Button>
       </View>
 
@@ -358,12 +386,39 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
         </Card>
       )}
 
-      {activeCollections.length > 0 && (
+      {/* Filters */}
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <Chip
+            selected={statusFilter === 'all'}
+            onPress={() => setStatusFilter('all')}
+            style={styles.filterChip}
+            showSelectedOverlay
+          >
+            All
+          </Chip>
+          <Chip
+            selected={statusFilter === 'active'}
+            onPress={() => setStatusFilter('active')}
+            style={styles.filterChip}
+            showSelectedOverlay
+          >
+            Active
+          </Chip>
+          <Chip
+            selected={statusFilter === 'completed'}
+            onPress={() => setStatusFilter('completed')}
+            style={styles.filterChip}
+            showSelectedOverlay
+          >
+            Completed
+          </Chip>
+        </ScrollView>
+      </View>
+
+      {collectionsToDisplay.length > 0 ? (
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-            Active Collections
-          </Text>
-          {activeCollections.map(collection => {
+          {collectionsToDisplay.map(collection => {
             const myContribution = collection.contributions?.find(
               c => c.user_id === profile?.id
             );
@@ -371,119 +426,162 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
             const paidCount = collection.contributions?.filter(c => c.status === 'paid').length || 0;
             const pendingApprovalCount = collection.contributions?.filter(c => c.status === 'pending_approval').length || 0;
             const totalCount = collection.contributions?.length || 0;
+            const isExpanded = expandedCollections.includes(collection.id);
+            const collectedAmount = collection.contributions?.reduce((sum, c) => c.status === 'paid' ? sum + Number(c.amount) : sum, 0) || 0;
 
             return (
               <Card key={collection.id} style={styles.collectionCard}>
                 <Card.Content>
-                  <View style={styles.collectionHeader}>
-                    <View style={styles.collectionInfo}>
+                  {/* Header Row */}
+                  <View style={styles.cardHeader}>
+                    <View style={styles.headerLeft}>
                       <Text style={[styles.collectionTitle, { color: theme.colors.onSurface }]}>
                         {collection.description || 'Advance Collection'}
                       </Text>
-                      <Text style={[styles.collectionAmount, { color: theme.colors.primary }]}>
-                        ₹{collection.total_amount.toFixed(2)}
-                      </Text>
-                      <Text style={[styles.collectionRecipient, { color: theme.colors.onSurfaceVariant }]}>
-                        To: {collection.recipient?.full_name || 'Unknown'}
-                      </Text>
-                      <Text style={[styles.collectionProgress, { color: theme.colors.onSurfaceVariant }]}>
-                        {paidCount}/{totalCount} members paid
-                        {pendingApprovalCount > 0 && ` • ${pendingApprovalCount} pending approval`}
+                      <Text style={[styles.dateText, { color: theme.colors.onSurfaceVariant }]}>
+                        {format(new Date(collection.created_at), 'MMM dd, yyyy')}
                       </Text>
                     </View>
+                    <Chip
+                      mode="flat"
+                      style={{ backgroundColor: collection.status === 'active' ? '#E8F5E9' : '#EEEEEE' }}
+                      textStyle={{ color: collection.status === 'active' ? '#2E7D32' : '#757575', fontSize: 12 }}
+                    >
+                      {collection.status === 'active' ? 'Active' : 'Completed'}
+                    </Chip>
                   </View>
 
                   <Divider style={styles.divider} />
 
-                  <Text style={[styles.contributorsTitle, { color: theme.colors.onSurface }]}>
-                    Contributors:
-                  </Text>
-                  {collection.contributions?.map(contribution => (
-                    <View key={contribution.id} style={styles.contributorRow}>
-                      <Avatar.Text
-                        size={32}
-                        label={contribution.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                      />
-                      <View style={styles.contributorInfo}>
-                        <Text style={[styles.contributorName, { color: theme.colors.onSurface }]}>
-                          {contribution.user?.full_name || 'Unknown'}
-                          {contribution.user_id === profile?.id && ' (You)'}
-                        </Text>
-                        <Text style={[styles.contributorAmount, { color: theme.colors.onSurfaceVariant }]}>
-                          ₹{contribution.amount.toFixed(2)}
-                        </Text>
-                      </View>
-                      <Chip
-                        icon={
-                          contribution.status === 'paid' 
-                            ? 'check-circle' 
-                            : contribution.status === 'pending_approval'
-                            ? 'clock-alert-outline'
-                            : 'clock-outline'
-                        }
-                        style={[
-                          styles.statusChip,
-                          contribution.status === 'paid' && { backgroundColor: theme.colors.primaryContainer },
-                          contribution.status === 'pending_approval' && { backgroundColor: '#FFF3E0' }
-                        ]}
-                        textStyle={
-                          contribution.status === 'pending_approval' ? { color: '#FF9800' } : undefined
-                        }
-                      >
-                        {contribution.status === 'paid' 
-                          ? 'Paid' 
-                          : contribution.status === 'pending_approval'
-                          ? 'Pending Approval'
-                          : 'Pending'}
-                      </Chip>
-                      {contribution.user_id === profile?.id && contribution.status === 'pending' && (
-                        <Button
-                          mode="contained"
-                          compact
-                          onPress={() => handleContribute(contribution.id)}
-                        >
-                          I Paid
-                        </Button>
-                      )}
-                      {isRecipient && contribution.status === 'pending_approval' && (
-                        <View style={styles.approvalButtons}>
-                          <Button
-                            mode="contained"
-                            compact
-                            buttonColor="#4CAF50"
-                            onPress={() => handleApprove(contribution.id)}
-                            style={styles.approveButton}
-                          >
-                            Approve
-                          </Button>
-                          <Button
-                            mode="outlined"
-                            compact
-                            textColor="#F44336"
-                            onPress={() => handleReject(contribution.id)}
-                            style={styles.rejectButton}
-                          >
-                            Reject
-                          </Button>
-                        </View>
-                      )}
+                  {/* Stats Grid */}
+                  <View style={styles.statsGrid}>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>Total</Text>
+                      <Text style={[styles.statValue, { color: theme.colors.primary }]}>
+                        ₹{collection.total_amount.toFixed(0)}
+                      </Text>
                     </View>
-                  ))}
+                    <View style={styles.statLine} />
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>Collected</Text>
+                      <Text style={[styles.statValue, { color: '#4CAF50' }]}>
+                        ₹{collectedAmount.toFixed(0)}
+                      </Text>
+                    </View>
+                    <View style={styles.statLine} />
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>Per Person</Text>
+                      <Text style={styles.statValue}>
+                        ₹{collection.per_member_amount?.toFixed(0)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.recipientRow}>
+                    <Text style={[styles.recipientLabel, { color: theme.colors.onSurfaceVariant }]}>Recipient: </Text>
+                    <Avatar.Text size={24} label={collection.recipient?.full_name?.substring(0, 2).toUpperCase() || 'U'} />
+                    <Text style={[styles.recipientName, { color: theme.colors.onSurface }]}>
+                      {collection.recipient?.full_name || 'Unknown'}
+                    </Text>
+                  </View>
 
                   {myContribution?.status === 'pending' && (
                     <Button
                       mode="contained"
                       onPress={() => handleContribute(myContribution.id)}
-                      style={styles.contributeButton}
+                      style={styles.mainActionButton}
                     >
-                      I've Paid My Share
+                      Pay My Share (₹{myContribution.amount.toFixed(0)})
                     </Button>
                   )}
+
                   {myContribution?.status === 'pending_approval' && (
                     <View style={styles.pendingApprovalNotice}>
                       <Text style={[styles.pendingApprovalText, { color: '#FF9800' }]}>
-                        ⏳ Your payment is pending approval from {collection.recipient?.full_name || 'the recipient'}
+                        ⏳ Waiting for approval
                       </Text>
+                    </View>
+                  )}
+
+                  <Button
+                    mode="text"
+                    onPress={() => toggleExpand(collection.id)}
+                    style={styles.expandButton}
+                    icon={isExpanded ? "chevron-up" : "chevron-down"}
+                  >
+                    {isExpanded ? "Hide Details" : `View Contributors (${paidCount}/${totalCount} Paid)`}
+                  </Button>
+
+                  {isExpanded && (
+                    <View style={styles.contributorsSection}>
+                      <Text style={[styles.contributorsTitle, { color: theme.colors.onSurface }]}>
+                        Contributors Status
+                      </Text>
+                      {collection.contributions?.map(contribution => (
+                        <View key={contribution.id} style={styles.contributorContainer}>
+                          <View style={styles.contributorRow}>
+                            <Avatar.Text
+                              size={32}
+                              label={contribution.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
+                            />
+                            <View style={styles.contributorInfo}>
+                              <Text style={[styles.contributorName, { color: theme.colors.onSurface }]}>
+                                {contribution.user?.full_name || 'Unknown'}
+                                {contribution.user_id === profile?.id && ' (You)'}
+                              </Text>
+                              <Text style={[styles.contributorAmount, { color: theme.colors.onSurfaceVariant }]}>
+                                ₹{contribution.amount.toFixed(2)}
+                              </Text>
+                            </View>
+                            <Chip
+                              icon={
+                                contribution.status === 'paid'
+                                  ? 'check-circle'
+                                  : contribution.status === 'pending_approval'
+                                    ? 'clock-alert-outline'
+                                    : 'clock-outline'
+                              }
+                              style={[
+                                styles.statusChip,
+                                contribution.status === 'paid' && { backgroundColor: theme.colors.primaryContainer },
+                                contribution.status === 'pending_approval' && { backgroundColor: '#FFF3E0' }
+                              ]}
+                              textStyle={
+                                contribution.status === 'pending_approval' ? { color: '#FF9800' } : undefined
+                              }
+                            >
+                              {contribution.status === 'paid'
+                                ? 'Paid'
+                                : contribution.status === 'pending_approval'
+                                  ? 'Pending Approval'
+                                  : 'Pending'}
+                            </Chip>
+                          </View>
+                          {/* We handled main "Pay" button outside, but keep context actions here if needed or if viewed by admin */}
+                          {isRecipient && contribution.status === 'pending_approval' && (
+                            <View style={styles.approvalButtons}>
+                              <Button
+                                mode="contained"
+                                compact
+                                buttonColor="#4CAF50"
+                                onPress={() => handleApprove(contribution.id)}
+                                style={styles.approveButton}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                mode="outlined"
+                                compact
+                                textColor="#F44336"
+                                onPress={() => handleReject(contribution.id)}
+                                style={styles.rejectButton}
+                              >
+                                Reject
+                              </Button>
+                            </View>
+                          )}
+                        </View>
+                      ))}
                     </View>
                   )}
                 </Card.Content>
@@ -491,40 +589,32 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
             );
           })}
         </View>
+      ) : (
+        !loading && (
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+              No {statusFilter !== 'all' ? statusFilter : ''} collections found
+            </Text>
+          </View>
+        )
       )}
 
-      {completedCollections.length > 0 && (
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-            Completed Collections
-          </Text>
-          {completedCollections.map(collection => (
-            <Card key={collection.id} style={styles.collectionCard}>
-              <Card.Content>
-                <Text style={[styles.collectionTitle, { color: theme.colors.onSurface }]}>
-                  {collection.description || 'Advance Collection'}
-                </Text>
-                <Text style={[styles.collectionAmount, { color: theme.colors.primary }]}>
-                  ₹{collection.total_amount.toFixed(2)}
-                </Text>
-                <Text style={[styles.collectionRecipient, { color: theme.colors.onSurfaceVariant }]}>
-                  To: {collection.recipient?.full_name || 'Unknown'}
-                </Text>
-                {collection.completed_at && (
-                  <Text style={[styles.completedDate, { color: theme.colors.onSurfaceVariant }]}>
-                    Completed: {format(new Date(collection.completed_at), 'MMM dd, yyyy')}
-                  </Text>
-                )}
-              </Card.Content>
-            </Card>
-          ))}
-        </View>
+      {advanceCollections.length > 0 && advanceCollections.length >= 20 && (
+        <Button
+          mode="outlined"
+          onPress={() => setPage(p => p + 1)}
+          loading={loading && !refreshing}
+          disabled={loading}
+          style={{ margin: 16 }}
+        >
+          Load More
+        </Button>
       )}
 
       {advanceCollections.length === 0 && !loading && (
         <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
-            No advance collections yet
+            No {statusFilter !== 'all' ? statusFilter : ''} advance collections yet
           </Text>
           <Text style={[styles.emptySubtext, { color: theme.colors.onSurfaceVariant }]}>
             Create a collection to collect money in advance from group members
@@ -550,7 +640,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
           <Text style={[styles.modalSubtitle, { color: theme.colors.onSurfaceVariant }]}>
             Your account balance is insufficient. Please select a payment method:
           </Text>
-          
+
           {paymentMethods.map(method => (
             <Card
               key={method.id}
@@ -607,7 +697,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -643,9 +733,86 @@ const styles = StyleSheet.create({
   submitButton: {
     marginTop: 16,
   },
-  collectionCard: {
-    marginBottom: 12,
+  // New Styles
+  filterContainer: {
+    marginBottom: 16,
   },
+  filterChip: {
+    marginRight: 8,
+  },
+  collectionCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  headerLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  dateText: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 12,
+    backgroundColor: '#FAFAFA',
+    padding: 12,
+    borderRadius: 8,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statLine: {
+    width: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#757575',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  recipientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recipientLabel: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  recipientName: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  expandButton: {
+    marginTop: 8,
+    borderColor: '#E0E0E0',
+  },
+  contributorsSection: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#EEEEEE',
+    paddingTop: 16,
+  },
+  mainActionButton: {
+    marginVertical: 8,
+    borderRadius: 8,
+  },
+  // End new styles
   collectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -678,10 +845,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
+  contributorContainer: {
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    paddingBottom: 12,
+  },
   contributorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
   contributorInfo: {
     flex: 1,
@@ -721,7 +893,7 @@ const styles = StyleSheet.create({
   approvalButtons: {
     flexDirection: 'row',
     gap: 8,
-    marginLeft: 8,
+    marginTop: 8,
   },
   approveButton: {
     flex: 1,

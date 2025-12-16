@@ -323,6 +323,26 @@ export const chatService = {
         };
         await storageService.setMessages([...existingMessages, messageWithStatus], request.conversation_id);
 
+        // Send push notification
+        (async () => {
+          try {
+            const { sendExpoPushNotification, getConversationParticipantsTokens } = await import('./push-notifications.service');
+            const tokens = await getConversationParticipantsTokens(request.conversation_id, user.id);
+            if (tokens.length > 0) {
+              const senderName = user.user_metadata?.full_name || 'New Message';
+              const body = request.message_type === 'image' ? '📷 Sent an image' : request.text;
+              await sendExpoPushNotification(
+                tokens,
+                senderName,
+                body,
+                { conversationId: request.conversation_id }
+              );
+            }
+          } catch (pushError) {
+            console.error('Failed to send push notification:', pushError);
+          }
+        })();
+
         return messageWithStatus;
       } catch (error: any) {
         // If online call fails, queue for sync
