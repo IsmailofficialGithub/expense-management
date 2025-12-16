@@ -59,6 +59,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
@@ -190,39 +191,37 @@ export default function ChatScreen({ route, navigation }: Props) {
     setError(null);
     let shouldContinueToAPI = true;
 
+
+
     // First, try to load from cache immediately (like WhatsApp)
     if (!beforeTimestamp) {
       try {
         const { storageService } = await import('../../services/storage.service');
         const cachedMessages = await storageService.getMessages(conversationId) || [];
         if (cachedMessages.length > 0) {
+          console.log('Loaded messages from cache:', cachedMessages.length);
           // Show cached messages immediately
           const sorted = cachedMessages.sort((a: any, b: any) =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           );
-          setMessages(sorted.reverse()); // Oldest first
-          setHasMore(true); // Assume there might be more
+          setMessages(sorted); // Newest first (descending)
+          setHasMore(true);
           setLoading(false);
-
-          // Scroll to bottom
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }, 100);
 
           // Then sync in background if online
           if (!isOnline) {
-            shouldContinueToAPI = false; // Offline, use cache only
+            shouldContinueToAPI = false;
           }
         }
       } catch (error) {
         console.error('Error loading cached messages:', error);
-        // Continue to API call even if cache fails
       }
     }
 
-    // Then fetch from API (or use cache if offline)
+    // Then fetch from API
     try {
       if (shouldContinueToAPI) {
+        // chatService.getMessages returns oldest first (Ascending)
         const { messages: newMessages, hasMore: moreAvailable } = await chatService.getMessages(
           conversationId,
           20,
@@ -230,34 +229,38 @@ export default function ChatScreen({ route, navigation }: Props) {
         );
 
         if (beforeTimestamp) {
-          // Loading more (prepend to existing messages)
-          setMessages(prev => [...newMessages, ...prev]);
+          // Loading more (older messages are fetched with 'beforeTimestamp')
+          // newMessages are [older...oldest] (Ascending)? No, chatService returns [oldest...older] usually or [older...oldest]?
+          // chatService.getMessages lines 486: returns messagesWithStatus.reverse().
+          // messagesWithStatus comes from query 'order created_at desc'.
+          // So database query returns [newest...oldest].
+          // chatService reverses it -> [oldest...newest].
+          // So newMessages is Ascending.
+
+          // For inverted list, we want [newest, older, oldest].
+          // When loading more, we append to the end.
+          // Appended chunk should be [older, oldest].
+          // So we need to reverse newMessages to get Descending order.
+
+          setMessages(prev => [...prev, ...[...newMessages].reverse()]);
           setHasMore(moreAvailable);
         } else {
-          // Initial load or refresh
-          setMessages(newMessages);
+          // Initial load
+          setMessages([...newMessages].reverse());
           setHasMore(moreAvailable);
           setLoading(false);
-
-          // Scroll to bottom
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }, 100);
         }
       }
     } catch (error: any) {
       const errorMessage = ErrorHandler.getUserFriendlyMessage(error);
       setError(errorMessage);
       ErrorHandler.handleError(error, showToast, 'Chat');
-      // Only set loading to false if this was initial load (not loading more)
       if (!beforeTimestamp) {
         setLoading(false);
       }
     } finally {
-      // Always clear loadingMore state
       setLoadingMore(false);
       loadingMoreRef.current = false;
-      // Ensure loading is cleared if it was set
       if (!beforeTimestamp && loading) {
         setLoading(false);
       }
@@ -269,8 +272,8 @@ export default function ChatScreen({ route, navigation }: Props) {
 
     loadingMoreRef.current = true;
     setLoadingMore(true);
-    // Get the oldest message timestamp
-    const oldestMessage = messages[0];
+    // Get the oldest message timestamp (last item in inverted list)
+    const oldestMessage = messages[messages.length - 1];
     if (oldestMessage) {
       loadMessages(oldestMessage.created_at);
     }
@@ -290,16 +293,9 @@ export default function ChatScreen({ route, navigation }: Props) {
           return filtered;
         }
 
-        // Append new message (newest messages are at the end)
-        return [...filtered, newMessage];
+        // Prepend new message (newest messages are at the start in inverted list)
+        return [newMessage, ...filtered];
       });
-
-      // Scroll to bottom only if not loading more (to avoid interrupting pagination)
-      if (!loadingMore) {
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      }
 
       // Mark as read if conversation is visible
       chatService.markAsRead(newMessage.id);
@@ -355,18 +351,20 @@ export default function ChatScreen({ route, navigation }: Props) {
       total_participants: conversation?.participants.length || 1,
     };
 
-    setMessages(prev => [...prev, optimisticMessage]);
+    setMessages(prev => [optimisticMessage, ...prev]);
 
-    // Scroll to bottom immediately
+    // Scroll to bottom to ensure new message is seen
     setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 100);
 
+    console.log('Sending message:', text);
     try {
       const sentMessage = await chatService.sendMessage({
         conversation_id: conversationId,
         text,
       });
+      console.log('Message sent successfully:', sentMessage.id);
 
       // Remove temporary message and add the real one (or keep temp if offline)
       setMessages(prev => {
@@ -375,7 +373,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         if (filtered.find(m => m.id === sentMessage.id)) {
           return filtered;
         }
-        return [...filtered, sentMessage];
+        return [sentMessage, ...filtered];
       });
 
       // Show appropriate toast based on online status
@@ -386,6 +384,7 @@ export default function ChatScreen({ route, navigation }: Props) {
         showToast('Message saved offline. Will send when connection is restored.', 'info');
       }
     } catch (error) {
+      console.error('Error sending message:', error);
       // Remove optimistic message on error (only if it's a real error, not offline)
       setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
       ErrorHandler.handleError(error, showToast, 'Send Message');
@@ -617,7 +616,7 @@ export default function ChatScreen({ route, navigation }: Props) {
                   isMyMessage ? { color: 'rgba(255,255,255,0.7)' } : { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                {format(new Date(item.created_at), 'HH:mm')}
+                {format(new Date(item.created_at), 'hh:mm a')}
               </Text>
               {isMyMessage && (
                 <View style={styles.messageStatusContainer}>
@@ -673,53 +672,68 @@ export default function ChatScreen({ route, navigation }: Props) {
   }
 
   return (
+
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        enabled={Platform.OS === 'ios'}
       >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item, index) => {
-            // Use index for temporary messages to avoid duplicate key errors
-            if (item.id.startsWith('temp-')) {
-              return `temp-${index}-${item.created_at}`;
-            }
-            return item.id;
-          }}
-          style={{ flex: 1 }}
-          contentContainerStyle={[styles.messagesList, messages.length === 0 && { flex: 1, justifyContent: 'center' }]}
-          ListEmptyComponent={
-            <View style={styles.centerContent}>
-              <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 16 }}>No messages yet</Text>
-            </View>
-          }
-          onContentSizeChange={() => {
-            if (!isSelectionMode && !loadingMore && messages.length > 0) {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }
-          }}
-          onScroll={({ nativeEvent }) => {
-            // Load more when scrolling near the top (within 300px)
-            if (nativeEvent.contentOffset.y < 300 && hasMore && !loadingMore && !loadingMoreRef.current) {
-              loadMoreMessages();
-            }
-          }}
-          scrollEventThrottle={400}
-          ListHeaderComponent={
-            loadingMore ? (
-              <View style={styles.loadMoreContainer}>
-                <ActivityIndicator size="small" color={theme.colors.primary} />
+        <View style={{ flex: 1 }}>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item, index) => {
+              if (item.id.startsWith('temp-')) {
+                return `temp-${index}-${item.created_at}`;
+              }
+              return item.id;
+            }}
+            style={{ flex: 1 }}
+            contentContainerStyle={[styles.messagesList, messages.length === 0 && { flex: 1, justifyContent: 'center' }]}
+            inverted
+            ListEmptyComponent={
+              <View style={[styles.centerContent, { transform: [{ scaleY: -1 }] }]}>
+                <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 16 }}>No messages yet</Text>
               </View>
-            ) : null
-          }
-          ListFooterComponent={renderTypingIndicator}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-        />
+            }
+            onEndReached={() => {
+              if (hasMore && !loadingMore && !loadingMoreRef.current) {
+                loadMoreMessages();
+              }
+            }}
+            onEndReachedThreshold={0.3}
+            onScroll={(event) => {
+              const offsetY = event.nativeEvent.contentOffset.y;
+              setShowScrollToBottom(offsetY > 300);
+            }}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.loadMoreContainer}>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                </View>
+              ) : null
+            }
+            ListHeaderComponent={renderTypingIndicator}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          />
+          {showScrollToBottom && (
+            <IconButton
+              icon="chevron-down"
+              mode="contained"
+              containerColor={theme.colors.secondaryContainer}
+              iconColor={theme.colors.onSecondaryContainer}
+              size={24}
+              onPress={() => {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              }}
+              style={styles.scrollToBottomFab}
+            />
+          )}
+        </View>
 
         {/* Input Area */}
         <View style={[styles.inputContainer, {
@@ -735,12 +749,7 @@ export default function ChatScreen({ route, navigation }: Props) {
               onChangeText={handleTyping}
               multiline
               maxLength={1000}
-              onFocus={() => {
-                // Scroll to bottom when input is focused
-                setTimeout(() => {
-                  flatListRef.current?.scrollToEnd({ animated: true });
-                }, 300);
-              }}
+
             />
             <IconButton
               icon="send"
@@ -851,5 +860,16 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  scrollToBottomFab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    borderRadius: 24,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
 });

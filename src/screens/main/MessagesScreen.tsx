@@ -1,5 +1,5 @@
-// src/screens/main/MessagesScreen.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, StyleSheet, RefreshControl, FlatList } from 'react-native';
 import {
   Text,
@@ -64,6 +64,8 @@ export default function MessagesScreen({ navigation }: any) {
     };
   }, []);
 
+
+
   // 1. Define Helper Functions (needed by listeners and render)
   const getConversationTitle = useCallback((conversation: ConversationWithDetails): string => {
     if (conversation.type === 'group' && conversation.group) {
@@ -90,7 +92,7 @@ export default function MessagesScreen({ navigation }: any) {
       const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
       if (diffInHours < 24) {
-        return format(date, 'HH:mm');
+        return format(date, 'hh:mm a');
       } else if (diffInHours < 168) {
         return format(date, 'EEE');
       } else {
@@ -181,6 +183,13 @@ export default function MessagesScreen({ navigation }: any) {
       setRefreshing(false); // Always clear refreshing
     }
   }, [conversations.length, isOnline, showToast]);
+
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadConversations();
+    }, [loadConversations])
+  );
 
   const setupRealtimeSubscriptions = useCallback(() => {
     // Clean up existing subscriptions

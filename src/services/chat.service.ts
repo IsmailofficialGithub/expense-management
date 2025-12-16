@@ -298,8 +298,11 @@ export const chatService = {
       related_expense_id: request.related_expense_id || null,
     };
 
+    console.log('chatService.sendMessage: isOnline?', isOnline());
+
     if (isOnline()) {
       try {
+        console.log('chatService.sendMessage: inserting to supabase...');
         // Insert message with sender profile in one query (faster - no participant check, RLS handles it)
         const { data: message, error } = await supabase
           .from('messages')
@@ -309,6 +312,8 @@ export const chatService = {
             sender:profiles(*)
           `)
           .single();
+
+        console.log('chatService.sendMessage: supabase insert result:', { error, messageId: message?.id });
 
         if (error) throw error;
 
@@ -609,24 +614,16 @@ export const chatService = {
       read_at: new Date().toISOString(),
     }));
 
-    // Insert read receipts (use insert instead of upsert to ensure INSERT events fire)
-    // First, delete any existing read receipts for these messages from this user
-    const messageIds = unreadMessages.map(m => m.id);
-    if (messageIds.length > 0) {
-      await supabase
+    // Insert read receipts (use upsert to avoid unique constraint violations)
+    if (readReceipts.length > 0) {
+      const { error: insertError } = await supabase
         .from('message_reads')
-        .delete()
-        .in('message_id', messageIds)
-        .eq('user_id', user.id);
+        .upsert(readReceipts, {
+          onConflict: 'message_id,user_id',
+          ignoreDuplicates: true
+        });
 
-      // Then insert new read receipts
-      if (readReceipts.length > 0) {
-        const { error: insertError } = await supabase
-          .from('message_reads')
-          .insert(readReceipts);
-
-        if (insertError) throw insertError;
-      }
+      if (insertError) throw insertError;
     }
 
     // Update last_read_at
@@ -709,8 +706,23 @@ export const chatService = {
           filter: `conversation_id=eq.${conversationId}`,
         },
         async (payload) => {
-          const message = await this.getMessageWithStatus(payload.new.id);
-          callback(message);
+          try {
+            const message = await this.getMessageWithStatus(payload.new.id);
+
+            // Save to local storage for offline access
+            const { storageService } = await import('./storage.service');
+            const existingMessages = await storageService.getMessages(conversationId) || [];
+
+            // Check if message already exists
+            const exists = existingMessages.some((m: any) => m.id === message.id);
+            if (!exists) {
+              await storageService.setMessages([...existingMessages, message], conversationId);
+            }
+
+            callback(message);
+          } catch (err) {
+            console.error('Error handling incoming message:', err);
+          }
         }
       )
       .subscribe();
