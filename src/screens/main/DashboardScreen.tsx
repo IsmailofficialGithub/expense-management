@@ -36,7 +36,7 @@ import { LinearGradient } from "expo-linear-gradient";
 export default function DashboardScreen({ navigation }: any) {
   const theme = useTheme();
   const { profile } = useAuth();
-  
+
   const { groups } = useGroups();
   const { expenses } = useExpenses();
   const { transactions, completeBalance } = usePersonalFinance();
@@ -45,9 +45,9 @@ export default function DashboardScreen({ navigation }: any) {
   const { showToast } = useToast();
   const [isBalanceHidden, setIsBalanceHidden] = useState(true);
 
-const toggleBalanceVisibility = () => {
-  setIsBalanceHidden(!isBalanceHidden);
-};
+  const toggleBalanceVisibility = () => {
+    setIsBalanceHidden(!isBalanceHidden);
+  };
   const { isOnline } = useNetworkCheck({
     showToast: true,
     onOnline: () => {
@@ -65,7 +65,7 @@ const toggleBalanceVisibility = () => {
 
   const loadPendingInvitations = async () => {
     if (!isOnline || !profile) return;
-    
+
     try {
       const invitations = await invitationService.getPendingInvitations();
       setPendingInvitationsCount(invitations.length);
@@ -76,28 +76,33 @@ const toggleBalanceVisibility = () => {
   };
 
   const loadData = async () => {
-    setIsLoading(true);
+    // Only show loading spinner if we have absolutely no data
+    if (groups.length === 0 && expenses.length === 0 && transactions.length === 0) {
+      setIsLoading(true);
+    }
+
     try {
       // Data is already loaded from cache in Provider.tsx
       // If online, sync in background to get latest data
       if (isOnline) {
-        await Promise.all([
-          dispatch(fetchGroups()).unwrap(),
-          dispatch(fetchExpenses()).unwrap(),
-          dispatch(fetchPersonalTransactions()).unwrap(),
-          dispatch(fetchCompleteBalance()).unwrap(),
-        ]);
+        // Fire and forget - don't await to keep UI responsive
+        Promise.all([
+          dispatch(fetchCompleteBalance()),
+          dispatch(fetchGroups()),
+          dispatch(fetchExpenses()),
+          dispatch(fetchPersonalTransactions()),
+        ]).catch(err => console.warn('Background sync failed:', err));
       } else {
         // Offline: data is already in Redux from cache
         // Just ensure we have the data (fetch will use cache)
         if (groups.length === 0) {
-          await dispatch(fetchGroups()).unwrap();
+          dispatch(fetchGroups());
         }
         if (expenses.length === 0) {
-          await dispatch(fetchExpenses()).unwrap();
+          dispatch(fetchExpenses());
         }
         if (transactions.length === 0) {
-          await dispatch(fetchPersonalTransactions()).unwrap();
+          dispatch(fetchPersonalTransactions());
         }
       }
     } catch (error) {
@@ -233,7 +238,7 @@ const toggleBalanceVisibility = () => {
       </View>
 
       {/* Overall Balance Card */}
-    {/* --- MASTERCARD STYLE CARD WITH HIDE/SHOW --- */}
+      {/* --- MASTERCARD STYLE CARD WITH HIDE/SHOW --- */}
       <View style={styles.cardContainer}>
         <LinearGradient
           colors={['#5b247a', '#1bcedf']}
@@ -266,7 +271,7 @@ const toggleBalanceVisibility = () => {
                   rippleColor="rgba(255,255,255,0.3)"
                 />
               </View>
-              
+
               <IconButton
                 icon="information-outline"
                 size={18}
@@ -278,8 +283,8 @@ const toggleBalanceVisibility = () => {
 
             {/* THE BALANCE / MASKED TEXT */}
             <Text style={styles.cardNumber}>
-              {isBalanceHidden 
-                ? "₹ ******" 
+              {isBalanceHidden
+                ? "₹ ******"
                 : `₹ ${overallBalance.toFixed(2)}`}
             </Text>
           </View>
@@ -292,9 +297,9 @@ const toggleBalanceVisibility = () => {
                 {profile?.full_name?.toUpperCase() || "USER"}
               </Text>
               <Text style={styles.cardStatusText}>
-                {isBalanceHidden 
-                   ? "Status: Hidden" 
-                   : overallBalance >= 0 ? "Status: Active" : "Status: Attention"}
+                {isBalanceHidden
+                  ? "Status: Hidden"
+                  : overallBalance >= 0 ? "Status: Active" : "Status: Attention"}
               </Text>
             </View>
 
@@ -400,8 +405,8 @@ const toggleBalanceVisibility = () => {
                 groupNetBalance > 0
                   ? styles.positiveBalance
                   : groupNetBalance < 0
-                  ? styles.negativeBalance
-                  : styles.neutralBalance,
+                    ? styles.negativeBalance
+                    : styles.neutralBalance,
               ]}
             >
               {groupNetBalance > 0 ? '+' : ''}₹{groupNetBalance.toFixed(2)}
@@ -467,7 +472,7 @@ const toggleBalanceVisibility = () => {
       </View>
 
       {/* Recent Personal Transactions */}
-    {recentPersonalTransactions.length > 0 && (
+      {recentPersonalTransactions.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
@@ -486,7 +491,7 @@ const toggleBalanceVisibility = () => {
             <Card
               key={transaction.id}
               style={styles.transactionCard}
-              onPress={() => navigation.navigate("PersonalFinance",{transactionId:transaction.id})}
+              onPress={() => navigation.navigate("PersonalFinance", { transactionId: transaction.id })}
             >
               <Card.Content style={styles.transactionContent}>
                 <View style={styles.transactionLeft}>
@@ -501,7 +506,7 @@ const toggleBalanceVisibility = () => {
                     }}
                   />
                   <View style={styles.transactionInfo}>
-                    <Text 
+                    <Text
                       style={[styles.transactionDescription, { color: theme.colors.onSurface }]}
                       numberOfLines={1}
                     >
@@ -512,7 +517,7 @@ const toggleBalanceVisibility = () => {
                     </Text>
                   </View>
                 </View>
-                
+
                 {/* Amount on the right */}
                 <Text
                   style={[
@@ -528,7 +533,7 @@ const toggleBalanceVisibility = () => {
         </View>
       )}
       {/* Recent Group Expenses */}
-   {recentExpenses.length > 0 && (
+      {recentExpenses.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
@@ -561,9 +566,9 @@ const toggleBalanceVisibility = () => {
                       {expense.category?.icon || "🧾"}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.expenseInfo}>
-                    <Text 
+                    <Text
                       style={[styles.expenseDescription, { color: theme.colors.onSurface }]}
                       numberOfLines={1}
                     >
@@ -636,7 +641,7 @@ const toggleBalanceVisibility = () => {
       </View>
 
       <LoadingOverlay
-        visible={isLoading && !refreshing}
+        visible={isLoading && !refreshing && groups.length === 0 && expenses.length === 0}
         message="Loading your data..."
       />
     </ScrollView>
@@ -695,8 +700,8 @@ const styles = StyleSheet.create({
   avatar: {
     backgroundColor: "#6200EE",
   },
- 
-cardContainer: {
+
+  cardContainer: {
     marginBottom: 24,
     borderRadius: 20,
     elevation: 8,
@@ -731,9 +736,9 @@ cardContainer: {
   },
   // UPDATED HEADER STYLES
   balanceHeader: {
-    flexDirection: 'row', 
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center', 
+    alignItems: 'center',
     marginBottom: 8,
   },
   labelRow: {
@@ -765,7 +770,7 @@ cardContainer: {
     fontSize: 28, // Slightly smaller to fit **** safely
     fontWeight: "bold",
     letterSpacing: 2, // Wider spacing looks more like a credit card
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', 
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
@@ -951,40 +956,40 @@ cardContainer: {
   transactionCard: {
     marginBottom: 8,
   },
- transactionContent: {
+  transactionContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 8, // This is the key to matching Group Card height
   },
-  
+
   transactionLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
     marginRight: 8, // Add spacing so long text doesn't hit the amount
   },
-  
+
   transactionInfo: {
     flex: 1,
     justifyContent: 'center',
   },
-  
+
   transactionDescription: {
     fontSize: 16,
     fontWeight: "600", // Matches groupName weight
   },
-  
+
   transactionDate: {
     fontSize: 12,
     marginTop: 2,
   },
-  
+
   transactionAmount: {
     fontSize: 16, // Matches groupName size for consistency
     fontWeight: "bold",
   },
- expenseCard: {
+  expenseCard: {
     marginBottom: 8,
   },
   // Matches Group Content Padding (Vertical 8 is key)
@@ -992,7 +997,7 @@ cardContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8, 
+    paddingVertical: 8,
   },
   expenseLeft: {
     flexDirection: "row",

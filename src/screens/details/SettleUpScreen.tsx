@@ -109,7 +109,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
         }
 
         const amountNum = parseFloat(amount);
-        const selectedUser = getUsersToSettle().find(u => u.id === selectedUserId);
+        const selectedUser = getUsersToSettle().find((u: any) => u.id === selectedUserId);
 
         Alert.alert(
             'Confirm Settlement',
@@ -145,18 +145,18 @@ export default function SettleUpScreen({ navigation, route }: Props) {
     const getUsersToSettle = () => {
         if (!selectedGroupId) return [];
 
-        const selectedGroup = groups.find(g => g.id === selectedGroupId);
+        const selectedGroup = groups.find((g: any) => g.id === selectedGroupId);
         if (!selectedGroup?.members) return [];
 
         // Get balances for this group
-        const groupBalances = balances.filter(b => b.group_id === selectedGroupId);
+        const groupBalances = balances.filter((b: any) => b.group_id === selectedGroupId);
 
         // Get users I owe money to (negative balance)
         return selectedGroup.members
-            .filter(m => m.user_id !== profile?.id)
-            .map(m => {
-                const balance = groupBalances.find(b => b.user_id === m.user_id);
-                const myBalance = groupBalances.find(b => b.user_id === profile?.id);
+            .filter((m: any) => m.user_id !== profile?.id)
+            .map((m: any) => {
+                const balance = groupBalances.find((b: any) => b.user_id === m.user_id);
+                const myBalance = groupBalances.find((b: any) => b.user_id === profile?.id);
 
                 // Calculate how much I owe this user
                 let oweAmount = 0;
@@ -176,16 +176,16 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                     oweAmount,
                 };
             })
-            .filter(u => u.oweAmount > 0)
-            .sort((a, b) => b.oweAmount - a.oweAmount);
+            .filter((u: any) => u.oweAmount > 0)
+            .sort((a: any, b: any) => b.oweAmount - a.oweAmount);
     };
 
     const getSelectedUserBalance = () => {
-        const user = getUsersToSettle().find(u => u.id === selectedUserId);
+        const user = getUsersToSettle().find((u: any) => u.id === selectedUserId);
         return user?.oweAmount || 0;
     };
 
-    const selectedGroup = groups.find(g => g.id === selectedGroupId);
+    const selectedGroup = groups.find((g: any) => g.id === selectedGroupId);
     const usersToSettle = getUsersToSettle();
     const selectedUserBalance = getSelectedUserBalance();
 
@@ -198,13 +198,13 @@ export default function SettleUpScreen({ navigation, route }: Props) {
             >
                 <ScrollView contentContainerStyle={styles.content}>
                     {/* Info Card */}
-                    <Card style={styles.infoCard}>
+                    <Card style={[styles.infoCard, { backgroundColor: theme.colors.surface }]}>
                         <Card.Content>
                             <View style={styles.infoHeader}>
                                 <Text style={styles.infoIcon}>💸</Text>
                                 <View style={styles.infoText}>
-                                    <Text style={styles.infoTitle}>Settle Up</Text>
-                                    <Text style={styles.infoDescription}>
+                                    <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>Settle Up</Text>
+                                    <Text style={[styles.infoDescription, { color: theme.colors.onSurfaceVariant }]}>
                                         Record a payment you made to a group member
                                     </Text>
                                 </View>
@@ -213,11 +213,11 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                     </Card>
 
                     {/* Group Selection */}
-                    <Text style={styles.sectionTitle}>Which group?</Text>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Which group?</Text>
                     {groups.length === 0 ? (
-                        <Card style={styles.emptyCard}>
+                        <Card style={[styles.emptyCard, { backgroundColor: theme.colors.surface }]}>
                             <Card.Content>
-                                <Text style={styles.emptyText}>No groups available</Text>
+                                <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No groups available</Text>
                                 <Button
                                     mode="contained"
                                     onPress={() => navigation.navigate('Groups')}
@@ -228,7 +228,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                             </Card.Content>
                         </Card>
                     ) : (
-                        <Card style={styles.selectionCard}>
+                        <Card style={[styles.selectionCard, { backgroundColor: theme.colors.surface }]}>
                             <RadioButton.Group
                                 onValueChange={(value) => {
                                     setSelectedGroupId(value);
@@ -236,7 +236,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                                 }}
                                 value={selectedGroupId}
                             >
-                                {groups.map((group) => (
+                                {groups.map((group: any) => (
                                     <React.Fragment key={group.id}>
                                         <RadioButton.Item
                                             label={group.name}
@@ -258,32 +258,32 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                     {/* User Selection */}
                     {selectedGroupId && (
                         <>
-                            <Text style={styles.sectionTitle}>Pay whom?</Text>
+                            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Pay whom?</Text>
                             {usersToSettle.length === 0 ? (
-                                <Card style={styles.emptyCard}>
+                                <Card style={[styles.emptyCard, { backgroundColor: theme.colors.surface }]}>
                                     <Card.Content>
-                                        <Text style={styles.emptyText}>
+                                        <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
                                             You don't owe anyone in this group
                                         </Text>
-                                        <Text style={styles.emptySubtext}>
+                                        <Text style={[styles.emptySubtext, { color: theme.colors.onSurfaceVariant }]}>
                                             You're all settled up! 🎉
                                         </Text>
                                     </Card.Content>
                                 </Card>
                             ) : (
-                                <Card style={styles.selectionCard}>
+                                <Card style={[styles.selectionCard, { backgroundColor: theme.colors.surface }]}>
                                     <RadioButton.Group
                                         onValueChange={(value) => {
                                             setSelectedUserId(value);
                                             // Auto-fill suggested amount
-                                            const user = usersToSettle.find(u => u.id === value);
+                                            const user = usersToSettle.find((u: any) => u.id === value);
                                             if (user) {
                                                 setAmount(user.oweAmount.toFixed(2));
                                             }
                                         }}
                                         value={selectedUserId}
                                     >
-                                        {usersToSettle.map((user, index) => (
+                                        {usersToSettle.map((user: any, index: number) => (
                                             <React.Fragment key={user.id}>
                                                 {index > 0 && <Divider />}
                                                 <View style={styles.userItem}>
@@ -297,15 +297,15 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                                                         <Avatar.Text
                                                             size={40}
                                                             label={user.name.substring(0, 2).toUpperCase()}
-                                                            style={styles.userAvatar}
+                                                            style={[styles.userAvatar, { backgroundColor: theme.colors.primary }]}
                                                         />
                                                         <View style={styles.userDetails}>
-                                                            <Text style={styles.userName}>{user.name}</Text>
-                                                            <Text style={styles.userEmail}>{user.email}</Text>
+                                                            <Text style={[styles.userName, { color: theme.colors.onSurface }]}>{user.name}</Text>
+                                                            <Text style={[styles.userEmail, { color: theme.colors.onSurfaceVariant }]}>{user.email}</Text>
                                                         </View>
                                                         <View style={styles.userBalance}>
-                                                            <Text style={styles.balanceLabel}>You owe</Text>
-                                                            <Text style={styles.balanceAmount}>
+                                                            <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>You owe</Text>
+                                                            <Text style={[styles.balanceAmount, { color: theme.colors.error }]}>
                                                                 ₹{user.oweAmount.toFixed(2)}
                                                             </Text>
                                                         </View>
@@ -327,7 +327,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                     {/* Amount Input */}
                     {selectedUserId && (
                         <>
-                            <Text style={styles.sectionTitle}>How much?</Text>
+                            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>How much?</Text>
                             <TextInput
                                 label="Amount *"
                                 value={amount}
@@ -346,8 +346,8 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                             ) : null}
 
                             {selectedUserBalance > 0 && (
-                                <View style={styles.suggestionContainer}>
-                                    <Text style={styles.suggestionText}>
+                                <View style={[styles.suggestionContainer, { backgroundColor: theme.colors.primaryContainer }]}>
+                                    <Text style={[styles.suggestionText, { color: theme.colors.onPrimaryContainer }]}>
                                         Suggested amount: ₹{selectedUserBalance.toFixed(2)}
                                     </Text>
                                     <Button
@@ -379,7 +379,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                     {/* Notes */}
                     {selectedUserId && (
                         <>
-                            <Text style={styles.sectionTitle}>Notes (Optional)</Text>
+                            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Notes (Optional)</Text>
                             <TextInput
                                 label="Add a note"
                                 value={notes}
@@ -395,31 +395,31 @@ export default function SettleUpScreen({ navigation, route }: Props) {
 
                     {/* Summary */}
                     {selectedUserId && amount && parseFloat(amount) > 0 && (
-                        <Card style={styles.summaryCard}>
+                        <Card style={[styles.summaryCard, { backgroundColor: theme.colors.surfaceVariant }]}>
                             <Card.Content>
-                                <Text style={styles.summaryTitle}>Payment Summary</Text>
+                                <Text style={[styles.summaryTitle, { color: theme.colors.onSurfaceVariant }]}>Payment Summary</Text>
                                 <Divider style={styles.summaryDivider} />
 
                                 <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>From</Text>
-                                    <Text style={styles.summaryValue}>You</Text>
+                                    <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>From</Text>
+                                    <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>You</Text>
                                 </View>
 
                                 <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>To</Text>
-                                    <Text style={styles.summaryValue}>
-                                        {usersToSettle.find(u => u.id === selectedUserId)?.name}
+                                    <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>To</Text>
+                                    <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
+                                        {usersToSettle.find((u: any) => u.id === selectedUserId)?.name}
                                     </Text>
                                 </View>
 
                                 <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Amount</Text>
-                                    <Text style={styles.summaryAmount}>₹{parseFloat(amount).toFixed(2)}</Text>
+                                    <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Amount</Text>
+                                    <Text style={[styles.summaryAmount, { color: theme.colors.primary }]}>₹{parseFloat(amount).toFixed(2)}</Text>
                                 </View>
 
                                 <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Group</Text>
-                                    <Text style={styles.summaryValue}>{selectedGroup?.name}</Text>
+                                    <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Group</Text>
+                                    <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>{selectedGroup?.name}</Text>
                                 </View>
                             </Card.Content>
                         </Card>
@@ -460,7 +460,6 @@ const styles = StyleSheet.create({
     },
     infoCard: {
         marginBottom: 24,
-        backgroundColor: '#E8F5E9',
         elevation: 2,
     },
     infoHeader: {
@@ -477,39 +476,32 @@ const styles = StyleSheet.create({
     infoTitle: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#2E7D32',
         marginBottom: 4,
     },
     infoDescription: {
         fontSize: 14,
-        color: '#558B2F',
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
         marginTop: 16,
         marginBottom: 12,
     },
     selectionCard: {
-        backgroundColor: '#fff',
         elevation: 2,
         marginBottom: 8,
     },
     emptyCard: {
-        backgroundColor: '#fff',
         elevation: 2,
         marginBottom: 8,
     },
     emptyText: {
         fontSize: 16,
-        color: '#666',
         textAlign: 'center',
         marginBottom: 8,
     },
     emptySubtext: {
         fontSize: 14,
-        color: '#999',
         textAlign: 'center',
         marginBottom: 16,
     },
@@ -531,7 +523,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     userAvatar: {
-        backgroundColor: '#6200EE',
         marginRight: 12,
     },
     userDetails: {
@@ -540,11 +531,9 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
     },
     userEmail: {
         fontSize: 12,
-        color: '#666',
         marginTop: 2,
     },
     userBalance: {
@@ -552,13 +541,11 @@ const styles = StyleSheet.create({
     },
     balanceLabel: {
         fontSize: 11,
-        color: '#666',
         marginBottom: 2,
     },
     balanceAmount: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#F44336',
     },
     input: {
         marginBottom: 8,
@@ -567,14 +554,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: '#E8DEF8',
         padding: 12,
         borderRadius: 8,
         marginBottom: 12,
     },
     suggestionText: {
         fontSize: 14,
-        color: '#6200EE',
         fontWeight: '500',
     },
     quickAmounts: {
@@ -588,7 +573,6 @@ const styles = StyleSheet.create({
         minWidth: 70,
     },
     summaryCard: {
-        backgroundColor: '#FFF3E0',
         elevation: 2,
         marginTop: 16,
         marginBottom: 16,
@@ -596,7 +580,6 @@ const styles = StyleSheet.create({
     summaryTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#E65100',
         marginBottom: 8,
     },
     summaryDivider: {
@@ -610,17 +593,14 @@ const styles = StyleSheet.create({
     },
     summaryLabel: {
         fontSize: 14,
-        color: '#666',
     },
     summaryValue: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
     },
     summaryAmount: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#E65100',
     },
     submitButton: {
         marginTop: 24,

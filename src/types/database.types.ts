@@ -245,11 +245,22 @@ export interface AdvanceCollectionContribution {
   collection_id: string
   user_id: string
   amount: number
-  status: 'pending' | 'paid' | 'cancelled'
+  status: 'pending' | 'pending_approval' | 'paid' | 'cancelled'
   contributed_at: string | null
+  approved_by: string | null
+  approved_at: string | null
   notes: string | null
   created_at: string
   user?: Profile
+}
+
+export interface BulkPaymentStats {
+  total: number
+  active: number
+  completed: number
+  totalAmount: number
+  pending: number
+  balanceLeft: number
 }
 
 export interface BulkSettlementSummary {

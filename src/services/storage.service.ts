@@ -1,5 +1,21 @@
 // src/services/storage.service.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  ExpenseWithDetails,
+  ExpenseCategory,
+  Settlement,
+  GroupWithMembers,
+  PersonalTransaction,
+  PersonalCategory,
+  UserCompleteBalance,
+  Hotel,
+  UserPaymentMethod,
+  Notification,
+  Message,
+  MessageWithStatus,
+  Conversation,
+  ConversationWithDetails
+} from '../types/database.types';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -40,7 +56,7 @@ export interface StorageService<T> {
   set(key: string, value: T): Promise<void>;
   remove(key: string): Promise<void>;
   clear(): Promise<void>;
-  getAllKeys(): Promise<string[]>;
+  getAllKeys(): Promise<readonly string[]>;
 }
 
 class LocalStorageService implements StorageService<any> {
@@ -81,7 +97,7 @@ class LocalStorageService implements StorageService<any> {
     }
   }
 
-  async getAllKeys(): Promise<string[]> {
+  async getAllKeys(): Promise<readonly string[]> {
     try {
       return await AsyncStorage.getAllKeys();
     } catch (error) {
@@ -96,8 +112,8 @@ const storage = new LocalStorageService();
 // Generic data storage functions
 export const storageService = {
   // Expenses
-  async getExpenses() {
-    return storage.get(STORAGE_KEYS.EXPENSES);
+  async getExpenses(): Promise<ExpenseWithDetails[] | null> {
+    return storage.get<ExpenseWithDetails[]>(STORAGE_KEYS.EXPENSES);
   },
 
   async setExpenses(expenses: any[]) {
@@ -118,8 +134,8 @@ export const storageService = {
   },
 
   // Groups
-  async getGroups() {
-    return storage.get(STORAGE_KEYS.GROUPS);
+  async getGroups(): Promise<GroupWithMembers[] | null> {
+    return storage.get<GroupWithMembers[]>(STORAGE_KEYS.GROUPS);
   },
 
   async setGroups(groups: any[]) {
@@ -140,8 +156,8 @@ export const storageService = {
   },
 
   // Personal Transactions
-  async getPersonalTransactions() {
-    return storage.get(STORAGE_KEYS.PERSONAL_TRANSACTIONS);
+  async getPersonalTransactions(): Promise<PersonalTransaction[] | null> {
+    return storage.get<PersonalTransaction[]>(STORAGE_KEYS.PERSONAL_TRANSACTIONS);
   },
 
   async setPersonalTransactions(transactions: any[]) {
@@ -162,8 +178,8 @@ export const storageService = {
   },
 
   // Hotels
-  async getHotels() {
-    return storage.get(STORAGE_KEYS.HOTELS);
+  async getHotels(): Promise<Hotel[] | null> {
+    return storage.get<Hotel[]>(STORAGE_KEYS.HOTELS);
   },
 
   async setHotels(hotels: any[]) {
@@ -184,8 +200,8 @@ export const storageService = {
   },
 
   // Payment Methods
-  async getPaymentMethods() {
-    return storage.get(STORAGE_KEYS.PAYMENT_METHODS);
+  async getPaymentMethods(): Promise<UserPaymentMethod[] | null> {
+    return storage.get<UserPaymentMethod[]>(STORAGE_KEYS.PAYMENT_METHODS);
   },
 
   async setPaymentMethods(methods: any[]) {
@@ -206,8 +222,8 @@ export const storageService = {
   },
 
   // Notifications
-  async getNotifications() {
-    return storage.get(STORAGE_KEYS.NOTIFICATIONS);
+  async getNotifications(): Promise<Notification[] | null> {
+    return storage.get<Notification[]>(STORAGE_KEYS.NOTIFICATIONS);
   },
 
   async setNotifications(notifications: any[]) {
@@ -228,8 +244,8 @@ export const storageService = {
   },
 
   // Categories
-  async getCategories() {
-    return storage.get(STORAGE_KEYS.CATEGORIES);
+  async getCategories(): Promise<ExpenseCategory[] | null> {
+    return storage.get<ExpenseCategory[]>(STORAGE_KEYS.CATEGORIES);
   },
 
   async setCategories(categories: any[]) {
@@ -250,8 +266,8 @@ export const storageService = {
   },
 
   // Settlements
-  async getSettlements() {
-    return storage.get(STORAGE_KEYS.SETTLEMENTS);
+  async getSettlements(): Promise<Settlement[] | null> {
+    return storage.get<Settlement[]>(STORAGE_KEYS.SETTLEMENTS);
   },
 
   async setSettlements(settlements: any[]) {
@@ -272,8 +288,8 @@ export const storageService = {
   },
 
   // Personal Categories
-  async getPersonalCategories() {
-    return storage.get(STORAGE_KEYS.PERSONAL_CATEGORIES);
+  async getPersonalCategories(): Promise<PersonalCategory[] | null> {
+    return storage.get<PersonalCategory[]>(STORAGE_KEYS.PERSONAL_CATEGORIES);
   },
 
   async setPersonalCategories(categories: any[]) {
@@ -294,8 +310,8 @@ export const storageService = {
   },
 
   // Complete Balance
-  async getCompleteBalance() {
-    return storage.get(STORAGE_KEYS.COMPLETE_BALANCE);
+  async getCompleteBalance(): Promise<UserCompleteBalance | null> {
+    return storage.get<UserCompleteBalance>(STORAGE_KEYS.COMPLETE_BALANCE);
   },
 
   async setCompleteBalance(balance: any) {
@@ -316,8 +332,8 @@ export const storageService = {
   },
 
   // Messages
-  async getMessages(conversationId?: string) {
-    const messages = await storage.get(STORAGE_KEYS.MESSAGES);
+  async getMessages(conversationId?: string): Promise<MessageWithStatus[] | null> {
+    const messages = await storage.get<MessageWithStatus[]>(STORAGE_KEYS.MESSAGES);
     if (!messages) return null;
     if (conversationId) {
       return messages.filter((m: any) => m.conversation_id === conversationId);
@@ -350,8 +366,8 @@ export const storageService = {
   },
 
   // Conversations
-  async getConversations() {
-    return storage.get(STORAGE_KEYS.CONVERSATIONS);
+  async getConversations(): Promise<ConversationWithDetails[] | null> {
+    return storage.get<ConversationWithDetails[]>(STORAGE_KEYS.CONVERSATIONS);
   },
 
   async setConversations(conversations: any[]) {

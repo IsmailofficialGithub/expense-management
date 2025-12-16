@@ -95,15 +95,46 @@ USING (
   )
 );
 
--- Users can create their own contributions
-CREATE POLICY "Users can create their own contributions"
+-- Group members can create contributions for any user in their groups
+-- This allows collection creators to create contribution records for all members
+CREATE POLICY "Group members can create contributions in their groups"
 ON advance_collection_contributions
 FOR INSERT
-WITH CHECK (user_id = auth.uid());
+WITH CHECK (
+  -- Check that the collection exists and belongs to a group
+  EXISTS (
+    SELECT 1 FROM group_advance_collections
+    WHERE group_advance_collections.id = advance_collection_contributions.collection_id
+  )
+  AND
+  -- Check that the current user is a member of the group
+  EXISTS (
+    SELECT 1 FROM group_advance_collections
+    JOIN group_members ON group_members.group_id = group_advance_collections.group_id
+    WHERE group_advance_collections.id = advance_collection_contributions.collection_id
+    AND group_members.user_id = auth.uid()
+  )
+  AND
+  -- Check that the user being contributed for is also a member of the group
+  EXISTS (
+    SELECT 1 FROM group_advance_collections
+    JOIN group_members ON group_members.group_id = group_advance_collections.group_id
+    WHERE group_advance_collections.id = advance_collection_contributions.collection_id
+    AND group_members.user_id = advance_collection_contributions.user_id
+  )
+);
 
--- Users can update their own contributions
-CREATE POLICY "Users can update their own contributions"
+-- Group members can update contributions in their groups
+CREATE POLICY "Group members can update contributions in their groups"
 ON advance_collection_contributions
 FOR UPDATE
-USING (user_id = auth.uid());
+USING (
+  -- User can update if they're a member of the group
+  EXISTS (
+    SELECT 1 FROM group_advance_collections
+    JOIN group_members ON group_members.group_id = group_advance_collections.group_id
+    WHERE group_advance_collections.id = advance_collection_contributions.collection_id
+    AND group_members.user_id = auth.uid()
+  )
+);
 

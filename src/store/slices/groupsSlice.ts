@@ -24,7 +24,7 @@ export const fetchGroups = createAsyncThunk('groups/fetchGroups', async (_, { re
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const groups = await groupService.getGroups();
@@ -34,13 +34,13 @@ export const fetchGroups = createAsyncThunk('groups/fetchGroups', async (_, { re
         console.warn('Online fetch groups failed, trying offline:', error);
       }
     }
-    
+
     // Offline: load from local storage
     const cachedGroups = await storageService.getGroups();
     if (cachedGroups) {
       return cachedGroups;
     }
-    
+
     throw new Error('No groups available');
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -59,10 +59,10 @@ export const createGroup = createAsyncThunk('groups/createGroup', async (request
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
-  try {
-    const group = await groupService.createGroup(request);
+      try {
+        const group = await groupService.createGroup(request);
         const groupWithDetails = await groupService.getGroup(group.id);
         // Save to local storage
         const currentGroups = await storageService.getGroups() || [];
@@ -72,7 +72,7 @@ export const createGroup = createAsyncThunk('groups/createGroup', async (request
         console.warn('Online create group failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: create temporary group and queue for sync
     const tempGroup: GroupWithMembers = {
       id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -81,16 +81,16 @@ export const createGroup = createAsyncThunk('groups/createGroup', async (request
       created_by: '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      created_by_profile: {} as any,
+      creator: {} as any,
       members: [],
     };
-    
+
     await syncService.addToQueue('create', 'group', request);
-    
+
     // Save to local storage
     const currentGroups = await storageService.getGroups() || [];
     await storageService.setGroups([tempGroup, ...currentGroups]);
-    
+
     return tempGroup;
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -101,14 +101,14 @@ export const updateGroup = createAsyncThunk('groups/updateGroup', async ({ group
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
-  try {
-    await groupService.updateGroup(groupId, updates);
+      try {
+        await groupService.updateGroup(groupId, updates);
         const updatedGroup = await groupService.getGroup(groupId);
         // Update local storage
         const currentGroups = await storageService.getGroups() || [];
-        const updatedGroups = currentGroups.map((g: any) => 
+        const updatedGroups = currentGroups.map((g: any) =>
           g.id === groupId ? updatedGroup : g
         );
         await storageService.setGroups(updatedGroups);
@@ -117,21 +117,21 @@ export const updateGroup = createAsyncThunk('groups/updateGroup', async ({ group
         console.warn('Online update group failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: update local storage and queue for sync
     const currentGroups = await storageService.getGroups() || [];
     const groupToUpdate = currentGroups.find((g: any) => g.id === groupId);
-    
+
     if (groupToUpdate) {
       const updatedGroup = { ...groupToUpdate, ...updates, updated_at: new Date().toISOString() };
       await syncService.addToQueue('update', 'group', { id: groupId, updates });
-      const updatedGroups = currentGroups.map((g: any) => 
+      const updatedGroups = currentGroups.map((g: any) =>
         g.id === groupId ? updatedGroup : g
       );
       await storageService.setGroups(updatedGroups);
       return updatedGroup;
     }
-    
+
     throw new Error('Group not found');
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -142,10 +142,10 @@ export const deleteGroup = createAsyncThunk('groups/deleteGroup', async (groupId
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
-  try {
-    await groupService.deleteGroup(groupId);
+      try {
+        await groupService.deleteGroup(groupId);
         // Remove from local storage
         const currentGroups = await storageService.getGroups() || [];
         await storageService.setGroups(currentGroups.filter((g: any) => g.id !== groupId));
@@ -154,12 +154,12 @@ export const deleteGroup = createAsyncThunk('groups/deleteGroup', async (groupId
         console.warn('Online delete group failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: remove from local storage and queue for sync
     const currentGroups = await storageService.getGroups() || [];
     await syncService.addToQueue('delete', 'group', { id: groupId });
     await storageService.setGroups(currentGroups.filter((g: any) => g.id !== groupId));
-    
+
     return groupId;
   } catch (error: any) {
     return rejectWithValue(error.message);
