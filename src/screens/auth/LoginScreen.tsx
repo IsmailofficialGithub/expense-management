@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    opacity: 0.5,
   },
   gradient: {
     flex: 1,
@@ -241,8 +240,9 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    padding: 5,
+    padding: 20,
     borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     // elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

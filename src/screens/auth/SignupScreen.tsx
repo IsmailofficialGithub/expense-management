@@ -42,10 +42,11 @@ export default function SignupScreen({ navigation, route }: Props) {
     password: '',
     confirmPassword: '',
   });
+  const [isSigningUp, setIsSigningUp] = useState(false);
   const { showToast } = useToast();
 
   const dispatch = useAppDispatch();
-  const { loading, error } = useAuth();
+  const { error } = useAuth();
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -93,6 +94,8 @@ export default function SignupScreen({ navigation, route }: Props) {
 
     if (hasError) return;
 
+    setIsSigningUp(true);
+
     // Dispatch signup action
     try {
       const result = await dispatch(signUp({
@@ -116,6 +119,8 @@ export default function SignupScreen({ navigation, route }: Props) {
     } catch (err) {
       console.error('Signup failed:', err);
       ErrorHandler.handleError(err, showToast, 'Signup');
+    } finally {
+      setIsSigningUp(false);
     }
   };
 
@@ -247,8 +252,8 @@ export default function SignupScreen({ navigation, route }: Props) {
                   <Button
                     mode="contained"
                     onPress={handleSignup}
-                    loading={loading}
-                    disabled={loading}
+                    loading={isSigningUp}
+                    disabled={isSigningUp}
                     style={styles.button}
                     contentStyle={styles.buttonContent}
                     labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
@@ -283,8 +288,6 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    opacity: 0.5,
-
   },
   gradient: {
     flex: 1,
@@ -306,8 +309,9 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    padding: 5,
+    padding: 20,
     borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     // elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

@@ -346,6 +346,12 @@ class SyncService {
       if (personalCategories) {
         await storageService.setPersonalCategories(personalCategories);
       }
+
+      // Sync complete balance
+      const balance = await personalFinanceService.getCompleteBalance();
+      if (balance) {
+        await storageService.setCompleteBalance(balance);
+      }
     } catch (error) {
       console.error('Error syncing from server:', error);
       throw error;

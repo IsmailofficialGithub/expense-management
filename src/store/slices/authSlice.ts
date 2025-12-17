@@ -4,6 +4,8 @@ import { User } from '@supabase/supabase-js';
 import { authService, profileService } from '../../services/supabase.service';
 import { Profile, SignUpData, SignInData } from '../../types/database.types';
 
+import { storageService } from '../../services/storage.service';
+
 interface AuthState {
   user: User | null;
   profile: Profile | null;
@@ -52,9 +54,12 @@ export const signIn = createAsyncThunk(
           // If profile doesn't exist, that's okay - user can still log in
           console.warn('Profile not found for user, they may need to complete profile setup:', profileError.message);
         }
+        if (profile) {
+          await storageService.setProfile(profile);
+        }
         return { user: result.user, profile };
       }
-      throw new Error('Sign in failed');
+      throw new Error('Sign in failed: No user returned');
     } catch (error: any) {
       return rejectWithValue(error.message || 'Sign in failed');
     }
@@ -66,6 +71,7 @@ export const signOut = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await authService.signOut();
+      await storageService.removeProfile();
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -86,6 +92,9 @@ export const initializeAuth = createAsyncThunk(
           // Profile doesn't exist - that's okay, user can still use app
           console.warn('Profile not found during initialization:', profileError.message);
         }
+        if (profile) {
+          await storageService.setProfile(profile);
+        }
         return { user, profile };
       }
       return { user: null, profile: null };
@@ -101,11 +110,12 @@ export const updateProfile = createAsyncThunk(
     try {
       const state = getState() as { auth: AuthState };
       if (!state.auth.user) throw new Error('Not authenticated');
-      
+
       const updatedProfile = await profileService.updateProfile(
         state.auth.user.id,
         updates
       );
+      await storageService.setProfile(updatedProfile);
       return updatedProfile;
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -134,6 +144,9 @@ const authSlice = createSlice({
       state.profile = action.payload.profile;
       state.isAuthenticated = !!action.payload.user;
     },
+    setProfileFromCache: (state, action: PayloadAction<Profile>) => {
+      state.profile = action.payload;
+    },
     clearError: (state) => {
       state.error = null;
     },
@@ -151,8 +164,8 @@ const authSlice = createSlice({
       state.profile = null;
       state.isAuthenticated = false;
       // Store verification message in error field (will be shown as success message)
-      state.error = action.payload.requiresVerification 
-        ? 'VERIFICATION_REQUIRED' 
+      state.error = action.payload.requiresVerification
+        ? 'VERIFICATION_REQUIRED'
         : null;
     });
     builder.addCase(signUp.rejected, (state, action) => {
@@ -215,5 +228,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setUser, clearError } = authSlice.actions;
+export const { setUser, clearError, setProfileFromCache } = authSlice.actions;
 export default authSlice.reducer;
