@@ -13,6 +13,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   initialized: boolean;
+  isPasswordReset: boolean;
 }
 
 const initialState: AuthState = {
@@ -22,6 +23,7 @@ const initialState: AuthState = {
   loading: false,
   error: null,
   initialized: false,
+  isPasswordReset: false,
 };
 
 // Async Thunks
@@ -45,18 +47,18 @@ export const signIn = createAsyncThunk(
     try {
       const result = await authService.signIn(data.email, data.password);
       if (result.user) {
-        // Profile might not exist if user was created manually
-        // Try to get profile, but don't fail if it doesn't exist
-        let profile: Profile | null = null;
-        try {
-          profile = await profileService.getProfile(result.user.id);
-        } catch (profileError: any) {
-          // If profile doesn't exist, that's okay - user can still log in
-          console.warn('Profile not found for user, they may need to complete profile setup:', profileError.message);
+        // Verify profile exists in public.profiles table
+        // This ensures the user is a valid application user
+        const profile = await profileService.getProfile(result.user.id);
+
+        if (!profile) {
+          // If auth exists but no profile, this is an invalid state
+          // Sign out immediately and inform the user
+          await authService.signOut();
+          throw new Error('User profile not found in database. Please contact support.');
         }
-        if (profile) {
-          await storageService.setProfile(profile);
-        }
+
+        await storageService.setProfile(profile);
         return { user: result.user, profile };
       }
       throw new Error('Sign in failed: No user returned');
@@ -71,7 +73,7 @@ export const signOut = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await authService.signOut();
-      await storageService.removeProfile();
+      await storageService.clearAll();
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -84,17 +86,18 @@ export const initializeAuth = createAsyncThunk(
     try {
       const user = await authService.getCurrentUser();
       if (user) {
-        // Profile might not exist - handle gracefully
-        let profile: Profile | null = null;
-        try {
-          profile = await profileService.getProfile(user.id);
-        } catch (profileError: any) {
-          // Profile doesn't exist - that's okay, user can still use app
-          console.warn('Profile not found during initialization:', profileError.message);
+        // Verify profile exists in public.profiles table
+        const profile = await profileService.getProfile(user.id);
+
+        if (!profile) {
+          // If session exists but no profile, clear the session
+          console.warn('Session found but profile missing. logging out.');
+          await authService.signOut();
+          await storageService.clearAll();
+          return { user: null, profile: null };
         }
-        if (profile) {
-          await storageService.setProfile(profile);
-        }
+
+        await storageService.setProfile(profile);
         return { user, profile };
       }
       return { user: null, profile: null };
@@ -149,6 +152,9 @@ const authSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null;
+    },
+    setPasswordReset: (state, action: PayloadAction<boolean>) => {
+      state.isPasswordReset = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -228,5 +234,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setUser, clearError, setProfileFromCache } = authSlice.actions;
+export const { setUser, clearError, setProfileFromCache, setPasswordReset } = authSlice.actions;
 export default authSlice.reducer;

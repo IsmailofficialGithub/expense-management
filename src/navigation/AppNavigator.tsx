@@ -11,6 +11,9 @@ import NotificationBadge from '../components/NotificationBadge';
 // Import screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
+import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import VerifyOtpScreen from '../screens/auth/VerifyOtpScreen';
+import NewPasswordScreen from '../screens/auth/NewPasswordScreen';
 import DashboardScreen from '../screens/main/DashboardScreen';
 import GroupsScreen from '../screens/main/GroupsScreen';
 import ExpensesScreen from '../screens/main/ExpensesScreen';
@@ -47,6 +50,8 @@ import SplashScreen from '../screens/SplashScreen';
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
+  ForgotPassword: undefined;
+  VerifyOtp: { email: string };
 };
 
 export type MainTabParamList = {
@@ -63,6 +68,7 @@ export type RootStackParamList = {
   Splash: undefined;
   Auth: undefined;
   Main: undefined;
+  NewPassword: undefined;
   GroupDetails: { groupId: string };
   SingleGroupDetails: { groupId: string };
   SingleGroupExpenseDetails: { expenseId: string; groupId?: string };
@@ -100,6 +106,8 @@ function AuthNavigator() {
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Signup" component={SignupScreen} />
+      <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <AuthStack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
     </AuthStack.Navigator>
   );
 }
@@ -186,7 +194,7 @@ function MainNavigator() {
 // Root Navigator - decides between Auth and Main based on login status
 // *** THIS FUNCTION IS UPDATED ***
 export default function AppNavigator() {
-  const { isAuthenticated, initialized } = useAuth();
+  const { isAuthenticated, initialized, isPasswordReset } = useAuth();
 
   // Screen options for detail and form screens
   const detailScreenOptions = {
@@ -203,125 +211,132 @@ export default function AppNavigator() {
 
   // Show splash screen immediately - it will handle auth initialization in background
   return (
-    <RootStack.Navigator 
+    <RootStack.Navigator
       screenOptions={{ headerShown: false }}
       initialRouteName="Splash"
     >
-      <RootStack.Screen 
-        name="Splash" 
+      <RootStack.Screen
+        name="Splash"
         component={SplashScreen}
         options={{ headerShown: false }}
       />
       {isAuthenticated ? (
-        // User is Logged In: Show Main app and all detail screens
-        <>
-          <RootStack.Screen name="Main" component={MainNavigator} />
-          <RootStack.Screen
-            name="GroupDetails"
-            component={GroupDetailsScreen}
-            options={{ ...detailScreenOptions, title: 'Group Details' }}
-          />
-          <RootStack.Screen
-            name="SingleGroupDetails"
-            component={SingleGroupDetailsScreen}
-            options={{ ...detailScreenOptions, title: 'Group Expenses' }}
-          />
-          <RootStack.Screen
-            name="SingleGroupExpenseDetails"
-            component={SingleGroupExpenseDetailsScreen}
-            options={{ ...detailScreenOptions, title: 'Expense Details' }}
-          />
-          <RootStack.Screen
-            name="ExpenseDetails"
-            component={ExpenseDetailsScreen}
-            options={{ ...detailScreenOptions, title: 'Expense Details' }}
-          />
-          <RootStack.Screen
-            name="PersonalFinance"
-            component={PersonalFinanceScreen}
-            options={{ ...detailScreenOptions, title: 'Personal Finance' }}
-          />
-          <RootStack.Screen
-            name="AddPersonalTransaction"
-            component={AddPersonalTransactionScreen}
-            options={{ ...detailScreenOptions, title: 'Add Transaction' }}
-          />
-          <RootStack.Screen
-            name="EditPersonalTransaction"
-            component={EditPersonalTransactionScreen}
-            options={{ ...detailScreenOptions, title: 'Edit Transaction' }}
-          />
-          <RootStack.Screen
-            name="SettleUp"
-            component={SettleUpScreen}
-            options={{ ...detailScreenOptions, title: 'Settle Up' }}
-          />
-          <RootStack.Screen
-            name="AddExpense"
-            component={AddExpenseScreen}
-            options={{ ...detailScreenOptions, title: 'Add Expense' }}
-          />
-          <RootStack.Screen
-            name="EditExpense"
-            component={EditExpenseScreen}
-            options={{ ...detailScreenOptions, title: 'Edit Expense' }}
-          />
-          <RootStack.Screen
-            name="InviteUser"
-            component={InviteUserScreen}
-            options={{ ...detailScreenOptions, title: 'Invite Users' }}
-          />
-          <RootStack.Screen
-            name="AddFoodExpense"
-            component={AddFoodExpenseScreen}
-            options={{ ...detailScreenOptions, title: 'Add Food Expense' }}
-          />
-          <RootStack.Screen
-            name="PaymentMethods"
-            component={PaymentMethodsScreen}
-            options={{ ...detailScreenOptions, title: 'Payment Methods' }}
-          />
-          <RootStack.Screen
-            name="AddPaymentMethod"
-            component={AddPaymentMethodScreen}
-            options={{ ...detailScreenOptions, title: 'Add Payment Method' }}
-          />
-          <RootStack.Screen
-            name="EditPaymentMethod"
-            component={EditPaymentMethodScreen}
-            options={{ ...detailScreenOptions, title: 'Edit Payment Method' }}
-          />
-          <RootStack.Screen
-            name="ManageHotel"
-            component={ManageHotelScreen}
-            options={{ ...detailScreenOptions, title: 'Manage Hotels' }}
-          />
-          <RootStack.Screen
-            name="Invitations"
-            component={InvitationsScreen}
-            options={{ ...detailScreenOptions, title: 'Group Invitations' }}
-          />
-          <RootStack.Screen
-            name="Chat"
-            component={ChatScreen}
-            options={{ ...detailScreenOptions, title: 'Chat' }}
-          />
-          <RootStack.Screen
-            name="AdvanceCollection"
-            component={AdvanceCollectionScreen}
-            options={{ ...detailScreenOptions, title: 'Advance Collection' }}
-          />
-          <RootStack.Screen
-            name="BulkSettlement"
-            component={BulkSettlementScreen}
-            options={{ ...detailScreenOptions, title: 'Bulk Settlement' }}
-          />
-          <RootStack.Screen
-            name="BulkPaymentStats"
-            component={BulkPaymentStatsScreen}
-            options={{ ...detailScreenOptions, title: 'Bulk Payment Stats' }}
-          />
-        </>
+        // User is Logged In
+        isPasswordReset ? (
+          // Force Password Reset Flow
+          <RootStack.Screen name="NewPassword" component={NewPasswordScreen} options={{ headerShown: false }} />
+        ) : (
+          // Normal App Flow
+          <>
+            <RootStack.Screen name="Main" component={MainNavigator} />
+            <RootStack.Screen
+              name="GroupDetails"
+              component={GroupDetailsScreen}
+              options={{ ...detailScreenOptions, title: 'Group Details' }}
+            />
+            {/* ... other screens ... */}
+            <RootStack.Screen
+              name="SingleGroupDetails"
+              component={SingleGroupDetailsScreen}
+              options={{ ...detailScreenOptions, title: 'Group Expenses' }}
+            />
+            <RootStack.Screen
+              name="SingleGroupExpenseDetails"
+              component={SingleGroupExpenseDetailsScreen}
+              options={{ ...detailScreenOptions, title: 'Expense Details' }}
+            />
+            <RootStack.Screen
+              name="ExpenseDetails"
+              component={ExpenseDetailsScreen}
+              options={{ ...detailScreenOptions, title: 'Expense Details' }}
+            />
+            <RootStack.Screen
+              name="PersonalFinance"
+              component={PersonalFinanceScreen}
+              options={{ ...detailScreenOptions, title: 'Personal Finance' }}
+            />
+            <RootStack.Screen
+              name="AddPersonalTransaction"
+              component={AddPersonalTransactionScreen}
+              options={{ ...detailScreenOptions, title: 'Add Transaction' }}
+            />
+            <RootStack.Screen
+              name="EditPersonalTransaction"
+              component={EditPersonalTransactionScreen}
+              options={{ ...detailScreenOptions, title: 'Edit Transaction' }}
+            />
+            <RootStack.Screen
+              name="SettleUp"
+              component={SettleUpScreen}
+              options={{ ...detailScreenOptions, title: 'Settle Up' }}
+            />
+            <RootStack.Screen
+              name="AddExpense"
+              component={AddExpenseScreen}
+              options={{ ...detailScreenOptions, title: 'Add Expense' }}
+            />
+            <RootStack.Screen
+              name="EditExpense"
+              component={EditExpenseScreen}
+              options={{ ...detailScreenOptions, title: 'Edit Expense' }}
+            />
+            <RootStack.Screen
+              name="InviteUser"
+              component={InviteUserScreen}
+              options={{ ...detailScreenOptions, title: 'Invite Users' }}
+            />
+            <RootStack.Screen
+              name="AddFoodExpense"
+              component={AddFoodExpenseScreen}
+              options={{ ...detailScreenOptions, title: 'Add Food Expense' }}
+            />
+            <RootStack.Screen
+              name="PaymentMethods"
+              component={PaymentMethodsScreen}
+              options={{ ...detailScreenOptions, title: 'Payment Methods' }}
+            />
+            <RootStack.Screen
+              name="AddPaymentMethod"
+              component={AddPaymentMethodScreen}
+              options={{ ...detailScreenOptions, title: 'Add Payment Method' }}
+            />
+            <RootStack.Screen
+              name="EditPaymentMethod"
+              component={EditPaymentMethodScreen}
+              options={{ ...detailScreenOptions, title: 'Edit Payment Method' }}
+            />
+            <RootStack.Screen
+              name="ManageHotel"
+              component={ManageHotelScreen}
+              options={{ ...detailScreenOptions, title: 'Manage Hotels' }}
+            />
+            <RootStack.Screen
+              name="Invitations"
+              component={InvitationsScreen}
+              options={{ ...detailScreenOptions, title: 'Group Invitations' }}
+            />
+            <RootStack.Screen
+              name="Chat"
+              component={ChatScreen}
+              options={{ ...detailScreenOptions, title: 'Chat' }}
+            />
+            <RootStack.Screen
+              name="AdvanceCollection"
+              component={AdvanceCollectionScreen}
+              options={{ ...detailScreenOptions, title: 'Advance Collection' }}
+            />
+            <RootStack.Screen
+              name="BulkSettlement"
+              component={BulkSettlementScreen}
+              options={{ ...detailScreenOptions, title: 'Bulk Settlement' }}
+            />
+            <RootStack.Screen
+              name="BulkPaymentStats"
+              component={BulkPaymentStatsScreen}
+              options={{ ...detailScreenOptions, title: 'Bulk Payment Stats' }}
+            />
+          </>
+        )
       ) : (
         // User is Logged Out: Show Auth screens
         <RootStack.Screen name="Auth" component={AuthNavigator} />

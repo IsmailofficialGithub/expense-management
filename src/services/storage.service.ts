@@ -9,6 +9,7 @@ import {
   PersonalCategory,
   UserCompleteBalance,
   Hotel,
+  HotelWithMenu,
   UserPaymentMethod,
   Notification,
   Message,
@@ -179,8 +180,8 @@ export const storageService = {
   },
 
   // Hotels
-  async getHotels(): Promise<Hotel[] | null> {
-    return storage.get<Hotel[]>(STORAGE_KEYS.HOTELS);
+  async getHotels(): Promise<HotelWithMenu[] | null> {
+    return storage.get<HotelWithMenu[]>(STORAGE_KEYS.HOTELS);
   },
 
   async setHotels(hotels: any[]) {
@@ -403,6 +404,10 @@ export const storageService = {
 
   // Generic storage access
   storage,
+
+  async clearAll() {
+    await storage.clear();
+  },
 };
 
 export { STORAGE_KEYS };

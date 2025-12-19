@@ -32,21 +32,34 @@ import { useTheme } from 'react-native-paper';
 import { updatesService } from '../../services/updates.service';
 
 export default function ProfileScreen({ navigation }: any) {
-  const { profile, loading } = useAuth();
+  const { profile, user, loading } = useAuth();
   const { theme: userTheme } = useUI();
   const theme = useTheme();
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
 
+  // Construct display profile from profile or user fallback
+  const displayProfile = profile || {
+    id: user?.id || '',
+    updated_at: new Date().toISOString(),
+    username: user?.email?.split('@')[0] || 'User',
+    full_name: user?.user_metadata?.full_name || 'User',
+    avatar_url: null,
+    website: null,
+    email: user?.email || '',
+    phone: '',
+    created_at: user?.created_at || new Date().toISOString(),
+  };
+
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
 
   // Edit profile state
-  const [editName, setEditName] = useState(profile?.full_name || '');
-  const [editPhone, setEditPhone] = useState(profile?.phone || '');
-  const [editEmail, setEditEmail] = useState(profile?.email || '');
+  const [editName, setEditName] = useState(displayProfile.full_name || '');
+  const [editPhone, setEditPhone] = useState(displayProfile.phone || '');
+  const [editEmail, setEditEmail] = useState(displayProfile.email || '');
 
   // Change password state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -74,9 +87,9 @@ export default function ProfileScreen({ navigation }: any) {
 
   // Open edit modal
   const handleEditProfile = () => {
-    setEditName(profile?.full_name || '');
-    setEditPhone(profile?.phone || '');
-    setEditEmail(profile?.email || '');
+    setEditName(displayProfile.full_name || '');
+    setEditPhone(displayProfile.phone || '');
+    setEditEmail(displayProfile.email || '');
     setErrors({ name: '', phone: '', email: '', currentPassword: '', newPassword: '', confirmPassword: '' });
     setEditModalVisible(true);
   };
@@ -217,8 +230,8 @@ export default function ProfileScreen({ navigation }: any) {
           setIsProcessing(true);
           try {
             // Delete file from storage first
-            if (profile?.avatar_url) {
-              const urlParts = profile.avatar_url.split('/avatars/');
+            if (displayProfile.avatar_url) {
+              const urlParts = displayProfile.avatar_url.split('/avatars/');
               if (urlParts.length > 1) {
                 const fileName = urlParts[1];
 
@@ -338,7 +351,7 @@ export default function ProfileScreen({ navigation }: any) {
     ]);
   };
 
-  if (!profile) {
+  if (!user && !profile) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6200EE" />
@@ -352,12 +365,12 @@ export default function ProfileScreen({ navigation }: any) {
       <Card style={styles.headerCard}>
         <Card.Content style={styles.headerContent}>
           <View style={styles.avatarContainer}>
-            {profile.avatar_url ? (
-              <Avatar.Image size={100} source={{ uri: profile.avatar_url }} />
+            {displayProfile.avatar_url ? (
+              <Avatar.Image size={100} source={{ uri: displayProfile.avatar_url }} />
             ) : (
               <Avatar.Text
                 size={100}
-                label={profile.full_name?.substring(0, 2).toUpperCase() || 'U'}
+                label={displayProfile.full_name?.substring(0, 2).toUpperCase() || 'U'}
                 style={styles.avatar}
               />
             )}
@@ -373,7 +386,7 @@ export default function ProfileScreen({ navigation }: any) {
                     { text: 'Take Photo', onPress: handleTakePhoto },
                     { text: 'Choose from Gallery', onPress: handlePickAvatar },
                     { text: 'Cancel', style: 'cancel' },
-                    ...(profile.avatar_url
+                    ...(displayProfile.avatar_url
                       ? [{ text: 'Remove Avatar', onPress: handleRemoveAvatar, style: 'destructive' as const }]
                       : []),
                   ]);
@@ -383,8 +396,8 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
 
           <View style={styles.headerText}>
-            <Text style={[styles.userName, { color: theme.colors.onSurface }]}>{profile.full_name}</Text>
-            <Text style={[styles.userEmail, { color: theme.colors.onSurfaceVariant }]}>{profile.email}</Text>
+            <Text style={[styles.userName, { color: theme.colors.onSurface }]}>{displayProfile.full_name}</Text>
+            <Text style={[styles.userEmail, { color: theme.colors.onSurfaceVariant }]}>{displayProfile.email}</Text>
             <Button
               mode="outlined"
               onPress={handleEditProfile}
@@ -404,25 +417,25 @@ export default function ProfileScreen({ navigation }: any) {
         <Card style={styles.card}>
           <List.Item
             title="Full Name"
-            description={profile.full_name || 'Not set'}
+            description={displayProfile.full_name || 'Not set'}
             left={(props) => <List.Icon {...props} icon="account" />}
           />
           <Divider />
           <List.Item
             title="Email"
-            description={profile.email}
+            description={displayProfile.email}
             left={(props) => <List.Icon {...props} icon="email" />}
           />
           <Divider />
           <List.Item
             title="Phone"
-            description={profile.phone || 'Not set'}
+            description={displayProfile.phone || 'Not set'}
             left={(props) => <List.Icon {...props} icon="phone" />}
           />
           <Divider />
           <List.Item
             title="Member Since"
-            description={format(new Date(profile.created_at), 'MMMM dd, yyyy')}
+            description={format(new Date(displayProfile.created_at), 'MMMM dd, yyyy')}
             left={(props) => <List.Icon {...props} icon="calendar" />}
           />
         </Card>

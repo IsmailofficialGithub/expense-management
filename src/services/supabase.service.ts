@@ -41,6 +41,42 @@ import {
 // AUTHENTICATION
 // ============================================
 
+// Helper to process invitations
+const processPendingInvitations = async (email: string, userId: string) => {
+  try {
+    // Check for invitations by email (invitation token is stored in group_invitations table)
+    const { data: invitations } = await supabase
+      .from('group_invitations')
+      .select('*, group:groups(*)')
+      .eq('invited_email', email.toLowerCase())
+      .eq('status', 'pending');
+
+    if (invitations && invitations.length > 0) {
+      // Add user to all groups they were invited to
+      const memberInserts = invitations.map(inv => ({
+        group_id: inv.group_id,
+        user_id: userId,
+        role: 'member' as const,
+      }));
+
+      await supabase
+        .from('group_members')
+        .insert(memberInserts);
+
+      // Update all invitations to accepted
+      const invitationIds = invitations.map(inv => inv.id);
+      await supabase
+        .from('group_invitations')
+        .update({ status: 'accepted' })
+        .in('id', invitationIds);
+
+      console.log(`Processed ${invitations.length} invitations for ${email}`);
+    }
+  } catch (inviteError) {
+    console.error('Failed to process invitations:', inviteError);
+  }
+};
+
 export const authService = {
   signUp: async (email: string, password: string, fullName: string, invitationToken?: string) => {
     const { data, error } = await supabase.auth.signUp({
@@ -77,38 +113,11 @@ export const authService = {
     if (error) throw error;
 
     // After successful login, check for pending invitations and process them
+    // Done in background to prevent blocking login
     if (data.user) {
-      try {
-        // Check for invitations by email (invitation token is stored in group_invitations table)
-        const { data: invitations } = await supabase
-          .from('group_invitations')
-          .select('*, group:groups(*)')
-          .eq('invited_email', email.toLowerCase())
-          .eq('status', 'pending');
-
-        if (invitations && invitations.length > 0) {
-          // Add user to all groups they were invited to
-          const memberInserts = invitations.map(inv => ({
-            group_id: inv.group_id,
-            user_id: data.user!.id,
-            role: 'member' as const,
-          }));
-
-          await supabase
-            .from('group_members')
-            .insert(memberInserts);
-
-          // Update all invitations to accepted
-          const invitationIds = invitations.map(inv => inv.id);
-          await supabase
-            .from('group_invitations')
-            .update({ status: 'accepted' })
-            .in('id', invitationIds);
-        }
-      } catch (inviteError) {
-        // Don't fail login if invitation processing fails
-        console.error('Failed to process invitations:', inviteError);
-      }
+      processPendingInvitations(email, data.user.id).catch(err =>
+        console.error('Background invitation processing failed:', err)
+      );
     }
 
     return data;
@@ -134,6 +143,20 @@ export const authService = {
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
+    if (error) throw error;
+  },
+  verifyOtp: async (email: string, token: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: email.trim().toLowerCase(),
+      token: token.trim(),
+      type: 'recovery',
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  sendOtp: async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) throw error;
   },
 };
