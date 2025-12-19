@@ -27,8 +27,10 @@ class UpdatesService {
                 Alert.alert('No Updates', 'You are using the latest version of the app.');
             }
         } catch (error) {
-            console.error('Error checking for updates:', error);
-            Alert.alert('Error', 'Failed to check for updates. Please try again later.');
+            console.warn('Error checking for updates:', error);
+            // Don't alert on automatic checks if it fails (e.g. offline)
+            // Or assume offline if it fails
+            // Alert.alert('Error', 'Failed to check for updates. Please try again later.');
         }
     }
 

@@ -129,9 +129,15 @@ export const authService = {
   },
 
   getCurrentUser: async () => {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    return user;
+    // getSession() reads from local storage and is offline-friendly
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      // If getSession fails, try getUser as a fallback (though likely also fails if offline)
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      return user;
+    }
+    return session?.user ?? null;
   },
 
   resetPassword: async (email: string) => {

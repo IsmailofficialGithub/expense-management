@@ -86,12 +86,39 @@ export const initializeAuth = createAsyncThunk(
     try {
       const user = await authService.getCurrentUser();
       if (user) {
-        // Verify profile exists in public.profiles table
-        const profile = await profileService.getProfile(user.id);
+        let profile = null;
+        try {
+          profile = await profileService.getProfile(user.id);
+        } catch (profileError) {
+          console.warn('Failed to fetch profile from Supabase, trying cache:', profileError);
+        }
 
         if (!profile) {
-          // If session exists but no profile, clear the session
-          console.warn('Session found but profile missing. logging out.');
+          // Fallback to cache if network request failed or returned null (though getProfile usually handles null)
+          const cachedProfile = await storageService.getProfile();
+          if (cachedProfile && cachedProfile.id === user.id) {
+            profile = cachedProfile;
+            console.log('Restored profile from cache');
+          }
+        }
+
+        if (!profile) {
+          // If still no profile (neither in DB nor cache), then it's a critical auth error
+          // Only sign out if we really think the session is invalid, but for now safe to fail 
+          // However, if we are offline and have no cache, user is stuck. 
+          // But strict mode requires a profile.
+
+          // Check if it was definitely a missing profile (406/PGRST116) vs network error?
+          // For safety, if we can't find a profile, logging out is the only way to recover strictly,
+          // BUT this breaks offline usage if cache is empty.
+          // Assuming cache is populated on login.
+
+          console.warn('Session found but profile missing (and no cache).');
+
+          // Only logout if we are sure it's not a temporary network issue?
+          // If we are offline, profileService.getProfile might throw.
+          // If we are offline and no cache, we can't let them in as we need profile data.
+
           await authService.signOut();
           await storageService.clearAll();
           return { user: null, profile: null };
