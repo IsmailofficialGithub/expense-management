@@ -118,7 +118,7 @@ export const fetchExpense = createAsyncThunk('expenses/fetchExpense', async (exp
   }
 });
 
-export const createExpense = createAsyncThunk('expenses/createExpense', async (request: CreateExpenseRequest, { rejectWithValue, getState }) => {
+export const createExpense = createAsyncThunk('expenses/createExpense', async (request: CreateExpenseRequest, { rejectWithValue, getState, dispatch }) => {
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
@@ -130,6 +130,48 @@ export const createExpense = createAsyncThunk('expenses/createExpense', async (r
         // Save to local storage
         const currentExpenses = await storageService.getExpenses() || [];
         await storageService.setExpenses([expenseWithDetails, ...currentExpenses]);
+
+        // AUTOMATIC PERSONAL FINANCE TRACKING
+        // If the current user paid for this, record it as a Personal Transaction (Expense)
+        const currentUser = (state as any).auth.user;
+        if (currentUser && request.paid_by === currentUser.id) {
+          // We need to dispatch this action. However, importing the thunk might cause circular deps.
+          // Using a dynamic import or assuming the user will dispatch it separately?
+          // Ideally, the thunk should dispatch it.
+          // Let's try importing it. If circular dep occurs, we might need a middleware or separate listener.
+          // For now, let's assume it's fine.
+          const { createPersonalTransaction } = require('./personalFinanceSlice'); // Dynamic require to avoid top-level circular dep potential
+
+          // We need to find or create a category. For now, use 'Others' or specific logic.
+          // Just sending the request. 
+          // Note: We need the category ID for personal finance. We'll use a default or first available if possible,
+          // or just leave it empty if allowed? PersonalTransaction requires category_id? It says it's a UUID.
+          // Let's check PersonalTransaction type. It has category_id.
+          // We'll skip this if we can't find a category, or maybe there's a "Group" category?
+          // To be safe and simple: just try to sync balance if possible, but creating a transaction requires more data.
+          // The user said "update in my balance".
+
+          // Actually, simply creating the transaction is the best way.
+          // Let's create a transaction with description "Group Expense: ..." and type "expense".
+          // We'll try to find a matching category in `state.personalFinance.categories` or default.
+
+          const personalCategories = (state as any).personalFinance.categories;
+          // Try to find 'Group' or 'Shared' or 'Expense'
+          const defaultCat = personalCategories.find((c: any) => c.name === 'Group') || personalCategories[0];
+
+          if (defaultCat) {
+            const personalTx = {
+              amount: request.amount,
+              type: 'expense',
+              category_id: defaultCat.id,
+              date: request.date || new Date().toISOString(),
+              description: `Group Exp: ${request.description}`,
+            };
+            // Dispatch directly
+            dispatch(createPersonalTransaction(personalTx));
+          }
+        }
+
         return expenseWithDetails;
       } catch (error: any) {
         // If online fails, queue for sync

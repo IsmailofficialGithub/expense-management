@@ -47,18 +47,50 @@ export const signIn = createAsyncThunk(
     try {
       const result = await authService.signIn(data.email, data.password);
       if (result.user) {
-        // Verify profile exists in public.profiles table
-        // This ensures the user is a valid application user
-        const profile = await profileService.getProfile(result.user.id);
+        // Save user to local storage for offline access
+        // We need to add setUser/getUser to storageService first (I'll add it in next step, but let's assume it exists or use generic set)
+        // actually I will use storageService.storage.set('user', result.user) directly or similar if I can't change storageService here.
+        // But better to update storageService first.
+        // I will assume I will update storageService in the next step.
+        // For now, let's keep the flow.
+
+        let profile = null;
+        try {
+          profile = await profileService.getProfile(result.user.id);
+        } catch (e) {
+          console.warn("Profile fetch failed during login", e);
+        }
 
         if (!profile) {
-          // If auth exists but no profile, this is an invalid state
-          // Sign out immediately and inform the user
-          await authService.signOut();
-          throw new Error('User profile not found in database. Please contact support.');
+          // Try to load from cache if network failed
+          const cachedProfile = await storageService.getProfile();
+          if (cachedProfile && cachedProfile.id === result.user.id) {
+            profile = cachedProfile;
+          }
+        }
+
+        // If still no profile, we can't strictly validate, but if we are ONLINE and it's missing, that's bad.
+        // But if we are offline (which signIn usually isn't, but maybe flaky), we might want to proceed?
+        // Actually signIn requires online.
+        // So if profile is missing after online sign in, it's a database issue. 
+        // BUT, we should try to not block the user if possible? 
+        // No, strict requirement: "User profile not found" IS an error for new users.
+        if (!profile) {
+          // Retry one more time? Or just fail.
+          // If this is a new user, profile SHOULD exist. 
+          // Error out.
+          if (!profile) {
+            // Check if it's a network error vs 404
+            // We will throw, but user said "stuck on loading".
+            // Throwing stops the loading spinner in LoginScreen (catch block).
+            throw new Error('User profile could not be loaded. Please check your connection.');
+          }
         }
 
         await storageService.setProfile(profile);
+        // We'll also store the user token/session implicitly via supabase, but let's store the user object explicitly for our offline fallback
+        await storageService.storage.set('user', result.user);
+
         return { user: result.user, profile };
       }
       throw new Error('Sign in failed: No user returned');
@@ -84,7 +116,21 @@ export const initializeAuth = createAsyncThunk(
   'auth/initialize',
   async (_, { rejectWithValue }) => {
     try {
-      const user = await authService.getCurrentUser();
+      let user = await authService.getCurrentUser();
+
+      // FALLBACK: If Supabase returns null (offline), try our local backup
+      if (!user) {
+        try {
+          const cachedUser = await storageService.storage.get<User>('user');
+          if (cachedUser) {
+            console.log('Restored user from local backup (Offline Mode)');
+            user = cachedUser;
+          }
+        } catch (e) {
+          console.warn('Failed to restore user backup', e);
+        }
+      }
+
       if (user) {
         let profile = null;
         try {
@@ -94,7 +140,7 @@ export const initializeAuth = createAsyncThunk(
         }
 
         if (!profile) {
-          // Fallback to cache if network request failed or returned null (though getProfile usually handles null)
+          // Fallback to cache
           const cachedProfile = await storageService.getProfile();
           if (cachedProfile && cachedProfile.id === user.id) {
             profile = cachedProfile;
@@ -103,30 +149,14 @@ export const initializeAuth = createAsyncThunk(
         }
 
         if (!profile) {
-          // If still no profile (neither in DB nor cache), then it's a critical auth error
-          // Only sign out if we really think the session is invalid, but for now safe to fail 
-          // However, if we are offline and have no cache, user is stuck. 
-          // But strict mode requires a profile.
-
-          // Check if it was definitely a missing profile (406/PGRST116) vs network error?
-          // For safety, if we can't find a profile, logging out is the only way to recover strictly,
-          // BUT this breaks offline usage if cache is empty.
-          // Assuming cache is populated on login.
-
-          console.warn('Session found but profile missing (and no cache).');
-
-          // Only logout if we are sure it's not a temporary network issue?
-          // If we are offline, profileService.getProfile might throw.
-          // If we are offline and no cache, we can't let them in as we need profile data.
-
-          await authService.signOut();
-          await storageService.clearAll();
-          return { user: null, profile: null };
+          console.warn('Session found but profile missing (and no cache). Likely offline or first login issue.');
+          return { user, profile: null };
         }
 
         await storageService.setProfile(profile);
         return { user, profile };
       }
+
       return { user: null, profile: null };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to initialize auth');

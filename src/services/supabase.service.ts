@@ -129,15 +129,37 @@ export const authService = {
   },
 
   getCurrentUser: async () => {
-    // getSession() reads from local storage and is offline-friendly
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) {
-      // If getSession fails, try getUser as a fallback (though likely also fails if offline)
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      return user;
+    try {
+      // getSession() reads from local storage and is offline-friendly
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      // If we have a session (even if expired/refresh failed), use it for offline access
+      if (session?.user) {
+        if (error) {
+          console.warn('getSession had error but returned session (ignoring for offline support):', error);
+        }
+        return session.user;
+      }
+
+      if (error) {
+        console.warn('getSession failed:', error);
+        // Fallback to getUser only if we have working network, but here we just try-catch it
+        // If we are offline, getUser will throw, so we catch it
+        try {
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          if (userError) throw userError;
+          return user;
+        } catch (e) {
+          console.warn('getUser fallback failed (likely offline):', e);
+          return null; // Return null instead of throwing to prevent app crash/logout loop
+        }
+      }
+
+      return null;
+    } catch (err) {
+      console.error('getCurrentUser unexpected error:', err);
+      return null;
     }
-    return session?.user ?? null;
   },
 
   resetPassword: async (email: string) => {
