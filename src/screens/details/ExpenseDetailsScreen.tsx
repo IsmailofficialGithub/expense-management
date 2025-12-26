@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
-import { fetchExpense, deleteExpense, updateExpense } from '../../store/slices/expensesSlice';
+import { fetchExpense, deleteExpense, updateExpense, markSplitAsSettled, settleUp } from '../../store/slices/expensesSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
@@ -103,9 +103,13 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
       return;
     }
 
+    // Find the split info
+    const split = selectedExpense?.splits?.find(s => s.id === splitId);
+    if (!split) return;
+
     Alert.alert(
       'Mark as Settled',
-      'Mark this split as settled?',
+      `Confirm settlement of ₹${split.amount} from ${split.user?.full_name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -113,12 +117,19 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
           onPress: async () => {
             setIsProcessing(true);
             try {
-              const { error } = await supabase
-                .from('expense_splits')
-                .update({ is_settled: true, settled_at: new Date().toISOString() })
-                .eq('id', splitId);
+              if (selectedExpense) {
+                // Create a formal settlement which will also mark the split as settled
+                await dispatch(settleUp({
+                  group_id: selectedExpense.group_id,
+                  from_user: split.user_id,
+                  to_user: selectedExpense.paid_by,
+                  amount: Number(split.amount),
+                  related_expense_ids: [selectedExpense.id],
+                  notes: `Settled for: ${selectedExpense.description}`
+                })).unwrap();
 
-              if (error) throw error;
+                showToast('Settlement recorded successfully', 'success');
+              }
             } catch (error) {
               ErrorHandler.handleError(error, showToast, 'Mark as Settled');
             } finally {

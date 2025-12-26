@@ -438,6 +438,58 @@ export const deleteExpense = createAsyncThunk('expenses/deleteExpense', async (e
   }
 });
 
+export const markSplitAsSettled = createAsyncThunk('expenses/markSplitAsSettled', async (splitId: string, { rejectWithValue, getState }) => {
+  try {
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+
+    if (isOnline) {
+      try {
+        const updatedSplit = await expenseService.markSplitAsSettled(splitId);
+        // We also need to update local storage
+        const currentExpenses = await storageService.getExpenses() || [];
+        // Find expense containing this split
+        const expenseIndex = currentExpenses.findIndex((e: any) => e.splits?.some((s: any) => s.id === splitId));
+        if (expenseIndex !== -1) {
+          const expense = currentExpenses[expenseIndex];
+          if (expense.splits) {
+            const splitIndex = expense.splits.findIndex((s: any) => s.id === splitId);
+            if (splitIndex !== -1) {
+              expense.splits[splitIndex] = { ...expense.splits[splitIndex], is_settled: true, settled_at: updatedSplit.settled_at };
+              await storageService.setExpenses(currentExpenses);
+            }
+          }
+        }
+        return { splitId, settledAt: updatedSplit.settled_at };
+      } catch (error: any) {
+        console.warn('Online markSplitAsSettled failed, queueing for sync:', error);
+      }
+    }
+
+    // Offline or online failed
+    const settledAt = new Date().toISOString();
+    await syncService.addToQueue('update', 'split_settlement', { id: splitId, is_settled: true, settled_at: settledAt });
+
+    // Update local storage
+    const currentExpenses = await storageService.getExpenses() || [];
+    const expenseIndex = currentExpenses.findIndex((e: any) => e.splits?.some((s: any) => s.id === splitId));
+    if (expenseIndex !== -1) {
+      const expense = currentExpenses[expenseIndex];
+      if (expense.splits) {
+        const splitIndex = expense.splits.findIndex((s: any) => s.id === splitId);
+        if (splitIndex !== -1) {
+          expense.splits[splitIndex] = { ...expense.splits[splitIndex], is_settled: true, settled_at: settledAt };
+          await storageService.setExpenses(currentExpenses);
+        }
+      }
+    }
+
+    return { splitId, settledAt };
+  } catch (error: any) {
+    return rejectWithValue(error.message);
+  }
+});
+
 export const fetchCategories = createAsyncThunk('expenses/fetchCategories', async (_, { rejectWithValue, getState }) => {
   try {
     const state = getState() as any;
@@ -628,6 +680,24 @@ const expensesSlice = createSlice({
       state.expenses = state.expenses.filter(e => e.id !== action.payload);
       if (state.selectedExpense?.id === action.payload) state.selectedExpense = null;
     });
+    builder.addCase(markSplitAsSettled.fulfilled, (state, action) => {
+      // Update in expenses list
+      state.expenses.forEach(expense => {
+        const split = expense.splits?.find(s => s.id === action.payload.splitId);
+        if (split) {
+          split.is_settled = true;
+          split.settled_at = action.payload.settledAt;
+        }
+      });
+      // Update selected expense
+      if (state.selectedExpense) {
+        const split = state.selectedExpense.splits?.find(s => s.id === action.payload.splitId);
+        if (split) {
+          split.is_settled = true;
+          split.settled_at = action.payload.settledAt;
+        }
+      }
+    });
     builder.addCase(fetchCategories.fulfilled, (state, action) => {
       state.categories = action.payload;
     });
@@ -638,6 +708,34 @@ const expensesSlice = createSlice({
     builder.addCase(settleUp.fulfilled, (state, action) => {
       state.loading = false;
       state.settlements.push(action.payload);
+
+      // Update related expenses' splits to settled
+      const relatedIds = action.meta.arg.related_expense_ids;
+      const fromUser = action.meta.arg.from_user;
+
+      if (relatedIds && relatedIds.length > 0) {
+        // Update in list
+        state.expenses.forEach(expense => {
+          if (relatedIds.includes(expense.id)) {
+            expense.splits?.forEach(split => {
+              if (split.user_id === fromUser) {
+                split.is_settled = true;
+                split.settled_at = action.payload.settled_at;
+              }
+            });
+          }
+        });
+
+        // Update selected expense
+        if (state.selectedExpense && relatedIds.includes(state.selectedExpense.id)) {
+          state.selectedExpense.splits?.forEach(split => {
+            if (split.user_id === fromUser) {
+              split.is_settled = true;
+              split.settled_at = action.payload.settled_at;
+            }
+          });
+        }
+      }
     });
     builder.addCase(settleUp.rejected, (state, action) => {
       state.loading = false;

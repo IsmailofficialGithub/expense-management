@@ -20,6 +20,7 @@ import ExpensesScreen from '../screens/main/ExpensesScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import LoadingScreen from '../screens/LoadingScreen';
 import GroupDetailsScreen from '../screens/details/GroupDetailsScreen';
+import GroupMemberDetailsScreen from '../screens/details/GroupMemberDetailsScreen';
 import SingleGroupDetailsScreen from '../screens/details/SingleGroupDetailsScreen';
 import SingleGroupExpenseDetailsScreen from '../screens/details/SingleGroupExpenseDetailsScreen';
 import ExpenseDetailsScreen from '../screens/details/ExpenseDetailsScreen';
@@ -52,6 +53,7 @@ export type AuthStackParamList = {
   Signup: undefined;
   ForgotPassword: undefined;
   VerifyOtp: { email: string };
+  VerifyResetOtp: { email: string }; // Added this just in case, though usually same screen
 };
 
 export type MainTabParamList = {
@@ -70,6 +72,7 @@ export type RootStackParamList = {
   Main: undefined;
   NewPassword: undefined;
   GroupDetails: { groupId: string };
+  GroupMemberDetails: { groupId: string; userId: string; userName?: string };
   SingleGroupDetails: { groupId: string };
   SingleGroupExpenseDetails: { expenseId: string; groupId?: string };
   ExpenseDetails: { expenseId: string };
@@ -234,6 +237,11 @@ export default function AppNavigator() {
               component={GroupDetailsScreen}
               options={{ ...detailScreenOptions, title: 'Group Details' }}
             />
+            <RootStack.Screen
+              name="GroupMemberDetails"
+              component={GroupMemberDetailsScreen}
+              options={{ ...detailScreenOptions, title: 'Member Details' }}
+            />
             {/* ... other screens ... */}
             <RootStack.Screen
               name="SingleGroupDetails"
@@ -344,11 +352,3 @@ export default function AppNavigator() {
     </RootStack.Navigator>
   );
 }
-
-
-
-
-
-
-
-

@@ -1642,6 +1642,17 @@ export const expenseService = {
       .eq('id', expenseId);
     if (error) throw error;
   },
+
+  markSplitAsSettled: async (splitId: string) => {
+    const { data, error } = await supabase
+      .from('expense_splits')
+      .update({ is_settled: true, settled_at: new Date().toISOString() })
+      .eq('id', splitId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
 };
 
 

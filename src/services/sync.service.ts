@@ -27,7 +27,9 @@ export type SyncEntityType =
   | 'personal_category'
   | 'message'
   | 'advance_collection'
-  | 'bulk_settlement';
+  | 'advance_collection'
+  | 'bulk_settlement'
+  | 'split_settlement';
 
 export interface SyncOperation {
   id: string;
@@ -222,6 +224,12 @@ class SyncService {
           if (type === 'create') {
             const { bulkPaymentService } = await import('./supabase.service');
             await bulkPaymentService.createBulkSettlement(data);
+          }
+          break;
+
+        case 'split_settlement':
+          if (type === 'update') {
+            await expenseService.markSplitAsSettled(data.id);
           }
           break;
 

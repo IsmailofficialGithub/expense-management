@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar } from 'react-native';
 import { Text, Card, Avatar, Button, IconButton, Chip, Divider, FAB, Portal, Modal, TextInput, HelperText, List } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
@@ -17,6 +18,7 @@ import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { chatService } from '../../services/chat.service';
+import { CsvService } from '../../services/csv.service';
 
 interface Props {
   navigation: any;
@@ -48,9 +50,11 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [errors, setErrors] = useState({ name: '', email: '' });
   const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    loadGroupData();
-  }, [groupId]);
+  useFocusEffect(
+    useCallback(() => {
+      loadGroupData();
+    }, [groupId])
+  );
 
   useEffect(() => {
     if (selectedGroup) {
@@ -289,6 +293,24 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                 </Button>
               </View>
             )}
+            <Button
+              mode="outlined"
+              icon="download"
+              onPress={async () => {
+                try {
+                  const reportExpenses = expenses.filter(e => e.group_id === groupId);
+                  await CsvService.generateAndShareExpenseReport(
+                    reportExpenses,
+                    `expenses_${selectedGroup.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}`
+                  );
+                } catch (error) {
+                  showToast('Failed to download report', 'error');
+                }
+              }}
+              style={{ marginTop: 12, borderColor: theme.colors.primary }}
+            >
+              Export Group Report
+            </Button>
           </Card.Content>
         </Card>
 
@@ -428,7 +450,15 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             const isCurrentUser = member.user_id === profile?.id;
 
             return (
-              <Card key={member.id} style={styles.memberCard}>
+              <Card
+                key={member.id}
+                style={styles.memberCard}
+                onPress={() => navigation.navigate('GroupMemberDetails', {
+                  groupId: groupId,
+                  userId: member.user_id,
+                  userName: member.user?.full_name
+                })}
+              >
                 <Card.Content style={styles.memberContent}>
                   <View style={styles.memberLeft}>
                     <Avatar.Text
