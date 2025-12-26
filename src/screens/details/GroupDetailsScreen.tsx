@@ -9,7 +9,7 @@ import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember } from '../../store/slices/groupsSlice';
-import { fetchExpenses } from '../../store/slices/expensesSlice';
+import { fetchExpenses, fetchSettlements } from '../../store/slices/expensesSlice';
 import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
 import { useAppSelector } from '../../store';
 import { ErrorHandler } from '../../utils/errorHandler';
@@ -33,7 +33,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const theme = useTheme();
   const { selectedGroup, balances, loading } = useGroups();
-  const { expenses } = useExpenses();
+  const { expenses, settlements } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
@@ -74,6 +74,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         dispatch(fetchGroup(groupId)).unwrap(),
         dispatch(fetchGroupBalances(groupId)).unwrap(),
         dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+        dispatch(fetchSettlements(groupId)).unwrap(),
         dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
       ]);
     } catch (error) {
@@ -449,6 +450,12 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             const memberBalance = balances.find(b => b.user_id === member.user_id);
             const isCurrentUser = member.user_id === profile?.id;
 
+            const settlementsGiven = settlements
+              .filter(s => s.from_user === member.user_id && s.group_id === groupId)
+              .reduce((sum, s) => sum + s.amount, 0);
+
+            const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
+
             return (
               <Card
                 key={member.id}
@@ -479,14 +486,14 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                       <Text
                         style={[
                           styles.memberBalance,
-                          memberBalance.balance > 0
+                          adjustedBalance > 0
                             ? styles.positiveBalance
-                            : memberBalance.balance < 0
+                            : adjustedBalance < 0
                               ? styles.negativeBalance
                               : styles.neutralBalance,
                         ]}
                       >
-                        ₹{memberBalance.balance.toFixed(2)}
+                        ₹{adjustedBalance.toFixed(2)}
                       </Text>
                     )}
                     {isAdmin && !isCurrentUser && (
