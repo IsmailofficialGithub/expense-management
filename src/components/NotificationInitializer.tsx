@@ -49,6 +49,8 @@ export default function NotificationInitializer() {
           }
         } catch (error) {
           console.error('Error setting up push token:', error);
+        }finally  {
+          
         }
       };
 
