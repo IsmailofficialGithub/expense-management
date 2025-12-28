@@ -37,7 +37,7 @@ import { ErrorHandler } from '../../utils/errorHandler';
 import { paymentMethodService } from '../../services/supabase.service';
 import { usePersonalFinance } from '../../hooks/usePersonalFinance';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/AppNavigator';
+import { RootStackParamList } from '../../navigation/types';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 

@@ -24,7 +24,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/AppNavigator';
+import { RootStackParamList } from '../../navigation/types';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 

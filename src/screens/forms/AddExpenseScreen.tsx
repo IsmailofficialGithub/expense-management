@@ -42,7 +42,7 @@ import DateTimePicker, {
 
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/AppNavigator';
+import { RootStackParamList } from '../../navigation/types';
 import SafeScrollView from "../../components/SafeScrollView";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
