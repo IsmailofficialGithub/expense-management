@@ -1,113 +1,39 @@
-// src/screens/SplashScreen.tsx
+
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Image, Animated } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../hooks/useAuth';
 import { useAppDispatch } from '../store';
 import { fetchGroups } from '../store/slices/groupsSlice';
 import { fetchExpenses } from '../store/slices/expensesSlice';
 import { fetchPersonalTransactions } from '../store/slices/personalFinanceSlice';
 import { fetchCompleteBalance } from '../store/slices/personalFinanceSlice';
 import { fetchNotifications } from '../store/slices/notificationsSlice';
-import { store } from '../store';
-import { useUI } from '../hooks/useUI';
 
 export default function SplashScreen() {
-  const navigation = useNavigation<any>();
-  const { isAuthenticated, initialized } = useAuth();
-  const { isOnline } = useUI();
   const dispatch = useAppDispatch();
-  const hasNavigatedRef = useRef(false);
-  const startTimeRef = useRef(Date.now());
   const dataLoadingRef = useRef(false);
   const scaleAnim = useRef(new Animated.Value(3.8)).current;
 
   // Animation effect - scale up the icon
   useEffect(() => {
     Animated.spring(scaleAnim, {
-      toValue: 1.4, // Scale to 110% (slightly larger)
-      friction: 4, // Controls the "bounciness"
-      tension: 10, // Controls the speed
+      toValue: 1.4,
+      friction: 4,
+      tension: 10,
       useNativeDriver: true,
     }).start();
   }, [scaleAnim]);
 
   useEffect(() => {
-    let mounted = true;
-
-    const init = async () => {
-      try {
-        // Start minimum splash timer for better UX
-        const minSplashPromise = new Promise(resolve => setTimeout(resolve, 800));
-
-        // Wait for Auth Initialization
-        const startTime = Date.now();
-        let authInitialized = store.getState().auth.initialized;
-
-        while (!authInitialized) {
-          if (Date.now() - startTime > 5000) {
-            console.warn('Auth initialization timed out, proceeding anyway');
-            break;
-          }
-          await new Promise(r => setTimeout(r, 100));
-          authInitialized = store.getState().auth.initialized;
-        }
-
-        // Trigger Data Fetch in background (don't wait for it)
-        if (!dataLoadingRef.current) {
-          dataLoadingRef.current = true;
-          Promise.allSettled([
-            dispatch(fetchGroups()),
-            dispatch(fetchExpenses()),
-            dispatch(fetchPersonalTransactions()),
-            dispatch(fetchCompleteBalance()),
-            dispatch(fetchNotifications()),
-          ]).then(() => {
-            console.log('Background data fetch completed');
-          }).catch(err => {
-            console.warn('Background data fetch error:', err);
-          });
-        }
-
-        // Ensure minimum splash time
-        await minSplashPromise;
-
-        if (!mounted) return;
-        if (hasNavigatedRef.current) return;
-        hasNavigatedRef.current = true;
-
-        // Navigate based on current auth state
-        const state = store.getState();
-        if (state.auth.isAuthenticated) {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Main' }],
-          });
-        } else {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Auth' }],
-          });
-        }
-      } catch (error) {
-        console.error('Splash screen error:', error);
-        // Fallback navigation
-        if (mounted && !hasNavigatedRef.current) {
-          hasNavigatedRef.current = true;
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Auth' }],
-          });
-        }
-      }
-    };
-
-    init();
-
-    return () => {
-      mounted = false;
-    };
-  }, [dispatch, navigation]); // Removed isOnline, initialized, isAuthenticated from deps
+    // Trigger Data Fetch in background to warm up the cache
+    if (!dataLoadingRef.current) {
+      dataLoadingRef.current = true;
+      dispatch(fetchGroups());
+      dispatch(fetchExpenses());
+      dispatch(fetchPersonalTransactions());
+      dispatch(fetchCompleteBalance());
+      dispatch(fetchNotifications());
+    }
+  }, [dispatch]);
 
   return (
     <View style={styles.container}>
@@ -145,4 +71,3 @@ const styles = StyleSheet.create({
     height: 200,
   },
 });
-

@@ -25,10 +25,15 @@ import {
 } from '../../store/slices/notificationsSlice';
 import { useNotifications } from '../../hooks/useNotifications';
 import { formatDistanceToNow } from 'date-fns';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/AppNavigator';
+import { RootStackParamList, MainTabParamList } from '../../navigation/AppNavigator';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Notifications'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Notifications'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export default function NotificationsScreen({ navigation }: Props) {
   const theme = useTheme();
