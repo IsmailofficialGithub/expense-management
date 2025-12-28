@@ -32,25 +32,41 @@ const initialState: BulkPaymentsState = {
 
 export const fetchAdvanceCollections = createAsyncThunk(
   'bulkPayments/fetchAdvanceCollections',
-  async (groupId: string, { rejectWithValue, getState }) => {
+  async (
+    params: {
+      groupId: string;
+      page?: number;
+      limit?: number;
+      status?: 'active' | 'completed' | 'all';
+      dateFrom?: string;
+      dateTo?: string;
+    },
+    { rejectWithValue, getState }
+  ) => {
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
 
       if (isOnline) {
         try {
-          const collections = await bulkPaymentService.getAdvanceCollections(groupId);
+          const { groupId, ...options } = params;
+          const collections = await bulkPaymentService.getAdvanceCollections(groupId, options);
           // Cache collections using AsyncStorage directly
-          const cacheKey = `advance_collections_${groupId}`;
-          await AsyncStorage.setItem(cacheKey, JSON.stringify(collections));
-          return collections;
+          // Only cache if it's the first page and no filters to keep it simple, or update logic complexly
+          // For now, let's only cache if it's default view (no complex filters)
+          if (!options.page || options.page === 1) {
+            const cacheKey = `advance_collections_${groupId}`;
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(collections));
+          }
+          return collections; // Note: We might need to handle appending vs replacing in reducer depending on page
         } catch (error: any) {
           console.warn('Online fetch failed, trying cache:', error);
         }
       }
 
       // Offline: load from cache
-      const cacheKey = `advance_collections_${groupId}`;
+      // Note: Offline mode might not support filtering/pagination correctly without more logic
+      const cacheKey = `advance_collections_${params.groupId}`;
       const cached = await AsyncStorage.getItem(cacheKey);
       return cached ? JSON.parse(cached) : [];
     } catch (error: any) {
@@ -202,7 +218,17 @@ const bulkPaymentsSlice = createSlice({
       })
       .addCase(fetchAdvanceCollections.fulfilled, (state, action) => {
         state.loading = false;
-        state.advanceCollections = action.payload;
+        const { page } = action.meta.arg as any;
+        if (page && page > 1) {
+          // Filter out duplicates just in case
+          const newIds = new Set(action.payload.map(c => c.id));
+          state.advanceCollections = [
+            ...state.advanceCollections.filter((c: GroupAdvanceCollection) => !newIds.has(c.id)),
+            ...action.payload
+          ];
+        } else {
+          state.advanceCollections = action.payload;
+        }
       })
       .addCase(fetchAdvanceCollections.rejected, (state, action) => {
         state.loading = false;

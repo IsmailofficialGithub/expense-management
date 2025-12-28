@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction, createAction } from '@reduxjs/toolkit';
+import { settleUp } from './expensesSlice';
 import { groupService } from '../../services/supabase.service';
 import { Group, GroupWithMembers, CreateGroupRequest, UserGroupBalance } from '../../types/database.types';
 import { storageService } from '../../services/storage.service';
@@ -262,6 +263,27 @@ const groupsSlice = createSlice({
     });
     builder.addCase(fetchGroupBalances.fulfilled, (state, action) => {
       state.balances = action.payload;
+    });
+    builder.addCase(settleUp.fulfilled, (state, action) => {
+      const { from_user, to_user, amount, group_id } = action.payload;
+
+      // Only update if the settlement belongs to the currently fetched group balances
+      // effectively we assume state.balances belongs to state.selectedGroup.id
+      // We should verify if we have balances for this group.
+      // Since balances array is just a list of UserGroupBalance, usually for the selected group.
+
+      if (state.selectedGroup?.id === group_id) {
+        const settlementAmount = Number(amount);
+        const fromMember = state.balances.find(b => b.user_id === from_user);
+        if (fromMember) {
+          fromMember.balance += settlementAmount;
+        }
+
+        const toMember = state.balances.find(b => b.user_id === to_user);
+        if (toMember) {
+          toMember.balance -= settlementAmount;
+        }
+      }
     });
     // Cache setter action
     builder.addCase(setGroupsFromCache, (state, action) => {

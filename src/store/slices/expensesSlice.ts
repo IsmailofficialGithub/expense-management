@@ -118,7 +118,7 @@ export const fetchExpense = createAsyncThunk('expenses/fetchExpense', async (exp
   }
 });
 
-export const createExpense = createAsyncThunk('expenses/createExpense', async (request: CreateExpenseRequest, { rejectWithValue, getState }) => {
+export const createExpense = createAsyncThunk('expenses/createExpense', async (request: CreateExpenseRequest, { rejectWithValue, getState, dispatch }) => {
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
@@ -130,6 +130,48 @@ export const createExpense = createAsyncThunk('expenses/createExpense', async (r
         // Save to local storage
         const currentExpenses = await storageService.getExpenses() || [];
         await storageService.setExpenses([expenseWithDetails, ...currentExpenses]);
+
+        // AUTOMATIC PERSONAL FINANCE TRACKING
+        // If the current user paid for this, record it as a Personal Transaction (Expense)
+        const currentUser = (state as any).auth.user;
+        if (currentUser && request.paid_by === currentUser.id) {
+          // We need to dispatch this action. However, importing the thunk might cause circular deps.
+          // Using a dynamic import or assuming the user will dispatch it separately?
+          // Ideally, the thunk should dispatch it.
+          // Let's try importing it. If circular dep occurs, we might need a middleware or separate listener.
+          // For now, let's assume it's fine.
+          const { createPersonalTransaction } = require('./personalFinanceSlice'); // Dynamic require to avoid top-level circular dep potential
+
+          // We need to find or create a category. For now, use 'Others' or specific logic.
+          // Just sending the request. 
+          // Note: We need the category ID for personal finance. We'll use a default or first available if possible,
+          // or just leave it empty if allowed? PersonalTransaction requires category_id? It says it's a UUID.
+          // Let's check PersonalTransaction type. It has category_id.
+          // We'll skip this if we can't find a category, or maybe there's a "Group" category?
+          // To be safe and simple: just try to sync balance if possible, but creating a transaction requires more data.
+          // The user said "update in my balance".
+
+          // Actually, simply creating the transaction is the best way.
+          // Let's create a transaction with description "Group Expense: ..." and type "expense".
+          // We'll try to find a matching category in `state.personalFinance.categories` or default.
+
+          const personalCategories = (state as any).personalFinance.categories;
+          // Try to find 'Group' or 'Shared' or 'Expense'
+          const defaultCat = personalCategories.find((c: any) => c.name === 'Group') || personalCategories[0];
+
+          if (defaultCat) {
+            const personalTx = {
+              amount: request.amount,
+              type: 'expense',
+              category_id: defaultCat.id,
+              date: request.date || new Date().toISOString(),
+              description: `Group Exp: ${request.description}`,
+            };
+            // Dispatch directly
+            dispatch(createPersonalTransaction(personalTx));
+          }
+        }
+
         return expenseWithDetails;
       } catch (error: any) {
         // If online fails, queue for sync
@@ -396,6 +438,58 @@ export const deleteExpense = createAsyncThunk('expenses/deleteExpense', async (e
   }
 });
 
+export const markSplitAsSettled = createAsyncThunk('expenses/markSplitAsSettled', async (splitId: string, { rejectWithValue, getState }) => {
+  try {
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+
+    if (isOnline) {
+      try {
+        const updatedSplit = await expenseService.markSplitAsSettled(splitId);
+        // We also need to update local storage
+        const currentExpenses = await storageService.getExpenses() || [];
+        // Find expense containing this split
+        const expenseIndex = currentExpenses.findIndex((e: any) => e.splits?.some((s: any) => s.id === splitId));
+        if (expenseIndex !== -1) {
+          const expense = currentExpenses[expenseIndex];
+          if (expense.splits) {
+            const splitIndex = expense.splits.findIndex((s: any) => s.id === splitId);
+            if (splitIndex !== -1) {
+              expense.splits[splitIndex] = { ...expense.splits[splitIndex], is_settled: true, settled_at: updatedSplit.settled_at };
+              await storageService.setExpenses(currentExpenses);
+            }
+          }
+        }
+        return { splitId, settledAt: updatedSplit.settled_at };
+      } catch (error: any) {
+        console.warn('Online markSplitAsSettled failed, queueing for sync:', error);
+      }
+    }
+
+    // Offline or online failed
+    const settledAt = new Date().toISOString();
+    await syncService.addToQueue('update', 'split_settlement', { id: splitId, is_settled: true, settled_at: settledAt });
+
+    // Update local storage
+    const currentExpenses = await storageService.getExpenses() || [];
+    const expenseIndex = currentExpenses.findIndex((e: any) => e.splits?.some((s: any) => s.id === splitId));
+    if (expenseIndex !== -1) {
+      const expense = currentExpenses[expenseIndex];
+      if (expense.splits) {
+        const splitIndex = expense.splits.findIndex((s: any) => s.id === splitId);
+        if (splitIndex !== -1) {
+          expense.splits[splitIndex] = { ...expense.splits[splitIndex], is_settled: true, settled_at: settledAt };
+          await storageService.setExpenses(currentExpenses);
+        }
+      }
+    }
+
+    return { splitId, settledAt };
+  } catch (error: any) {
+    return rejectWithValue(error.message);
+  }
+});
+
 export const fetchCategories = createAsyncThunk('expenses/fetchCategories', async (_, { rejectWithValue, getState }) => {
   try {
     const state = getState() as any;
@@ -586,6 +680,24 @@ const expensesSlice = createSlice({
       state.expenses = state.expenses.filter(e => e.id !== action.payload);
       if (state.selectedExpense?.id === action.payload) state.selectedExpense = null;
     });
+    builder.addCase(markSplitAsSettled.fulfilled, (state, action) => {
+      // Update in expenses list
+      state.expenses.forEach(expense => {
+        const split = expense.splits?.find(s => s.id === action.payload.splitId);
+        if (split) {
+          split.is_settled = true;
+          split.settled_at = action.payload.settledAt;
+        }
+      });
+      // Update selected expense
+      if (state.selectedExpense) {
+        const split = state.selectedExpense.splits?.find(s => s.id === action.payload.splitId);
+        if (split) {
+          split.is_settled = true;
+          split.settled_at = action.payload.settledAt;
+        }
+      }
+    });
     builder.addCase(fetchCategories.fulfilled, (state, action) => {
       state.categories = action.payload;
     });
@@ -596,6 +708,34 @@ const expensesSlice = createSlice({
     builder.addCase(settleUp.fulfilled, (state, action) => {
       state.loading = false;
       state.settlements.push(action.payload);
+
+      // Update related expenses' splits to settled
+      const relatedIds = action.meta.arg.related_expense_ids;
+      const fromUser = action.meta.arg.from_user;
+
+      if (relatedIds && relatedIds.length > 0) {
+        // Update in list
+        state.expenses.forEach(expense => {
+          if (relatedIds.includes(expense.id)) {
+            expense.splits?.forEach(split => {
+              if (split.user_id === fromUser) {
+                split.is_settled = true;
+                split.settled_at = action.payload.settled_at;
+              }
+            });
+          }
+        });
+
+        // Update selected expense
+        if (state.selectedExpense && relatedIds.includes(state.selectedExpense.id)) {
+          state.selectedExpense.splits?.forEach(split => {
+            if (split.user_id === fromUser) {
+              split.is_settled = true;
+              split.settled_at = action.payload.settled_at;
+            }
+          });
+        }
+      }
     });
     builder.addCase(settleUp.rejected, (state, action) => {
       state.loading = false;

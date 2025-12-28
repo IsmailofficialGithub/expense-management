@@ -25,10 +25,10 @@ export async function sendExpoPushNotification(
 ): Promise<void> {
   try {
     const tokens = Array.isArray(pushToken) ? pushToken : [pushToken];
-    
+
     // Filter out invalid tokens
     const validTokens = tokens.filter(token => token && token.startsWith('ExponentPushToken'));
-    
+
     if (validTokens.length === 0) {
       console.warn('No valid push tokens provided');
       return;
@@ -64,7 +64,7 @@ export async function sendExpoPushNotification(
 
     const result = await response.json();
     console.log('Push notification sent:', result);
-    
+
     // Check for errors in response
     if (result.data) {
       result.data.forEach((item: any, index: number) => {
@@ -88,7 +88,7 @@ export async function getGroupMemberPushTokens(
 ): Promise<string[]> {
   try {
     const { supabase } = await import('./supabase');
-    
+
     // Get all group member user IDs
     const { data: members, error: membersError } = await supabase
       .from('group_members')
@@ -124,13 +124,69 @@ export async function getGroupMemberPushTokens(
     // Extract valid push tokens
     const tokens = profiles
       .map((p: any) => p.push_token)
-      .filter((token: string) => 
+      .filter((token: string) =>
         token && token.startsWith('ExponentPushToken')
       );
 
     return tokens;
   } catch (error) {
     console.error('Error getting group member push tokens:', error);
+    return [];
+  }
+}
+
+/**
+ * Get push tokens for conversation participants (except the sender)
+ */
+export async function getConversationParticipantsTokens(
+  conversationId: string,
+  excludeUserId?: string
+): Promise<string[]> {
+  try {
+    const { supabase } = await import('./supabase');
+
+    // Get all conversation participant user IDs
+    const { data: participants, error: participantsError } = await supabase
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId);
+
+    if (participantsError || !participants) {
+      console.error('Error fetching conversation participants:', participantsError);
+      return [];
+    }
+
+    // Filter out excluded user
+    const userIds = participants
+      .map((p: any) => p.user_id)
+      .filter((id: string) => id !== excludeUserId);
+
+    if (userIds.length === 0) {
+      return [];
+    }
+
+    // Get push tokens for these users
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('push_token')
+      .in('id', userIds)
+      .not('push_token', 'is', null);
+
+    if (profilesError || !profiles) {
+      console.error('Error fetching push tokens:', profilesError);
+      return [];
+    }
+
+    // Extract valid push tokens
+    const tokens = profiles
+      .map((p: any) => p.push_token)
+      .filter((token: string) =>
+        token && token.startsWith('ExponentPushToken')
+      );
+
+    return tokens;
+  } catch (error) {
+    console.error('Error getting conversation participant push tokens:', error);
     return [];
   }
 }

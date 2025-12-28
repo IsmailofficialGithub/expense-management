@@ -9,6 +9,7 @@ import {
   PersonalCategory,
   UserCompleteBalance,
   Hotel,
+  HotelWithMenu,
   UserPaymentMethod,
   Notification,
   Message,
@@ -44,6 +45,7 @@ const STORAGE_KEYS = {
   CONVERSATIONS: 'conversations',
   CONVERSATIONS_META: 'conversations_meta',
   SYNC_QUEUE: 'sync_queue',
+  PROFILE: 'profile',
 } as const;
 
 export interface StorageMetadata {
@@ -178,8 +180,8 @@ export const storageService = {
   },
 
   // Hotels
-  async getHotels(): Promise<Hotel[] | null> {
-    return storage.get<Hotel[]>(STORAGE_KEYS.HOTELS);
+  async getHotels(): Promise<HotelWithMenu[] | null> {
+    return storage.get<HotelWithMenu[]>(STORAGE_KEYS.HOTELS);
   },
 
   async setHotels(hotels: any[]) {
@@ -387,8 +389,25 @@ export const storageService = {
     await storage.set(STORAGE_KEYS.CONVERSATIONS_META, meta);
   },
 
+  // Profile
+  async getProfile(): Promise<any | null> {
+    return storage.get<any>(STORAGE_KEYS.PROFILE);
+  },
+
+  async setProfile(profile: any) {
+    await storage.set(STORAGE_KEYS.PROFILE, profile);
+  },
+
+  async removeProfile() {
+    await storage.remove(STORAGE_KEYS.PROFILE);
+  },
+
   // Generic storage access
   storage,
+
+  async clearAll() {
+    await storage.clear();
+  },
 };
 
 export { STORAGE_KEYS };

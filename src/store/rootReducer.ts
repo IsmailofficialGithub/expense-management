@@ -11,7 +11,7 @@ import paymentMethodsReducer from './slices/paymentMethodsSlice';
 import hotelsReducer from './slices/hotelsSlice';
 import bulkPaymentsReducer from './slices/bulkPaymentsSlice';
 
-export const rootReducer = combineReducers({
+const appReducer = combineReducers({
     auth: authReducer,
     groups: groupsReducer,
     expenses: expensesReducer,
@@ -23,4 +23,11 @@ export const rootReducer = combineReducers({
     bulkPayments: bulkPaymentsReducer,
 });
 
-export type RootState = ReturnType<typeof rootReducer>;
+export const rootReducer = (state: any, action: any) => {
+    if (action.type === 'auth/signOut/fulfilled') {
+        return appReducer(undefined, action);
+    }
+    return appReducer(state, action);
+};
+
+export type RootState = ReturnType<typeof appReducer>;

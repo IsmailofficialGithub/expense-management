@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar } from 'react-native';
 import { Text, Card, Avatar, Button, IconButton, Chip, Divider, FAB, Portal, Modal, TextInput, HelperText, List } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
@@ -8,7 +9,7 @@ import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember } from '../../store/slices/groupsSlice';
-import { fetchExpenses } from '../../store/slices/expensesSlice';
+import { fetchExpenses, fetchSettlements } from '../../store/slices/expensesSlice';
 import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
 import { useAppSelector } from '../../store';
 import { ErrorHandler } from '../../utils/errorHandler';
@@ -17,6 +18,7 @@ import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { chatService } from '../../services/chat.service';
+import { CsvService } from '../../services/csv.service';
 
 interface Props {
   navigation: any;
@@ -31,7 +33,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const theme = useTheme();
   const { selectedGroup, balances, loading } = useGroups();
-  const { expenses } = useExpenses();
+  const { expenses, settlements } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
@@ -48,9 +50,11 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [errors, setErrors] = useState({ name: '', email: '' });
   const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    loadGroupData();
-  }, [groupId]);
+  useFocusEffect(
+    useCallback(() => {
+      loadGroupData();
+    }, [groupId])
+  );
 
   useEffect(() => {
     if (selectedGroup) {
@@ -70,6 +74,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         dispatch(fetchGroup(groupId)).unwrap(),
         dispatch(fetchGroupBalances(groupId)).unwrap(),
         dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+        dispatch(fetchSettlements(groupId)).unwrap(),
         dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
       ]);
     } catch (error) {
@@ -289,6 +294,24 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                 </Button>
               </View>
             )}
+            <Button
+              mode="outlined"
+              icon="download"
+              onPress={async () => {
+                try {
+                  const reportExpenses = expenses.filter(e => e.group_id === groupId);
+                  await CsvService.generateAndShareExpenseReport(
+                    reportExpenses,
+                    `expenses_${selectedGroup.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}`
+                  );
+                } catch (error) {
+                  showToast('Failed to download report', 'error');
+                }
+              }}
+              style={{ marginTop: 12, borderColor: theme.colors.primary }}
+            >
+              Export Group Report
+            </Button>
           </Card.Content>
         </Card>
 
@@ -427,8 +450,22 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             const memberBalance = balances.find(b => b.user_id === member.user_id);
             const isCurrentUser = member.user_id === profile?.id;
 
+            const settlementsGiven = settlements
+              .filter(s => s.from_user === member.user_id && s.group_id === groupId)
+              .reduce((sum, s) => sum + s.amount, 0);
+
+            const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
+
             return (
-              <Card key={member.id} style={styles.memberCard}>
+              <Card
+                key={member.id}
+                style={styles.memberCard}
+                onPress={() => navigation.navigate('GroupMemberDetails', {
+                  groupId: groupId,
+                  userId: member.user_id,
+                  userName: member.user?.full_name
+                })}
+              >
                 <Card.Content style={styles.memberContent}>
                   <View style={styles.memberLeft}>
                     <Avatar.Text
@@ -449,14 +486,14 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                       <Text
                         style={[
                           styles.memberBalance,
-                          memberBalance.balance > 0
+                          adjustedBalance > 0
                             ? styles.positiveBalance
-                            : memberBalance.balance < 0
+                            : adjustedBalance < 0
                               ? styles.negativeBalance
                               : styles.neutralBalance,
                         ]}
                       >
-                        ₹{memberBalance.balance.toFixed(2)}
+                        ₹{adjustedBalance.toFixed(2)}
                       </Text>
                     )}
                     {isAdmin && !isCurrentUser && (

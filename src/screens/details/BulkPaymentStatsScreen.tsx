@@ -50,7 +50,7 @@ export default function BulkPaymentStatsScreen({ navigation, route }: Props) {
     try {
       await Promise.all([
         dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
-        dispatch(fetchAdvanceCollections(groupId)).unwrap(),
+        dispatch(fetchAdvanceCollections({ groupId })).unwrap(),
       ]);
     } catch (error) {
       ErrorHandler.handleError(error, showToast, 'Load Stats');
@@ -66,8 +66,8 @@ export default function BulkPaymentStatsScreen({ navigation, route }: Props) {
   const activeCollections = advanceCollections.filter(c => c.status === 'active');
   const completedCollections = advanceCollections.filter(c => c.status === 'completed');
   const pendingApprovalCollections = advanceCollections.filter(c => {
-    return c.contributions?.some(contrib => 
-      contrib.status === 'pending_approval' && 
+    return c.contributions?.some(contrib =>
+      contrib.status === 'pending_approval' &&
       c.recipient_id === profile?.id
     );
   });
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   activeChip: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: 'green',
   },
   completedChip: {
     backgroundColor: '#E8F5E9',
