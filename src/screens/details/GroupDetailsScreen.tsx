@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar } from 'react-native';
 import { Text, Card, Avatar, Button, IconButton, Chip, Divider, FAB, Portal, Modal, TextInput, HelperText, List } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
@@ -8,13 +9,16 @@ import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember } from '../../store/slices/groupsSlice';
-import { fetchExpenses } from '../../store/slices/expensesSlice';
+import { fetchExpenses, fetchSettlements } from '../../store/slices/expensesSlice';
+import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
+import { useAppSelector } from '../../store';
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { chatService } from '../../services/chat.service';
+import { CsvService } from '../../services/csv.service';
 
 interface Props {
   navigation: any;
@@ -29,12 +33,13 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const theme = useTheme();
   const { selectedGroup, balances, loading } = useGroups();
-  const { expenses } = useExpenses();
+  const { expenses, settlements } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
+  const { bulkPaymentStats } = useAppSelector(state => state.bulkPayments);
 
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -45,9 +50,11 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [errors, setErrors] = useState({ name: '', email: '' });
   const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    loadGroupData();
-  }, [groupId]);
+  useFocusEffect(
+    useCallback(() => {
+      loadGroupData();
+    }, [groupId])
+  );
 
   useEffect(() => {
     if (selectedGroup) {
@@ -67,6 +74,8 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         dispatch(fetchGroup(groupId)).unwrap(),
         dispatch(fetchGroupBalances(groupId)).unwrap(),
         dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+        dispatch(fetchSettlements(groupId)).unwrap(),
+        dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
       ]);
     } catch (error) {
       ErrorHandler.handleError(error, showToast, 'Load Group Details');
@@ -285,6 +294,24 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                 </Button>
               </View>
             )}
+            <Button
+              mode="outlined"
+              icon="download"
+              onPress={async () => {
+                try {
+                  const reportExpenses = expenses.filter(e => e.group_id === groupId);
+                  await CsvService.generateAndShareExpenseReport(
+                    reportExpenses,
+                    `expenses_${selectedGroup.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}`
+                  );
+                } catch (error) {
+                  showToast('Failed to download report', 'error');
+                }
+              }}
+              style={{ marginTop: 12, borderColor: theme.colors.primary }}
+            >
+              Export Group Report
+            </Button>
           </Card.Content>
         </Card>
 
@@ -338,6 +365,60 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
           </Card.Content>
         </Card>
 
+        {/* Bulk Payment Highlights */}
+        {bulkPaymentStats && (
+          <Card style={styles.balanceCard}>
+            <Card.Content>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+                  Bulk Payments
+                </Text>
+                <Button
+                  mode="text"
+                  compact
+                  onPress={() => navigation.navigate('BulkPaymentStats', { groupId })}
+                >
+                  View Stats
+                </Button>
+              </View>
+
+              <View style={styles.balanceRow}>
+                <View style={styles.balanceItem}>
+                  <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>
+                    Active Collections
+                  </Text>
+                  <Text style={[styles.balanceAmount, { color: theme.colors.primary }]}>
+                    {bulkPaymentStats.activeCount}
+                  </Text>
+                  <Text style={[styles.balanceSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                    ₹{bulkPaymentStats.activeAmount.toFixed(2)}
+                  </Text>
+                </View>
+
+                <View style={styles.balanceItem}>
+                  <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>
+                    Balance Left
+                  </Text>
+                  <Text style={[styles.balanceAmount, { color: '#FF9800' }]}>
+                    ₹{bulkPaymentStats.pendingAmount.toFixed(2)}
+                  </Text>
+                  <Text style={[styles.balanceSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                    {bulkPaymentStats.pendingCount} pending
+                  </Text>
+                </View>
+              </View>
+
+              <Button
+                mode="outlined"
+                icon="chart-bar"
+                onPress={() => navigation.navigate('BulkPaymentStats', { groupId })}
+                style={{ marginTop: 12 }}
+              >
+                View All Statistics
+              </Button>
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Members Section */}
         <View style={styles.section}>
@@ -369,8 +450,22 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             const memberBalance = balances.find(b => b.user_id === member.user_id);
             const isCurrentUser = member.user_id === profile?.id;
 
+            const settlementsGiven = settlements
+              .filter(s => s.from_user === member.user_id && s.group_id === groupId)
+              .reduce((sum, s) => sum + s.amount, 0);
+
+            const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
+
             return (
-              <Card key={member.id} style={styles.memberCard}>
+              <Card
+                key={member.id}
+                style={styles.memberCard}
+                onPress={() => navigation.navigate('GroupMemberDetails', {
+                  groupId: groupId,
+                  userId: member.user_id,
+                  userName: member.user?.full_name
+                })}
+              >
                 <Card.Content style={styles.memberContent}>
                   <View style={styles.memberLeft}>
                     <Avatar.Text
@@ -391,14 +486,14 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                       <Text
                         style={[
                           styles.memberBalance,
-                          memberBalance.balance > 0
+                          adjustedBalance > 0
                             ? styles.positiveBalance
-                            : memberBalance.balance < 0
+                            : adjustedBalance < 0
                               ? styles.negativeBalance
                               : styles.neutralBalance,
                         ]}
                       >
-                        ₹{memberBalance.balance.toFixed(2)}
+                        ₹{adjustedBalance.toFixed(2)}
                       </Text>
                     )}
                     {isAdmin && !isCurrentUser && (
@@ -720,6 +815,10 @@ const styles = StyleSheet.create({
   balanceAmount: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  balanceSubtext: {
+    fontSize: 12,
+    marginTop: 4,
   },
   positiveBalance: {
     color: '#4CAF50',

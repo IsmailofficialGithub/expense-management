@@ -51,8 +51,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AddExpense'>;
 export default function AddExpenseScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { groups } = useGroups();
-  const { categories, loading } = useExpenses();
+  const { groups, loading: groupsLoading } = useGroups();
+  const { categories, loading: categoriesLoading } = useExpenses();
   const { profile } = useAuth();
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
@@ -289,7 +289,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
           receipt: receiptFile,
         })
       ).unwrap();
-      
+
       // Show different message based on online status
       if (isOnline) {
         showToast("Expense added successfully!", "success");
@@ -308,10 +308,10 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <StatusBar 
-        barStyle="light-content" 
-        backgroundColor={theme.colors.primary} 
-        translucent={false} 
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={theme.colors.primary}
+        translucent={false}
       />
       <KeyboardAvoidingView
         style={styles.keyboardView}
@@ -368,8 +368,24 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
           <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
             <Card.Content>
               <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Which group? *</Text>
-              {groups.length === 0 ? (
+              {groupsLoading && groups.length === 0 ? (
                 <Text style={[styles.noDataText, { color: theme.colors.onSurfaceVariant }]}>Loading groups...</Text>
+              ) : groups.length === 0 ? (
+                <View style={styles.noGroupsContainer}>
+                  <Text style={[styles.noDataText, { color: theme.colors.error, textAlign: 'center', marginBottom: 10 }]}>
+                    Please create a group first to add an expense.
+                  </Text>
+                  <Button
+                    mode="outlined"
+                    onPress={() => {
+                      // Navigate to Groups tab to create a group
+                      // Using 'as any' to bypass deep nested navigation type check for simplicity
+                      navigation.navigate('Main', { screen: 'Groups' } as any);
+                    }}
+                  >
+                    Go to Groups
+                  </Button>
+                </View>
               ) : (
                 <View style={styles.chipContainer}>
                   {groups.map((group) => {
@@ -407,8 +423,10 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
               <Divider style={styles.divider} />
 
               <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Category *</Text>
-              {categories.length === 0 ? (
+              {categoriesLoading && categories.length === 0 ? (
                 <Text style={[styles.noDataText, { color: theme.colors.onSurfaceVariant }]}>Loading categories...</Text>
+              ) : categories.length === 0 ? (
+                <Text style={[styles.noDataText, { color: theme.colors.onSurfaceVariant }]}>No categories found.</Text>
               ) : (
                 <View style={styles.chipContainer}>
                   {categories.map((category) => {
@@ -726,5 +744,13 @@ const styles = StyleSheet.create({
   },
   submitButtonContent: {
     paddingVertical: 8,
+  },
+  noGroupsContainer: {
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    borderStyle: 'dashed',
   },
 });

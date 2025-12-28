@@ -10,6 +10,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -65,7 +67,7 @@ export const notificationsService = {
           showBadge: true,
           enableLights: true,
         });
-        
+
         // Also create a high-priority channel for expense notifications
         await Notifications.setNotificationChannelAsync('expense_notifications', {
           name: 'Expense Alerts',
@@ -82,16 +84,16 @@ export const notificationsService = {
 
       // Get project ID from Constants
       const Constants = require('expo-constants').default;
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId || 
-                       Constants.expoConfig?.extra?.EXPO_PROJECT_ID ||
-                       Constants.expoConfig?.extra?.expo?.projectId;
-      
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId ||
+        Constants.expoConfig?.extra?.EXPO_PROJECT_ID ||
+        Constants.expoConfig?.extra?.expo?.projectId;
+
       if (!projectId) {
         console.warn('Expo project ID not found. Push notifications may not work when app is closed.');
         console.warn('Add projectId to app.config.ts or app.json extra section');
         return null;
       }
-      
+
       try {
         const { data: token } = await Notifications.getExpoPushTokenAsync({
           projectId: projectId,
@@ -190,7 +192,12 @@ export const notificationsService = {
         if (data?.conversationId) {
           navigation.navigate('Chat', { conversationId: data.conversationId });
         } else if (data?.groupId) {
-          navigation.navigate('GroupDetails', { groupId: data.groupId });
+          // Check if it's a collection-related notification
+          if (data?.collection_id || data?.type === 'contribution_pending_approval' || data?.type === 'payment_received') {
+            navigation.navigate('AdvanceCollection', { groupId: data.groupId });
+          } else {
+            navigation.navigate('GroupDetails', { groupId: data.groupId });
+          }
         } else if (data?.expense_id) {
           navigation.navigate('ExpenseDetails', { expenseId: data.expense_id });
         } else if (data?.type === 'expense_added' || data?.type === 'expense_split_assigned') {
@@ -238,8 +245,8 @@ export const notificationsService = {
     const title = conversationType === 'group' && conversationName
       ? `${senderName} in ${conversationName}`
       : senderName;
-    
-    const body = messageText.length > 100 
+
+    const body = messageText.length > 100
       ? messageText.substring(0, 100) + '...'
       : messageText;
 

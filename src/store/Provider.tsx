@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import { Provider } from 'react-redux';
 import { Platform } from 'react-native';
 import { store } from './index';
-import { initializeAuth, setUser } from './slices/authSlice';
+import { initializeAuth, setUser, setProfileFromCache } from './slices/authSlice';
 import { supabase } from '../services/supabase';
 import { setOnlineStatus } from './slices/uiSlice';
 import { storageService } from '../services/storage.service';
@@ -28,6 +28,11 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
     const loadCachedData = async () => {
       try {
         // Load expenses and set directly in Redux (no API call)
+        const cachedProfile = await storageService.getProfile();
+        if (cachedProfile) {
+          store.dispatch(setProfileFromCache(cachedProfile));
+        }
+
         const cachedExpenses = await storageService.getExpenses();
         if (cachedExpenses && cachedExpenses.length > 0) {
           store.dispatch(setExpensesFromCache(cachedExpenses));
@@ -114,7 +119,7 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
             const { profileService } = await import('../services/supabase.service');
             const profile = await profileService.getProfile(session.user.id);
             store.dispatch(setUser({ user: session.user, profile }));
-            
+
             // Load user-specific cached data after login
             const cachedPaymentMethods = await storageService.getPaymentMethods();
             if (cachedPaymentMethods && cachedPaymentMethods.length > 0) {

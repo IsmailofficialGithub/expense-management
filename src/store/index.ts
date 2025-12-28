@@ -3,29 +3,12 @@ import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 
 // Import slices
-import authReducer from './slices/authSlice';
-import groupsReducer from './slices/groupsSlice';
-import expensesReducer from './slices/expensesSlice';
-import notificationsReducer from './slices/notificationsSlice';
-import uiReducer from './slices/uiSlice';
-import personalFinanceReducer from './slices/personalFinanceSlice';
-import paymentMethodsReducer from './slices/paymentMethodsSlice';
-import hotelsReducer from './slices/hotelsSlice';
-import bulkPaymentsReducer from './slices/bulkPaymentsSlice';
+import { rootReducer, RootState } from './rootReducer';
 import { offlineMiddleware } from './middleware/offlineMiddleware';
 
+
 export const store = configureStore({
-  reducer: {
-    auth: authReducer,
-    groups: groupsReducer,
-    expenses: expensesReducer,
-    notifications: notificationsReducer,
-    paymentMethods: paymentMethodsReducer,
-    hotels: hotelsReducer,
-    ui: uiReducer,
-    personalFinance: personalFinanceReducer,
-    bulkPayments: bulkPaymentsReducer,
-  },
+  reducer: rootReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
@@ -40,7 +23,7 @@ export const store = configureStore({
 });
 
 
-export type RootState = ReturnType<typeof store.getState>;
+export type { RootState };
 export type AppDispatch = typeof store.dispatch;
 
 // Typed hooks

@@ -20,8 +20,11 @@ export default function GroupsScreen({ navigation }: any) {
     onOnline: () => loadGroups(),
   });
   const { groups, loading } = useGroups();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const dispatch = useAppDispatch();
+
+  // Use profile ID or fallback to user ID
+  const currentUserId = profile?.id || user?.id;
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,7 +71,7 @@ export default function GroupsScreen({ navigation }: any) {
 
     setCreating(true);
     try {
-       await dispatch(createGroup({
+      await dispatch(createGroup({
         name: newGroupName.trim(),
         description: newGroupDescription.trim() || undefined,
         member_ids: [],
@@ -78,7 +81,7 @@ export default function GroupsScreen({ navigation }: any) {
       setNewGroupName('');
       setNewGroupDescription('');
       setModalVisible(false);
-      
+
       // Show different message based on online status
       if (isOnline) {
         showToast('Group created successfully!', 'success');
@@ -87,34 +90,45 @@ export default function GroupsScreen({ navigation }: any) {
       }
 
     } catch (error) {
-       ErrorHandler.handleError(error, showToast, 'Create Group');
+      ErrorHandler.handleError(error, showToast, 'Create Group');
     } finally {
       setCreating(false);
     }
   };
 
+  // Filter groups: only show groups where current user is a member
+  const myGroups = groups.filter(group => {
+    // If we don't know the current user, show nothing (or show all?)
+    // Better to show nothing for privacy
+    if (!currentUserId) return false;
+
+    // Check if current user is a member of this group
+    const isMember = group.members?.some((member: any) => member.user_id === currentUserId);
+    return isMember;
+  });
+
   // Filter groups based on search
-  const filteredGroups = groups.filter(group =>
+  const filteredGroups = myGroups.filter(group =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const renderGroupCard = ({ item }: any) => {
     const memberCount = item.members?.length || 0;
-    const isCreator = item.created_by === profile?.id;
+    const isCreator = item.created_by === currentUserId;
 
     return (
-     <Card
-  style={styles.groupCard}
-  onPress={() => {
-    // This is the navigation call
-    navigation.navigate('GroupDetails', { groupId: item.id });
-  }}
->
+      <Card
+        style={styles.groupCard}
+        onPress={() => {
+          // This is the navigation call
+          navigation.navigate('GroupDetails', { groupId: item.id });
+        }}
+      >
         <Card.Content style={styles.cardContent}>
           <View style={styles.groupHeader}>
-            <Avatar.Text 
-              size={56} 
-              label={item.name.substring(0, 2).toUpperCase()} 
+            <Avatar.Text
+              size={56}
+              label={item.name.substring(0, 2).toUpperCase()}
               style={styles.groupAvatar}
             />
             <View style={styles.groupInfo}>
@@ -161,7 +175,7 @@ export default function GroupsScreen({ navigation }: any) {
   );
 
   // Show error state if there's an error and no groups
-  if (error && groups.length === 0 && !loading) {
+  if (error && myGroups.length === 0 && !loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <ErrorState
@@ -198,7 +212,7 @@ export default function GroupsScreen({ navigation }: any) {
       />
 
       {/* Floating Action Button */}
-      {groups.length > 0 && (
+      {myGroups.length > 0 && (
         <FAB
           icon="plus"
           style={styles.fab}
@@ -215,7 +229,7 @@ export default function GroupsScreen({ navigation }: any) {
           contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
         >
           <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Create New Group</Text>
-          
+
           <TextInput
             label="Group Name *"
             value={newGroupName}

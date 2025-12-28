@@ -27,7 +27,9 @@ export type SyncEntityType =
   | 'personal_category'
   | 'message'
   | 'advance_collection'
-  | 'bulk_settlement';
+  | 'advance_collection'
+  | 'bulk_settlement'
+  | 'split_settlement';
 
 export interface SyncOperation {
   id: string;
@@ -225,6 +227,12 @@ class SyncService {
           }
           break;
 
+        case 'split_settlement':
+          if (type === 'update') {
+            await expenseService.markSplitAsSettled(data.id);
+          }
+          break;
+
         default:
           console.warn(`Unknown entity type: ${entity}`);
           return false;
@@ -345,6 +353,12 @@ class SyncService {
       const personalCategories = await personalFinanceService.getCategories();
       if (personalCategories) {
         await storageService.setPersonalCategories(personalCategories);
+      }
+
+      // Sync complete balance
+      const balance = await personalFinanceService.getCompleteBalance();
+      if (balance) {
+        await storageService.setCompleteBalance(balance);
       }
     } catch (error) {
       console.error('Error syncing from server:', error);

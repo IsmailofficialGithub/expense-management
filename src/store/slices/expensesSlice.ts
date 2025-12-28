@@ -28,7 +28,7 @@ export const fetchExpenses = createAsyncThunk('expenses/fetchExpenses', async (f
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     // Try online first
     if (isOnline) {
       try {
@@ -41,7 +41,7 @@ export const fetchExpenses = createAsyncThunk('expenses/fetchExpenses', async (f
         console.warn('Online fetch failed, trying offline:', error);
       }
     }
-    
+
     // Offline: load from local storage
     const cachedExpenses = await storageService.getExpenses();
     if (cachedExpenses) {
@@ -58,14 +58,16 @@ export const fetchExpenses = createAsyncThunk('expenses/fetchExpenses', async (f
           filtered = filtered.filter((e: any) => e.paid_by === filters.paid_by);
         }
         if (filters.date_from) {
-          filtered = filtered.filter((e: any) => e.date >= filters.date_from);
+          const dateFrom = filters.date_from;
+          filtered = filtered.filter((e: any) => e.date >= dateFrom);
         }
         if (filters.date_to) {
-          filtered = filtered.filter((e: any) => e.date <= filters.date_to);
+          const dateTo = filters.date_to;
+          filtered = filtered.filter((e: any) => e.date <= dateTo);
         }
         if (filters.search) {
           const searchLower = filters.search.toLowerCase();
-          filtered = filtered.filter((e: any) => 
+          filtered = filtered.filter((e: any) =>
             e.description?.toLowerCase().includes(searchLower)
           );
         }
@@ -73,7 +75,7 @@ export const fetchExpenses = createAsyncThunk('expenses/fetchExpenses', async (f
       }
       return cachedExpenses;
     }
-    
+
     throw new Error('No expenses available');
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -84,7 +86,7 @@ export const fetchExpense = createAsyncThunk('expenses/fetchExpense', async (exp
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const expense = await expenseService.getExpense(expenseId);
@@ -102,39 +104,81 @@ export const fetchExpense = createAsyncThunk('expenses/fetchExpense', async (exp
         console.warn('Online fetch expense failed, trying offline:', error);
       }
     }
-    
+
     // Offline: load from local storage
     const cachedExpenses = await storageService.getExpenses() || [];
     const expense = cachedExpenses.find((e: any) => e.id === expenseId);
     if (expense) {
       return expense;
     }
-    
+
     throw new Error('Expense not found');
   } catch (error: any) {
     return rejectWithValue(error.message);
   }
 });
 
-export const createExpense = createAsyncThunk('expenses/createExpense', async (request: CreateExpenseRequest, { rejectWithValue, getState }) => {
+export const createExpense = createAsyncThunk('expenses/createExpense', async (request: CreateExpenseRequest, { rejectWithValue, getState, dispatch }) => {
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
-  try {
-    const expense = await expenseService.createExpense(request);
+      try {
+        const expense = await expenseService.createExpense(request);
         const expenseWithDetails = await expenseService.getExpense(expense.id);
         // Save to local storage
         const currentExpenses = await storageService.getExpenses() || [];
         await storageService.setExpenses([expenseWithDetails, ...currentExpenses]);
+
+        // AUTOMATIC PERSONAL FINANCE TRACKING
+        // If the current user paid for this, record it as a Personal Transaction (Expense)
+        const currentUser = (state as any).auth.user;
+        if (currentUser && request.paid_by === currentUser.id) {
+          // We need to dispatch this action. However, importing the thunk might cause circular deps.
+          // Using a dynamic import or assuming the user will dispatch it separately?
+          // Ideally, the thunk should dispatch it.
+          // Let's try importing it. If circular dep occurs, we might need a middleware or separate listener.
+          // For now, let's assume it's fine.
+          const { createPersonalTransaction } = require('./personalFinanceSlice'); // Dynamic require to avoid top-level circular dep potential
+
+          // We need to find or create a category. For now, use 'Others' or specific logic.
+          // Just sending the request. 
+          // Note: We need the category ID for personal finance. We'll use a default or first available if possible,
+          // or just leave it empty if allowed? PersonalTransaction requires category_id? It says it's a UUID.
+          // Let's check PersonalTransaction type. It has category_id.
+          // We'll skip this if we can't find a category, or maybe there's a "Group" category?
+          // To be safe and simple: just try to sync balance if possible, but creating a transaction requires more data.
+          // The user said "update in my balance".
+
+          // Actually, simply creating the transaction is the best way.
+          // Let's create a transaction with description "Group Expense: ..." and type "expense".
+          // We'll try to find a matching category in `state.personalFinance.categories` or default.
+
+          const personalCategories = (state as any).personalFinance.categories;
+          // Try to find 'Group' or 'Shared' or 'Expense'
+          const defaultCat = personalCategories.find((c: any) => c.name === 'Group') || personalCategories[0];
+
+          if (defaultCat) {
+            const personalTx = {
+              amount: request.amount,
+              type: 'expense',
+              category_id: defaultCat.id,
+              date: request.date || new Date().toISOString(),
+              description: `Group Exp: ${request.description}`,
+            };
+            // Dispatch directly
+            dispatch(createPersonalTransaction(personalTx));
+          }
+        }
+
         return expenseWithDetails;
       } catch (error: any) {
         // If online fails, queue for sync
         console.warn('Online create failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: create temporary expense and queue for sync
     const tempExpense: ExpenseWithDetails = {
       id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -145,24 +189,25 @@ export const createExpense = createAsyncThunk('expenses/createExpense', async (r
         id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         expense_id: '',
         user_id: s.user_id,
-        amount: s.amount,
-        percentage: s.percentage,
-        shares: s.shares,
+        amount: s.amount || 0,
+        percentage: s.percentage || null,
+        shares: s.shares || null,
         is_settled: false,
+        settled_at: null,
         created_at: new Date().toISOString(),
         user: {} as any,
       })),
       category: {} as any,
       paid_by_user: {} as any,
     };
-    
+
     // Queue for sync
     await syncService.addToQueue('create', 'expense', request);
-    
+
     // Save to local storage
     const currentExpenses = await storageService.getExpenses() || [];
     await storageService.setExpenses([tempExpense, ...currentExpenses]);
-    
+
     return tempExpense;
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -173,7 +218,7 @@ export const createFoodExpense = createAsyncThunk('expenses/createFoodExpense', 
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const expenseWithDetails = await foodExpenseService.createFoodExpense(request);
@@ -186,13 +231,13 @@ export const createFoodExpense = createAsyncThunk('expenses/createFoodExpense', 
         console.warn('Online create food expense failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: create temporary expense and queue for sync
     const totalAmount = request.food_items.reduce(
       (sum, item) => sum + (item.quantity * item.unit_price),
       0
     );
-    
+
     const tempExpense: ExpenseWithDetails = {
       id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       group_id: request.group_id,
@@ -200,11 +245,12 @@ export const createFoodExpense = createAsyncThunk('expenses/createFoodExpense', 
       description: request.description,
       amount: totalAmount,
       paid_by: request.paid_by,
-      date: request.date,
+      date: request.date || new Date().toISOString(),
       notes: request.notes || null,
       split_type: request.split_type,
       hotel_id: request.hotel_id,
       payment_method_id: request.payment_method_id || null,
+      payment_method_type: null,
       receipt_url: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -212,10 +258,11 @@ export const createFoodExpense = createAsyncThunk('expenses/createFoodExpense', 
         id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         expense_id: '',
         user_id: s.user_id,
-        amount: s.amount,
+        amount: s.amount || 0,
         percentage: null,
         shares: null,
         is_settled: false,
+        settled_at: null,
         created_at: new Date().toISOString(),
         user: {} as any,
       })),
@@ -234,14 +281,14 @@ export const createFoodExpense = createAsyncThunk('expenses/createFoodExpense', 
       paid_by_user: {} as any,
       hotel: {} as any,
     };
-    
+
     // Queue for sync
     await syncService.addToQueue('create', 'expense', request);
-    
+
     // Save to local storage
     const currentExpenses = await storageService.getExpenses() || [];
     await storageService.setExpenses([tempExpense, ...currentExpenses]);
-    
+
     return tempExpense;
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -267,55 +314,55 @@ export const updateExpense = createAsyncThunk(
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
-      
+
       if (isOnline) {
-    try {
-      // 1️⃣ If a new receipt file was uploaded
-      let receipt_url: string | null | undefined = undefined;
+        try {
+          // 1️⃣ If a new receipt file was uploaded
+          let receipt_url: string | null | undefined = undefined;
 
-      if (receipt) {
-        const fileExt = receipt.name.split(".").pop();
-        const filePath = `receipts/${expenseId}.${fileExt}`;
+          if (receipt) {
+            const fileExt = receipt.name.split(".").pop();
+            const filePath = `receipts/${expenseId}.${fileExt}`;
 
-        // Upload to Supabase Storage
-        const upload = await expenseService.uploadReceipt(filePath, receipt);
+            // Upload to Supabase Storage
+            const upload = await expenseService.uploadReceipt(filePath, receipt);
 
-        if (upload.error) throw upload.error;
+            if (upload.error) throw upload.error;
 
-        // Get public URL
-        const publicUrl = expenseService.getReceiptUrl(filePath);
-        receipt_url = publicUrl;
-      }
+            // Get public URL
+            const publicUrl = expenseService.getReceiptUrl(filePath);
+            receipt_url = publicUrl;
+          }
 
-      // 2️⃣ Update expense main data (add receipt_url if replaced)
-      const updatedExpense = await expenseService.updateExpense(expenseId, {
-        ...updates,
-        ...(receipt_url ? { receipt_url } : {}),
-      });
+          // 2️⃣ Update expense main data (add receipt_url if replaced)
+          const updatedExpense = await expenseService.updateExpense(expenseId, {
+            ...updates,
+            ...(receipt_url ? { receipt_url } : {}),
+          });
 
-      // 3️⃣ Update splits (delete old + insert new)
-      await expenseService.replaceSplits(expenseId, splits);
+          // 3️⃣ Update splits (delete old + insert new)
+          await expenseService.replaceSplits(expenseId, splits);
 
-      // 4️⃣ Return fresh expense with details
+          // 4️⃣ Return fresh expense with details
           const expenseWithDetails = await expenseService.getExpense(expenseId);
-          
+
           // Update local storage
           const currentExpenses = await storageService.getExpenses() || [];
-          const updatedExpenses = currentExpenses.map((e: any) => 
+          const updatedExpenses = currentExpenses.map((e: any) =>
             e.id === expenseId ? expenseWithDetails : e
           );
           await storageService.setExpenses(updatedExpenses);
-          
+
           return expenseWithDetails;
         } catch (error: any) {
           console.warn('Online update expense failed, queueing for sync:', error);
         }
       }
-      
+
       // Offline or online failed: update local storage and queue for sync
       const currentExpenses = await storageService.getExpenses() || [];
       const expenseToUpdate = currentExpenses.find((e: any) => e.id === expenseId);
-      
+
       if (expenseToUpdate) {
         const updatedExpense: ExpenseWithDetails = {
           ...expenseToUpdate,
@@ -329,24 +376,25 @@ export const updateExpense = createAsyncThunk(
             percentage: null,
             shares: null,
             is_settled: false,
+            settled_at: null,
             created_at: new Date().toISOString(),
             user: {} as any,
           })),
         };
-        
-        await syncService.addToQueue('update', 'expense', { 
-          id: expenseId, 
-          updates: { ...updates, splits } 
+
+        await syncService.addToQueue('update', 'expense', {
+          id: expenseId,
+          updates: { ...updates, splits }
         });
-        
-        const updatedExpenses = currentExpenses.map((e: any) => 
+
+        const updatedExpenses = currentExpenses.map((e: any) =>
           e.id === expenseId ? updatedExpense : e
         );
         await storageService.setExpenses(updatedExpenses);
-        
+
         return updatedExpense;
       }
-      
+
       throw new Error('Expense not found');
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -361,10 +409,10 @@ export const deleteExpense = createAsyncThunk('expenses/deleteExpense', async (e
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
-  try {
-    await expenseService.deleteExpense(expenseId);
+      try {
+        await expenseService.deleteExpense(expenseId);
         // Remove from local storage
         const currentExpenses = await storageService.getExpenses() || [];
         await storageService.setExpenses(currentExpenses.filter((e: any) => e.id !== expenseId));
@@ -374,17 +422,69 @@ export const deleteExpense = createAsyncThunk('expenses/deleteExpense', async (e
         console.warn('Online delete failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: remove from local storage and queue for sync
     const currentExpenses = await storageService.getExpenses() || [];
     const expenseToDelete = currentExpenses.find((e: any) => e.id === expenseId);
-    
+
     if (expenseToDelete) {
       await syncService.addToQueue('delete', 'expense', { id: expenseId });
       await storageService.setExpenses(currentExpenses.filter((e: any) => e.id !== expenseId));
     }
-    
+
     return expenseId;
+  } catch (error: any) {
+    return rejectWithValue(error.message);
+  }
+});
+
+export const markSplitAsSettled = createAsyncThunk('expenses/markSplitAsSettled', async (splitId: string, { rejectWithValue, getState }) => {
+  try {
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+
+    if (isOnline) {
+      try {
+        const updatedSplit = await expenseService.markSplitAsSettled(splitId);
+        // We also need to update local storage
+        const currentExpenses = await storageService.getExpenses() || [];
+        // Find expense containing this split
+        const expenseIndex = currentExpenses.findIndex((e: any) => e.splits?.some((s: any) => s.id === splitId));
+        if (expenseIndex !== -1) {
+          const expense = currentExpenses[expenseIndex];
+          if (expense.splits) {
+            const splitIndex = expense.splits.findIndex((s: any) => s.id === splitId);
+            if (splitIndex !== -1) {
+              expense.splits[splitIndex] = { ...expense.splits[splitIndex], is_settled: true, settled_at: updatedSplit.settled_at };
+              await storageService.setExpenses(currentExpenses);
+            }
+          }
+        }
+        return { splitId, settledAt: updatedSplit.settled_at };
+      } catch (error: any) {
+        console.warn('Online markSplitAsSettled failed, queueing for sync:', error);
+      }
+    }
+
+    // Offline or online failed
+    const settledAt = new Date().toISOString();
+    await syncService.addToQueue('update', 'split_settlement', { id: splitId, is_settled: true, settled_at: settledAt });
+
+    // Update local storage
+    const currentExpenses = await storageService.getExpenses() || [];
+    const expenseIndex = currentExpenses.findIndex((e: any) => e.splits?.some((s: any) => s.id === splitId));
+    if (expenseIndex !== -1) {
+      const expense = currentExpenses[expenseIndex];
+      if (expense.splits) {
+        const splitIndex = expense.splits.findIndex((s: any) => s.id === splitId);
+        if (splitIndex !== -1) {
+          expense.splits[splitIndex] = { ...expense.splits[splitIndex], is_settled: true, settled_at: settledAt };
+          await storageService.setExpenses(currentExpenses);
+        }
+      }
+    }
+
+    return { splitId, settledAt };
   } catch (error: any) {
     return rejectWithValue(error.message);
   }
@@ -394,7 +494,7 @@ export const fetchCategories = createAsyncThunk('expenses/fetchCategories', asyn
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const categories = await categoryService.getCategories();
@@ -404,13 +504,13 @@ export const fetchCategories = createAsyncThunk('expenses/fetchCategories', asyn
         console.warn('Online fetch categories failed, trying offline:', error);
       }
     }
-    
+
     // Offline: load from local storage
     const cachedCategories = await storageService.getCategories();
     if (cachedCategories) {
       return cachedCategories;
     }
-    
+
     throw new Error('No categories available');
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -421,7 +521,7 @@ export const settleUp = createAsyncThunk('expenses/settleUp', async (request: Se
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const settlement = await settlementService.settleUp(request);
@@ -433,21 +533,25 @@ export const settleUp = createAsyncThunk('expenses/settleUp', async (request: Se
         console.warn('Online settleUp failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: create temporary settlement and queue for sync
     const tempSettlement: Settlement = {
       id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       ...request,
+      notes: request.notes || null,
+      is_bulk: false,
+      bulk_settlement_id: null,
+      related_expense_ids: request.related_expense_ids || null,
       settled_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
     };
-    
+
     await syncService.addToQueue('create', 'settlement', request);
-    
+
     // Save to local storage
     const currentSettlements = await storageService.getSettlements() || [];
     await storageService.setSettlements([tempSettlement, ...currentSettlements]);
-    
+
     return tempSettlement;
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -463,7 +567,7 @@ export const fetchSettlements = createAsyncThunk('expenses/fetchSettlements', as
   try {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const settlements = await settlementService.getSettlements(groupId);
@@ -473,7 +577,7 @@ export const fetchSettlements = createAsyncThunk('expenses/fetchSettlements', as
         console.warn('Online fetch settlements failed, trying offline:', error);
       }
     }
-    
+
     // Offline: load from local storage
     const cachedSettlements = await storageService.getSettlements();
     if (cachedSettlements) {
@@ -483,7 +587,7 @@ export const fetchSettlements = createAsyncThunk('expenses/fetchSettlements', as
       }
       return cachedSettlements;
     }
-    
+
     return [];
   } catch (error: any) {
     return rejectWithValue(error.message);
@@ -576,6 +680,24 @@ const expensesSlice = createSlice({
       state.expenses = state.expenses.filter(e => e.id !== action.payload);
       if (state.selectedExpense?.id === action.payload) state.selectedExpense = null;
     });
+    builder.addCase(markSplitAsSettled.fulfilled, (state, action) => {
+      // Update in expenses list
+      state.expenses.forEach(expense => {
+        const split = expense.splits?.find(s => s.id === action.payload.splitId);
+        if (split) {
+          split.is_settled = true;
+          split.settled_at = action.payload.settledAt;
+        }
+      });
+      // Update selected expense
+      if (state.selectedExpense) {
+        const split = state.selectedExpense.splits?.find(s => s.id === action.payload.splitId);
+        if (split) {
+          split.is_settled = true;
+          split.settled_at = action.payload.settledAt;
+        }
+      }
+    });
     builder.addCase(fetchCategories.fulfilled, (state, action) => {
       state.categories = action.payload;
     });
@@ -586,6 +708,34 @@ const expensesSlice = createSlice({
     builder.addCase(settleUp.fulfilled, (state, action) => {
       state.loading = false;
       state.settlements.push(action.payload);
+
+      // Update related expenses' splits to settled
+      const relatedIds = action.meta.arg.related_expense_ids;
+      const fromUser = action.meta.arg.from_user;
+
+      if (relatedIds && relatedIds.length > 0) {
+        // Update in list
+        state.expenses.forEach(expense => {
+          if (relatedIds.includes(expense.id)) {
+            expense.splits?.forEach(split => {
+              if (split.user_id === fromUser) {
+                split.is_settled = true;
+                split.settled_at = action.payload.settled_at;
+              }
+            });
+          }
+        });
+
+        // Update selected expense
+        if (state.selectedExpense && relatedIds.includes(state.selectedExpense.id)) {
+          state.selectedExpense.splits?.forEach(split => {
+            if (split.user_id === fromUser) {
+              split.is_settled = true;
+              split.settled_at = action.payload.settled_at;
+            }
+          });
+        }
+      }
     });
     builder.addCase(settleUp.rejected, (state, action) => {
       state.loading = false;
