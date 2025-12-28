@@ -116,7 +116,28 @@ export const initializeAuth = createAsyncThunk(
   'auth/initialize',
   async (_, { rejectWithValue }) => {
     try {
-      let user = await authService.getCurrentUser();
+      console.log('Initializing auth...');
+
+      // Retry mechanism to handle async session loading from AsyncStorage
+      // Supabase needs time to load the session from storage
+      let user = null;
+      const maxRetries = 3;
+      const retryDelay = 200; // ms
+
+      for (let i = 0; i < maxRetries; i++) {
+        user = await authService.getCurrentUser();
+
+        if (user) {
+          console.log('User session found on attempt', i + 1);
+          break;
+        }
+
+        // If no user found and not the last retry, wait a bit
+        if (i < maxRetries - 1) {
+          console.log('No session yet, retrying in', retryDelay, 'ms...');
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
 
       // FALLBACK: If Supabase returns null (offline), try our local backup
       if (!user) {
@@ -132,6 +153,7 @@ export const initializeAuth = createAsyncThunk(
       }
 
       if (user) {
+        console.log('User authenticated:', user.id);
         let profile = null;
         try {
           profile = await profileService.getProfile(user.id);
@@ -157,8 +179,10 @@ export const initializeAuth = createAsyncThunk(
         return { user, profile };
       }
 
+      console.log('No user session found, user is logged out');
       return { user: null, profile: null };
     } catch (error: any) {
+      console.error('initializeAuth error:', error);
       return rejectWithValue(error.message || 'Failed to initialize auth');
     }
   }
@@ -203,6 +227,7 @@ const authSlice = createSlice({
       state.user = action.payload.user;
       state.profile = action.payload.profile;
       state.isAuthenticated = !!action.payload.user;
+      state.initialized = true; // Mark as initialized when auth state changes
     },
     setProfileFromCache: (state, action: PayloadAction<Profile>) => {
       state.profile = action.payload;

@@ -505,12 +505,28 @@ export default function SingleGroupExpenseDetailsScreen({ navigation, route }: P
                             onPress={() => setReceiptModalVisible(false)}
                         />
                     </View>
-                    {selectedExpense.receipt_url && (
-                        <Image
-                            source={{ uri: selectedExpense.receipt_url }}
-                            style={styles.receiptImage}
-                            resizeMode="contain"
-                        />
+                    {selectedExpense.receipt_url ? (
+                        <>
+                            <Image
+                                source={{ uri: selectedExpense.receipt_url }}
+                                style={styles.receiptImage}
+                                resizeMode="contain"
+                                onError={(error) => {
+                                    console.error('Receipt image failed to load:', error.nativeEvent.error);
+                                    console.log('Receipt URL:', selectedExpense.receipt_url);
+                                }}
+                                onLoad={() => console.log('Receipt image loaded successfully')}
+                            />
+                            <Text style={[styles.receiptUrl, { color: theme.colors.onSurfaceVariant }]}>
+                                {selectedExpense.receipt_url}
+                            </Text>
+                        </>
+                    ) : (
+                        <View style={styles.noReceiptContainer}>
+                            <Text style={[styles.noReceiptText, { color: theme.colors.onSurfaceVariant }]}>
+                                No receipt available
+                            </Text>
+                        </View>
                     )}
                 </Modal>
             </Portal>
@@ -739,5 +755,20 @@ const styles = StyleSheet.create({
         width: width - 40,
         height: 400,
         alignSelf: 'center',
+    },
+    receiptUrl: {
+        fontSize: 10,
+        padding: 16,
+        textAlign: 'center',
+        fontFamily: 'monospace',
+    },
+    noReceiptContainer: {
+        padding: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    noReceiptText: {
+        fontSize: 14,
+        fontStyle: 'italic',
     },
 });

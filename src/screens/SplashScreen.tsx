@@ -37,11 +37,10 @@ export default function SplashScreen() {
 
     const init = async () => {
       try {
-        // Start minimum splash timer
+        // Start minimum splash timer for better UX
         const minSplashPromise = new Promise(resolve => setTimeout(resolve, 800));
 
         // Wait for Auth Initialization
-        // Poll store instead of effect dependencies to avoid re-runs
         const startTime = Date.now();
         let authInitialized = store.getState().auth.initialized;
 
@@ -54,11 +53,9 @@ export default function SplashScreen() {
           authInitialized = store.getState().auth.initialized;
         }
 
-        // Trigger Data Fetch
+        // Trigger Data Fetch in background (don't wait for it)
         if (!dataLoadingRef.current) {
           dataLoadingRef.current = true;
-          // Fire and forget - or wait with short timeout if critical
-          // Since Provider loads cache, we don't strictly need to wait for fresh data
           Promise.allSettled([
             dispatch(fetchGroups()),
             dispatch(fetchExpenses()),

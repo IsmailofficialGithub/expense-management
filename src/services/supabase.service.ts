@@ -1176,6 +1176,7 @@ export const personalFinanceService = {
         description: request.description,
         date: request.date || new Date().toISOString().split('T')[0],
         notes: request.notes,
+        receipt_url: request.receipt_url,
       })
       .select()
       .single();
@@ -1202,10 +1203,31 @@ export const personalFinanceService = {
 
   // Delete personal transaction
   deleteTransaction: async (transactionId: string): Promise<void> => {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // First, get the transaction to check if it has a receipt
+    const { data: transaction, error: fetchError } = await supabase
+      .from('personal_transactions')
+      .select('receipt_url')
+      .eq('id', transactionId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!fetchError && transaction?.receipt_url) {
+      // Delete receipt from storage
+      try {
+        await expenseService.deleteReceipt(transaction.receipt_url);
+      } catch (error) {
+        console.error('Failed to delete transaction receipt:', error);
+      }
+    }
+
     const { error } = await supabase
       .from('personal_transactions')
       .delete()
-      .eq('id', transactionId);
+      .eq('id', transactionId)
+      .eq('user_id', user.id);
 
     if (error) throw error;
   },
@@ -1449,6 +1471,8 @@ export const expenseService = {
     if (request.receipt) {
       try {
         const fileName = `${Date.now()}_${request.receipt.name || 'receipt.jpg'}`;
+        // Include user ID in path for RLS policy compliance
+        const filePath = `${request.paid_by}/${fileName}`;
 
         // Simpler method - use fetch with arrayBuffer
         const response = await fetch(request.receipt.uri);
@@ -1463,7 +1487,7 @@ export const expenseService = {
         // Upload to Supabase storage
         const { error: uploadError } = await supabase.storage
           .from('receipts')
-          .upload(fileName, uint8Array, {
+          .upload(filePath, uint8Array, {
             contentType: request.receipt.type || 'image/jpeg',
             cacheControl: '3600',
             upsert: false
@@ -1474,12 +1498,18 @@ export const expenseService = {
           throw uploadError;
         }
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
+        // Get signed URL (works with private buckets)
+        // Signed URL expires in 1 year (31536000 seconds)
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
           .from('receipts')
-          .getPublicUrl(fileName);
+          .createSignedUrl(filePath, 31536000); // 1 year expiry
 
-        receiptUrl = publicUrl;
+        if (signedUrlError) {
+          console.error('Failed to create signed URL:', signedUrlError);
+          throw signedUrlError;
+        }
+
+        receiptUrl = signedUrlData.signedUrl;
       } catch (error) {
         console.error('Failed to process receipt:', error);
         receiptUrl = null;
@@ -1612,8 +1642,47 @@ export const expenseService = {
       .from("receipts")
       .upload(filePath, file, { upsert: true });
   },
-  getReceiptUrl(filePath: string) {
-    return supabase.storage.from("receipts").getPublicUrl(filePath).data.publicUrl;
+  async getReceiptUrl(filePath: string) {
+    const { data, error } = await supabase.storage
+      .from("receipts")
+      .createSignedUrl(filePath, 31536000); // 1 year expiry
+
+    if (error) {
+      console.error('Failed to create signed URL:', error);
+      return null;
+    }
+
+    return data.signedUrl;
+  },
+
+  async deleteReceipt(receiptUrl: string) {
+    try {
+      // Extract file path from URL
+      // URL format: https://[project].supabase.co/storage/v1/object/[public|sign]/receipts/[userId]/[filename]
+      const urlParts = receiptUrl.split('/receipts/');
+      if (urlParts.length > 1) {
+        // Remove query parameters if it's a signed URL
+        const pathWithQuery = urlParts[1];
+        const filePath = pathWithQuery.split('?')[0];
+
+        // Delete from storage
+        const { error } = await supabase.storage
+          .from('receipts')
+          .remove([filePath]);
+
+        if (error) {
+          console.error('Failed to delete receipt from storage:', error);
+          return false;
+        }
+
+        console.log('Receipt deleted successfully from storage:', filePath);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error deleting receipt:', error);
+      return false;
+    }
   }
   ,
   async replaceSplits(expenseId: string, splits: { user_id: string; amount: number }[]) {
@@ -1636,10 +1705,38 @@ export const expenseService = {
   }
   ,
   deleteExpense: async (expenseId: string) => {
+    // 1. First, get the expense to check if it has a receipt
+    const { data: expense, error: fetchError } = await supabase
+      .from('expenses')
+      .select('receipt_url')
+      .eq('id', expenseId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // 2. Delete the receipt from storage if it exists
+    if (expense?.receipt_url) {
+      await expenseService.deleteReceipt(expense.receipt_url);
+    }
+
+    // 3. Delete related food items first (foreign key dependency)
+    await supabase
+      .from('expense_food_items')
+      .delete()
+      .eq('expense_id', expenseId);
+
+    // 4. Delete splits first (foreign key dependency)
+    await supabase
+      .from('expense_splits')
+      .delete()
+      .eq('expense_id', expenseId);
+
+    // 5. Finally, delete the expense from database
     const { error } = await supabase
       .from('expenses')
       .delete()
       .eq('id', expenseId);
+
     if (error) throw error;
   },
 

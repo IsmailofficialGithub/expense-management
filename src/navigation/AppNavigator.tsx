@@ -30,6 +30,7 @@ import EditExpenseScreen from '../screens/forms/EditExpenseScreen';
 import PersonalFinanceScreen from '../screens/main/PersonalFinanceScreen';
 import AddPersonalTransactionScreen from '../screens/forms/AddPersonalTransactionScreen';
 import EditPersonalTransactionScreen from '../screens/forms/EditPersonalTransactionScreen';
+import PersonalTransactionDetailsScreen from '../screens/details/PersonalTransactionDetailsScreen';
 
 
 import InviteUserScreen from '../screens/details/InviteUserScreen';
@@ -46,6 +47,7 @@ import AdvanceCollectionScreen from '../screens/details/AdvanceCollectionScreen'
 import BulkSettlementScreen from '../screens/details/BulkSettlementScreen';
 import BulkPaymentStatsScreen from '../screens/details/BulkPaymentStatsScreen';
 import SplashScreen from '../screens/SplashScreen';
+import ShareHandlerScreen from '../screens/ShareHandlerScreen';
 
 // Type definitions for navigation
 export type AuthStackParamList = {
@@ -77,11 +79,13 @@ export type RootStackParamList = {
   SingleGroupExpenseDetails: { expenseId: string; groupId?: string };
   ExpenseDetails: { expenseId: string };
   SettleUp: { groupId?: string; userId?: string; amount?: string };
-  AddExpense: { groupId?: string };
+  AddExpense: { groupId?: string; sharedImageUri?: string };
   EditExpense: { expenseId: string };
   PersonalFinance: undefined;
-  AddPersonalTransaction: undefined;
+  AddPersonalTransaction: { sharedImageUri?: string };
+  ShareHandler: undefined;
   EditPersonalTransaction: { transactionId: string };
+  PersonalTransactionDetails: { transactionId: string };
   InviteUser: { groupId: string; groupName: string };
   AddFoodExpense: { groupId?: string };
   PaymentMethods: undefined;
@@ -212,17 +216,28 @@ export default function AppNavigator() {
     },
   };
 
-  // Show splash screen immediately - it will handle auth initialization in background
+  // Show splash screen while auth is initializing to prevent flash of login page
+  // This ensures we don't show the wrong screen before knowing the auth state
+  if (!initialized) {
+    return (
+      <RootStack.Navigator
+        screenOptions={{ headerShown: false }}
+        initialRouteName="Splash"
+      >
+        <RootStack.Screen
+          name="Splash"
+          component={SplashScreen}
+          options={{ headerShown: false }}
+        />
+      </RootStack.Navigator>
+    );
+  }
+
+  // Once initialized, show the appropriate screens based on auth state
   return (
     <RootStack.Navigator
       screenOptions={{ headerShown: false }}
-      initialRouteName="Splash"
     >
-      <RootStack.Screen
-        name="Splash"
-        component={SplashScreen}
-        options={{ headerShown: false }}
-      />
       {isAuthenticated ? (
         // User is Logged In
         isPasswordReset ? (
@@ -272,6 +287,11 @@ export default function AppNavigator() {
               name="EditPersonalTransaction"
               component={EditPersonalTransactionScreen}
               options={{ ...detailScreenOptions, title: 'Edit Transaction' }}
+            />
+            <RootStack.Screen
+              name="PersonalTransactionDetails"
+              component={PersonalTransactionDetailsScreen}
+              options={{ ...detailScreenOptions, title: 'Transaction Details' }}
             />
             <RootStack.Screen
               name="SettleUp"
@@ -349,6 +369,12 @@ export default function AppNavigator() {
         // User is Logged Out: Show Auth screens
         <RootStack.Screen name="Auth" component={AuthNavigator} />
       )}
+      {/* ShareHandler available regardless of auth state */}
+      <RootStack.Screen
+        name="ShareHandler"
+        component={ShareHandlerScreen}
+        options={{ ...detailScreenOptions, title: 'Share to Expense' }}
+      />
     </RootStack.Navigator>
   );
 }

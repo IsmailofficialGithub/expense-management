@@ -61,6 +61,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const preSelectedGroupId = route?.params?.groupId;
+  const sharedImageUri = route?.params?.sharedImageUri;
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -70,7 +71,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [notes, setNotes] = useState("");
-  const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [receiptUri, setReceiptUri] = useState<string | null>(sharedImageUri || null);
   const [splitType, setSplitType] = useState<"equal" | "unequal">("equal");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customSplits, setCustomSplits] = useState<{
@@ -126,7 +127,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.8,
     });
@@ -593,13 +594,21 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
               <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Receipt</Text>
               <View style={styles.receiptContainer}>
                 {receiptUri ? (
-                  <View style={[styles.receiptPreview, { backgroundColor: theme.colors.primaryContainer }]}>
-                    <Text style={[styles.receiptText, { color: theme.colors.onPrimaryContainer }]}>Receipt attached ✓</Text>
-                    <IconButton
-                      icon="close"
-                      size={20}
-                      onPress={() => setReceiptUri(null)}
-                    />
+                  <View>
+                    <Card style={[styles.receiptImageCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                      <Card.Cover source={{ uri: receiptUri }} style={styles.receiptImage} />
+                      <Card.Actions style={styles.receiptActions}>
+                        <Text style={[styles.receiptText, { color: theme.colors.onSurfaceVariant }]}>
+                          {sharedImageUri ? '📤 Shared image attached' : '✓ Receipt attached'}
+                        </Text>
+                        <IconButton
+                          icon="close-circle"
+                          size={24}
+                          iconColor={theme.colors.error}
+                          onPress={() => setReceiptUri(null)}
+                        />
+                      </Card.Actions>
+                    </Card>
                   </View>
                 ) : (
                   <View style={styles.receiptButtons}>
@@ -738,6 +747,17 @@ const styles = StyleSheet.create({
   },
   receiptButton: {
     flex: 1,
+  },
+  receiptImageCard: {
+    marginBottom: 8,
+    elevation: 2,
+  },
+  receiptImage: {
+    height: 200,
+  },
+  receiptActions: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
   },
   submitButton: {
     marginTop: 24,

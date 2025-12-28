@@ -105,6 +105,7 @@ export interface PersonalTransaction {
   description: string;
   date: string;
   notes: string | null;
+  receipt_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -129,6 +130,7 @@ export interface CreatePersonalTransactionRequest {
   description: string;
   date?: string;
   notes?: string;
+  receipt_url?: string;
 }
 
 export interface UserCompleteBalance {

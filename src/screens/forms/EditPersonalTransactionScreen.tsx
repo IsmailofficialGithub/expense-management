@@ -15,6 +15,7 @@ import {
 import SafeScrollView from '../../components/SafeScrollView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePersonalFinance } from '../../hooks/usePersonalFinance';
+import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
@@ -25,6 +26,9 @@ import {
 } from '../../store/slices/personalFinanceSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import * as ImagePicker from 'expo-image-picker';
+import { Image, TouchableOpacity } from 'react-native';
+import { supabase } from '../../services/supabase';
 import { format } from 'date-fns';
 
 interface Props {
@@ -43,6 +47,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
   const { transactions, categories, loading } = usePersonalFinance();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
+  const { profile } = useAuth();
   const dispatch = useAppDispatch();
 
   // Find the transaction
@@ -55,6 +60,8 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
   const [selectedCategory, setSelectedCategory] = useState('');
   const [date, setDate] = useState(new Date());
   const [notes, setNotes] = useState('');
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null);
 
   // Validation errors
   const [errors, setErrors] = useState({
@@ -80,6 +87,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
       setSelectedCategory(transaction.category);
       setDate(new Date(transaction.date));
       setNotes(transaction.notes || '');
+      setExistingReceiptUrl(transaction.receipt_url || null);
     }
   }, [transaction]);
 
@@ -91,11 +99,13 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
         description.trim() !== transaction.description ||
         parseFloat(amount) !== Number(transaction.amount) ||
         selectedCategory !== transaction.category ||
-        notes.trim() !== (transaction.notes || '');
+        notes.trim() !== (transaction.notes || '') ||
+        receiptUri !== null ||
+        (existingReceiptUrl === null && transaction.receipt_url !== null);
 
       setHasChanges(changed);
     }
-  }, [type, description, amount, selectedCategory, notes, transaction]);
+  }, [type, description, amount, selectedCategory, notes, receiptUri, existingReceiptUrl, transaction]);
 
   if (!transaction) {
     return (
@@ -140,6 +150,43 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
     return isValid;
   };
 
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera roll permissions to upload receipts.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setReceiptUri(result.assets[0].uri);
+      setExistingReceiptUrl(null);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera permissions to take photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setReceiptUri(result.assets[0].uri);
+      setExistingReceiptUrl(null);
+    }
+  };
+
   const handleUpdate = async () => {
     // Check network first
     if (!isOnline) {
@@ -149,14 +196,92 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
 
     if (!validateForm()) return;
 
-    if (!hasChanges) {
-      showToast('No changes to save', 'info');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
+      let receiptUrl: string | undefined | null = undefined;
+      let shouldDeleteOldReceipt = false;
+
+      if (receiptUri) {
+        // New receipt selected - will replace old one
+        if (!profile) throw new Error('User not authenticated');
+
+        if (existingReceiptUrl) {
+          shouldDeleteOldReceipt = true;
+        }
+
+        const fileName = `${Date.now()}_receipt.jpg`;
+        const filePath = `${profile.id}/${fileName}`;
+
+        console.log('📸 Starting receipt upload...');
+
+        // Fetch and convert to arrayBuffer (React Native compatible)
+        const response = await fetch(receiptUri);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        // Upload to receipts bucket
+        const { error: uploadError } = await supabase.storage
+          .from('receipts')
+          .upload(filePath, uint8Array, {
+            contentType: 'image/jpeg',
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('❌ Receipt upload error:', uploadError);
+          throw uploadError;
+        }
+
+        console.log('✅ Receipt uploaded to storage');
+
+        // Get signed URL
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+          .from('receipts')
+          .createSignedUrl(filePath, 31536000); // 1 year expiry
+
+        if (signedUrlError) {
+          console.error('❌ Failed to create signed URL:', signedUrlError);
+          throw signedUrlError;
+        }
+
+        console.log('✅ Signed URL created');
+        receiptUrl = signedUrlData.signedUrl;
+      } else if (!receiptUri && !existingReceiptUrl && transaction?.receipt_url) {
+        // User removed the receipt
+        shouldDeleteOldReceipt = true;
+        receiptUrl = null; // Set to null to clear from database
+      }
+
+      // Delete old receipt if needed (cleanup)
+      if (shouldDeleteOldReceipt && transaction?.receipt_url) {
+        try {
+          // Extract file path from URL
+          const urlParts = transaction.receipt_url.split('/receipts/');
+          if (urlParts.length > 1) {
+            const pathWithQuery = urlParts[1];
+            const filePath = pathWithQuery.split('?')[0];
+
+            const { error: deleteError } = await supabase.storage
+              .from('receipts')
+              .remove([filePath]);
+
+            if (deleteError) {
+              console.error('Failed to delete old receipt:', deleteError);
+            } else {
+              console.log('✅ Old receipt deleted from storage');
+            }
+          }
+        } catch (error) {
+          console.error('Error deleting old receipt:', error);
+        }
+      }
+
       await dispatch(
         updatePersonalTransaction({
           id: transactionId,
@@ -167,6 +292,8 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
             description: description.trim(),
             date: format(date, 'yyyy-MM-dd'),
             notes: notes.trim() || null,
+            // Include receipt_url only if it changed
+            ...(receiptUrl !== undefined ? { receipt_url: receiptUrl } : {}),
           },
         })
       ).unwrap();
@@ -397,6 +524,59 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
         style={styles.input}
       />
 
+      {/* Receipt Section */}
+      <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Receipt (Optional)</Text>
+      {receiptUri || existingReceiptUrl ? (
+        <View>
+          {/* Image Preview */}
+          <TouchableOpacity 
+            style={styles.imagePreviewContainer}
+            activeOpacity={0.9}
+          >
+            <Image
+              source={{ uri: receiptUri || existingReceiptUrl || '' }}
+              style={styles.imagePreview}
+              resizeMode="cover"
+            />
+            {/* Remove button overlay */}
+            <IconButton
+              icon="close-circle"
+              size={32}
+              iconColor="white"
+              containerColor="rgba(0,0,0,0.6)"
+              style={styles.removeButton}
+              onPress={() => {
+                setReceiptUri(null);
+                setExistingReceiptUrl(null);
+              }}
+            />
+          </TouchableOpacity>
+          {/* Info text */}
+          <Text style={[styles.receiptInfoText, { color: theme.colors.onSurfaceVariant }]}>
+            {receiptUri ? '📸 New receipt selected' : '📎 Current receipt'}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.receiptButtons}>
+          <Button
+            mode="outlined"
+            icon="camera"
+            onPress={handleTakePhoto}
+            style={styles.receiptButton}
+          >
+            Take Photo
+          </Button>
+          <Button
+            mode="outlined"
+            icon="image"
+            onPress={handlePickImage}
+            style={styles.receiptButton}
+          >
+            Choose Image
+          </Button>
+        </View>
+      )}
+
       {/* Changes Indicator */}
       {hasChanges && (
         <Card style={[styles.changesCard, { backgroundColor: theme.colors.errorContainer }]}>
@@ -472,7 +652,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
           disabled={isSubmitting || !hasChanges}
           icon="content-save"
         >
-          Save Changes
+          Save
         </Button>
       </View>
 
@@ -654,5 +834,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     marginBottom: 8,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+    backgroundColor: '#f0f0f0',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  receiptInfoText: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  receiptButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  receiptButton: {
+    flex: 1,
   },
 });

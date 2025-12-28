@@ -37,13 +37,20 @@ import {
 } from '../../store/slices/personalFinanceSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import * as ImagePicker from 'expo-image-picker';
+import { Image, TouchableOpacity } from 'react-native';
+import { IconButton } from 'react-native-paper';
+import { profileService } from '../../services/supabase.service';
+import { supabase } from '../../services/supabase';
+import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
 
 interface Props {
   navigation: any;
-  route?: {
+  route: {
     params?: {
       type?: 'income' | 'expense';
+      sharedImageUri?: string;
     };
   };
 }
@@ -54,10 +61,12 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
   const { categories, loading } = usePersonalFinance();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
+  const { profile } = useAuth();
   const dispatch = useAppDispatch();
 
   // Pre-selected type from navigation params (optional)
   const preSelectedType = route?.params?.type;
+  const sharedImageUri = route?.params?.sharedImageUri;
 
   // Form state
   const [type, setType] = useState<'income' | 'expense'>(preSelectedType || 'expense');
@@ -66,6 +75,7 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
   const [selectedCategory, setSelectedCategory] = useState('');
   const [date, setDate] = useState(new Date());
   const [notes, setNotes] = useState('');
+  const [receiptUri, setReceiptUri] = useState<string | null>(sharedImageUri || null);
 
   // Validation errors
   const [errors, setErrors] = useState({
@@ -80,6 +90,37 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
     // Load categories
     dispatch(fetchPersonalCategories());
   }, []);
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera roll permissions to upload receipts.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setReceiptUri(result.assets[0].uri);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera permissions to take photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setReceiptUri(result.assets[0].uri);
+    }
+  };
 
   // Filter categories by type
   const filteredCategories = categories.filter(c => c.type === type);
@@ -125,6 +166,64 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
     setIsSubmitting(true);
 
     try {
+      let receiptUrl: string | undefined = undefined;
+
+      // Upload receipt image if present
+      if (receiptUri) {
+        try {
+          if (!profile) throw new Error('User not authenticated');
+
+          const fileName = `${Date.now()}_receipt.jpg`;
+          const filePath = `${profile.id}/${fileName}`;
+
+          console.log('📸 Starting receipt upload...');
+          console.log('Receipt URI:', receiptUri);
+
+          // Fetch and convert to arrayBuffer
+          const response = await fetch(receiptUri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+          }
+
+          const arrayBuffer = await response.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+
+          console.log('📦 Image size:', uint8Array.length, 'bytes');
+
+          // Upload to receipts bucket
+          const { error: uploadError } = await supabase.storage
+            .from('receipts')
+            .upload(filePath, uint8Array, {
+              contentType: 'image/jpeg',
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (uploadError) {
+            console.error('❌ Receipt upload error:', uploadError);
+            throw uploadError;
+          }
+
+          console.log('✅ Receipt uploaded to storage');
+
+          // Get signed URL
+          const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+            .from('receipts')
+            .createSignedUrl(filePath, 31536000); // 1 year expiry
+
+          if (signedUrlError) {
+            console.error('❌ Failed to create signed URL:', signedUrlError);
+            throw signedUrlError;
+          }
+
+          console.log('✅ Signed URL created');
+          receiptUrl = signedUrlData.signedUrl;
+        } catch (uploadError) {
+          console.error('Receipt upload error:', uploadError);
+          showToast('Failed to upload receipt, but transaction will be saved', 'warning');
+        }
+      }
+
       await dispatch(
         createPersonalTransaction({
           type,
@@ -133,6 +232,7 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
           description: description.trim(),
           date: format(date, 'yyyy-MM-dd'),
           notes: notes.trim() || undefined,
+          receipt_url: receiptUrl,
         })
       ).unwrap();
 
@@ -296,6 +396,44 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
         placeholder="Add any additional details..."
         style={styles.input}
       />
+
+      {/* Receipt Section */}
+      <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Receipt (Optional)</Text>
+      {receiptUri ? (
+        <Card style={[styles.receiptCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+          <Card.Cover source={{ uri: receiptUri }} style={styles.receiptImage} />
+          <Card.Actions style={styles.receiptActions}>
+            <Text style={[styles.receiptText, { color: theme.colors.onSurfaceVariant }]}>
+              {sharedImageUri ? '📤 Shared image attached' : '✓ Receipt attached'}
+            </Text>
+            <IconButton
+              icon="close-circle"
+              size={24}
+              iconColor={theme.colors.error}
+              onPress={() => setReceiptUri(null)}
+            />
+          </Card.Actions>
+        </Card>
+      ) : (
+        <View style={styles.receiptButtons}>
+          <Button
+            mode="outlined"
+            icon="camera"
+            onPress={handleTakePhoto}
+            style={styles.receiptButton}
+          >
+            Take Photo
+          </Button>
+          <Button
+            mode="outlined"
+            icon="image"
+            onPress={handlePickImage}
+            style={styles.receiptButton}
+          >
+            Choose Image
+          </Button>
+        </View>
+      )}
 
       {/* Summary Card */}
       <Card
@@ -480,5 +618,28 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
     marginBottom: 8,
+  },
+  receiptCard: {
+    marginBottom: 16,
+    elevation: 2,
+  },
+  receiptImage: {
+    height: 200,
+  },
+  receiptActions: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  receiptText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  receiptButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  receiptButton: {
+    flex: 1,
   },
 });

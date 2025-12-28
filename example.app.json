@@ -1,0 +1,59 @@
+{
+    "expo": {
+        "name": "Flatmates Expense Tracker",
+        "slug": "manager",
+        "version": "1.0.0",
+        "orientation": "portrait",
+        "icon": "./assets/icon.png",
+        "userInterfaceStyle": "automatic",
+        "splash": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#6200EE",
+            "resizeMode": "contain"
+        },
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.yourname.flatmates"
+        },
+        "android": {
+            "package": "com.yourname.flatmates",
+            "adaptiveIcon": {
+                "foregroundImage": "./assets/splash-icon.png",
+                "backgroundColor": "#6200EE"
+            },
+            "intentFilters": [
+                {
+                    "action": "SEND",
+                    "category": [
+                        "DEFAULT"
+                    ],
+                    "data": [
+                        {
+                            "mimeType": "image/*"
+                        }
+                    ]
+                }
+            ]
+        },
+        "extra": {
+            "SUPABASE_URL": "YOUR SUPABASE URL",
+            "SUPABASE_ANON_KEY": "YOUR SUPABASE ANON KEY",
+            "SUPABASE_SERVICE_ROLE_KEY": "YOUR SUPABASE SERVICE ROLE KEY",
+            "SMTP_HOST": "smtp.gmail.com",
+            "SMTP_PORT": "587",
+            "SMTP_USER": "YOUR SMTP USER",
+            "SMTP_PASSWORD": "YOUR SMTP PASSWORD",
+            "SMTP_FROM_NAME": "Flatmates Expense Tracker",
+            "DOWNLOAD_URL": "https://github.com/IsmailofficialGithub/expense-management",
+            "eas": {
+                "projectId": ""
+            }
+        },
+        "runtimeVersion": {
+            "policy": "appVersion"
+        },
+        "updates": {
+            "url": "YOUR UPDATE URL"
+        }
+    }
+}

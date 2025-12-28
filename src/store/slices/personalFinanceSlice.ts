@@ -32,7 +32,7 @@ export const fetchPersonalTransactions = createAsyncThunk(
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
-      
+
       if (isOnline) {
         try {
           const transactions = await personalFinanceService.getTransactions();
@@ -42,13 +42,13 @@ export const fetchPersonalTransactions = createAsyncThunk(
           console.warn('Online fetch transactions failed, trying offline:', error);
         }
       }
-      
+
       // Offline: load from local storage
       const cachedTransactions = await storageService.getPersonalTransactions();
       if (cachedTransactions) {
         return cachedTransactions;
       }
-      
+
       throw new Error('No transactions available');
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -62,7 +62,7 @@ export const createPersonalTransaction = createAsyncThunk(
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
-      
+
       if (isOnline) {
         try {
           const transaction = await personalFinanceService.createTransaction(request);
@@ -74,23 +74,25 @@ export const createPersonalTransaction = createAsyncThunk(
           console.warn('Online create transaction failed, queueing for sync:', error);
         }
       }
-      
+
       // Offline or online failed: create temporary transaction and queue for sync
       const tempTransaction: PersonalTransaction = {
         id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         user_id: '',
         ...request,
+        notes: request.notes || null,
+        receipt_url: request.receipt_url || null,
         date: request.date || new Date().toISOString().split('T')[0],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      
+
       await syncService.addToQueue('create', 'transaction', request);
-      
+
       // Save to local storage
       const currentTransactions = await storageService.getPersonalTransactions() || [];
       await storageService.setPersonalTransactions([tempTransaction, ...currentTransactions]);
-      
+
       return tempTransaction;
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -107,13 +109,13 @@ export const updatePersonalTransaction = createAsyncThunk(
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
-      
+
       if (isOnline) {
         try {
           const transaction = await personalFinanceService.updateTransaction(id, updates);
           // Update local storage
           const currentTransactions = await storageService.getPersonalTransactions() || [];
-          const updatedTransactions = currentTransactions.map((t: any) => 
+          const updatedTransactions = currentTransactions.map((t: any) =>
             t.id === id ? transaction : t
           );
           await storageService.setPersonalTransactions(updatedTransactions);
@@ -122,21 +124,21 @@ export const updatePersonalTransaction = createAsyncThunk(
           console.warn('Online update transaction failed, queueing for sync:', error);
         }
       }
-      
+
       // Offline or online failed: update local storage and queue for sync
       const currentTransactions = await storageService.getPersonalTransactions() || [];
       const transactionToUpdate = currentTransactions.find((t: any) => t.id === id);
-      
+
       if (transactionToUpdate) {
         const updatedTransaction = { ...transactionToUpdate, ...updates, updated_at: new Date().toISOString() };
         await syncService.addToQueue('update', 'transaction', { id, updates });
-        const updatedTransactions = currentTransactions.map((t: any) => 
+        const updatedTransactions = currentTransactions.map((t: any) =>
           t.id === id ? updatedTransaction : t
         );
         await storageService.setPersonalTransactions(updatedTransactions);
         return updatedTransaction;
       }
-      
+
       throw new Error('Transaction not found');
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -150,10 +152,10 @@ export const deletePersonalTransaction = createAsyncThunk(
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
-      
+
       if (isOnline) {
-    try {
-      await personalFinanceService.deleteTransaction(id);
+        try {
+          await personalFinanceService.deleteTransaction(id);
           // Remove from local storage
           const currentTransactions = await storageService.getPersonalTransactions() || [];
           await storageService.setPersonalTransactions(currentTransactions.filter((t: any) => t.id !== id));
@@ -162,12 +164,12 @@ export const deletePersonalTransaction = createAsyncThunk(
           console.warn('Online delete transaction failed, queueing for sync:', error);
         }
       }
-      
+
       // Offline or online failed: remove from local storage and queue for sync
       const currentTransactions = await storageService.getPersonalTransactions() || [];
       await syncService.addToQueue('delete', 'transaction', { id });
       await storageService.setPersonalTransactions(currentTransactions.filter((t: any) => t.id !== id));
-      
+
       return id;
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -181,7 +183,7 @@ export const fetchPersonalCategories = createAsyncThunk(
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
-      
+
       if (isOnline) {
         try {
           const categories = await personalFinanceService.getCategories();
@@ -191,13 +193,13 @@ export const fetchPersonalCategories = createAsyncThunk(
           console.warn('Online fetch categories failed, trying offline:', error);
         }
       }
-      
+
       // Offline: load from local storage
       const cachedCategories = await storageService.getPersonalCategories();
       if (cachedCategories) {
         return cachedCategories;
       }
-      
+
       return [];
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -216,7 +218,7 @@ export const fetchCompleteBalance = createAsyncThunk(
     try {
       const state = getState() as any;
       const isOnline = state.ui.isOnline;
-      
+
       if (isOnline) {
         try {
           const balance = await personalFinanceService.getCompleteBalance();
@@ -226,13 +228,13 @@ export const fetchCompleteBalance = createAsyncThunk(
           console.warn('Online fetch complete balance failed, trying offline:', error);
         }
       }
-      
+
       // Offline: load from local storage
       const cachedBalance = await storageService.getCompleteBalance();
       if (cachedBalance) {
         return cachedBalance;
       }
-      
+
       throw new Error('No complete balance available');
     } catch (error: any) {
       return rejectWithValue(error.message);

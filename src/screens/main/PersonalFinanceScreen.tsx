@@ -230,8 +230,12 @@ export default function PersonalFinanceScreen({ navigation }: any) {
 
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Total Income</Text>
-                <Text style={[styles.summaryValue, styles.incomeText]}>
+                <Text style={styles.summaryLabel} numberOfLines={1}>Total Income</Text>
+                <Text 
+                  style={[styles.summaryValue, styles.incomeText]} 
+                  numberOfLines={1} 
+                  adjustsFontSizeToFit
+                >
                   ₹{totalIncome.toFixed(0)}
                 </Text>
               </View>
@@ -239,8 +243,12 @@ export default function PersonalFinanceScreen({ navigation }: any) {
               <Divider style={styles.verticalDivider} />
 
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Total Expenses</Text>
-                <Text style={[styles.summaryValue, styles.expenseText]}>
+                <Text style={styles.summaryLabel} numberOfLines={1}>Total Expenses</Text>
+                <Text 
+                  style={[styles.summaryValue, styles.expenseText]} 
+                  numberOfLines={1} 
+                  adjustsFontSizeToFit
+                >
                   ₹{totalExpenses.toFixed(0)}
                 </Text>
               </View>
@@ -270,29 +278,37 @@ export default function PersonalFinanceScreen({ navigation }: any) {
 
             <View style={styles.monthlyStats}>
               <View style={styles.statItem}>
-                <IconButton icon="arrow-down-circle" size={24} iconColor="#4CAF50" />
-                <View>
-                  <Text style={styles.statLabel}>Income</Text>
-                  <Text style={[styles.statValue, styles.incomeText]}>
+                <IconButton icon="arrow-down-circle" size={24} iconColor="#4CAF50" style={styles.statIcon} />
+                <View style={styles.statTextContainer}>
+                  <Text style={styles.statLabel} numberOfLines={1}>Income</Text>
+                  <Text 
+                    style={[styles.statValue, styles.incomeText]} 
+                    numberOfLines={1} 
+                    adjustsFontSizeToFit
+                  >
                     ₹{monthlyIncome.toFixed(0)}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.statItem}>
-                <IconButton icon="arrow-up-circle" size={24} iconColor="#F44336" />
-                <View>
-                  <Text style={styles.statLabel}>Expenses</Text>
-                  <Text style={[styles.statValue, styles.expenseText]}>
+                <IconButton icon="arrow-up-circle" size={24} iconColor="#F44336" style={styles.statIcon} />
+                <View style={styles.statTextContainer}>
+                  <Text style={styles.statLabel} numberOfLines={1}>Expenses</Text>
+                  <Text 
+                    style={[styles.statValue, styles.expenseText]} 
+                    numberOfLines={1} 
+                    adjustsFontSizeToFit
+                  >
                     ₹{monthlyExpenses.toFixed(0)}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.statItem}>
-                <IconButton icon="wallet" size={24} iconColor="#2196F3" />
-                <View>
-                  <Text style={styles.statLabel}>Savings</Text>
+                <IconButton icon="wallet" size={24} iconColor="#2196F3" style={styles.statIcon} />
+                <View style={styles.statTextContainer}>
+                  <Text style={styles.statLabel} numberOfLines={1}>Savings</Text>
                   <Text
                     style={[
                       styles.statValue,
@@ -302,6 +318,8 @@ export default function PersonalFinanceScreen({ navigation }: any) {
                           ? styles.expenseText
                           : styles.neutralText,
                     ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                   >
                     ₹{monthlySavings.toFixed(0)}
                   </Text>
@@ -347,7 +365,7 @@ export default function PersonalFinanceScreen({ navigation }: any) {
                     key={transaction.id}
                     style={styles.transactionCard}
                     onPress={() => {
-                      navigation.navigate('EditPersonalTransaction', {
+                      navigation.navigate('PersonalTransactionDetails', {
                         transactionId: transaction.id,
                       });
                     }}
@@ -412,7 +430,7 @@ export default function PersonalFinanceScreen({ navigation }: any) {
       {/* Floating Action Button */}
       <FAB
         icon="plus"
-        label="Add Transaction"
+        label=""
         style={styles.fab}
         onPress={() => navigation.navigate('AddPersonalTransaction')}
       />
@@ -509,19 +527,29 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   monthlyStats: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
   },
   statItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: 2,
+  },
+  statIcon: {
+    margin: 0,
+    marginRight: -4,
+  },
+  statTextContainer: {
+    flex: 1,
+    marginLeft: 0,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: theme.colors.onSurfaceVariant,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   filterButtons: {
@@ -615,7 +643,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     position: 'absolute',
     margin: 16,
     right: 0,
-    bottom: 0,
+    bottom: 64,
     backgroundColor: theme.colors.primary,
   },
 });

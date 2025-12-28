@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction, createAction } from '@reduxjs/toolkit';
 import { expenseService, settlementService, categoryService, foodExpenseService } from '../../services/supabase.service';
+import { supabase } from '../../services/supabase';
 import { Expense, ExpenseWithDetails, ExpenseCategory, Settlement, CreateExpenseRequest, CreateFoodExpenseRequest, SettleUpRequest, ExpenseFilters } from '../../types/database.types';
 import { storageService } from '../../services/storage.service';
 import { syncService } from '../../services/sync.service';
@@ -156,19 +157,30 @@ export const createExpense = createAsyncThunk('expenses/createExpense', async (r
           // We'll try to find a matching category in `state.personalFinance.categories` or default.
 
           const personalCategories = (state as any).personalFinance.categories;
-          // Try to find 'Group' or 'Shared' or 'Expense'
-          const defaultCat = personalCategories.find((c: any) => c.name === 'Group') || personalCategories[0];
 
-          if (defaultCat) {
-            const personalTx = {
-              amount: request.amount,
-              type: 'expense',
-              category_id: defaultCat.id,
-              date: request.date || new Date().toISOString(),
-              description: `Group Exp: ${request.description}`,
-            };
-            // Dispatch directly
-            dispatch(createPersonalTransaction(personalTx));
+          // Only create personal transaction if categories are loaded and available
+          if (personalCategories && personalCategories.length > 0) {
+            // Try to find 'Group' or 'Shared' or 'Others' category, fallback to first expense category
+            const defaultCat =
+              personalCategories.find((c: any) => c.name === 'Group' && c.type === 'expense') ||
+              personalCategories.find((c: any) => c.name === 'Others' && c.type === 'expense') ||
+              personalCategories.find((c: any) => c.type === 'expense');
+
+            if (defaultCat && defaultCat.id) {
+              const personalTx = {
+                amount: request.amount,
+                type: 'expense' as const,
+                category_id: defaultCat.id,
+                date: request.date || new Date().toISOString(),
+                description: `Group Exp: ${request.description}`,
+              };
+              // Dispatch directly
+              dispatch(createPersonalTransaction(personalTx));
+            } else {
+              console.warn('No valid expense category found for personal transaction. Skipping automatic personal finance tracking.');
+            }
+          } else {
+            console.warn('Personal categories not loaded. Skipping automatic personal finance tracking.');
           }
         }
 
@@ -307,7 +319,7 @@ export const updateExpense = createAsyncThunk(
       expenseId: string;
       updates: Partial<Expense>;
       splits: { user_id: string; amount: number }[];
-      receipt?: File | null;
+      receipt?: any; // React Native file object with uri, name, type properties
     },
     { rejectWithValue, getState }
   ) => {
@@ -321,17 +333,72 @@ export const updateExpense = createAsyncThunk(
           let receipt_url: string | null | undefined = undefined;
 
           if (receipt) {
-            const fileExt = receipt.name.split(".").pop();
-            const filePath = `receipts/${expenseId}.${fileExt}`;
+            // Get current user ID from state
+            const currentUser = (state as any).auth.user;
+            if (!currentUser) throw new Error('User not authenticated');
 
-            // Upload to Supabase Storage
-            const upload = await expenseService.uploadReceipt(filePath, receipt);
+            // Get the current expense to check for old receipt
+            const currentExpense = await expenseService.getExpense(expenseId);
 
-            if (upload.error) throw upload.error;
+            // Delete old receipt if it exists
+            if (currentExpense.receipt_url) {
+              await expenseService.deleteReceipt(currentExpense.receipt_url);
+            }
 
-            // Get public URL
-            const publicUrl = expenseService.getReceiptUrl(filePath);
-            receipt_url = publicUrl;
+            const fileName = `${Date.now()}_${receipt.name || 'receipt.jpg'}`;
+            const filePath = `${currentUser.id}/${fileName}`; // Include user ID in path
+
+            console.log('📸 Starting receipt upload...');
+            console.log('Receipt URI:', receipt.uri);
+            console.log('File path:', filePath);
+
+            // Use fetch with arrayBuffer (React Native compatible)
+            try {
+              const response = await fetch(receipt.uri);
+
+              if (!response.ok) {
+                throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+              }
+
+              console.log('✅ Image fetched successfully');
+
+              const arrayBuffer = await response.arrayBuffer();
+              const uint8Array = new Uint8Array(arrayBuffer);
+
+              console.log('📦 Image size:', uint8Array.length, 'bytes');
+
+              // Upload to Supabase Storage
+              const { error: uploadError } = await supabase.storage
+                .from('receipts')
+                .upload(filePath, uint8Array, {
+                  contentType: receipt.type || 'image/jpeg',
+                  cacheControl: '3600',
+                  upsert: false
+                });
+
+              if (uploadError) {
+                console.error('❌ Receipt upload error:', uploadError);
+                throw uploadError;
+              }
+
+              console.log('✅ Receipt uploaded to storage');
+
+              // Get signed URL
+              const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+                .from('receipts')
+                .createSignedUrl(filePath, 31536000); // 1 year expiry
+
+              if (signedUrlError) {
+                console.error('❌ Failed to create signed URL:', signedUrlError);
+                throw signedUrlError;
+              }
+
+              console.log('✅ Signed URL created');
+              receipt_url = signedUrlData.signedUrl;
+            } catch (error) {
+              console.error('❌ Receipt upload failed:', error);
+              throw error;
+            }
           }
 
           // 2️⃣ Update expense main data (add receipt_url if replaced)

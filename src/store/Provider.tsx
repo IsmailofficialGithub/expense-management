@@ -114,6 +114,8 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
     // Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state change:', event, session?.user?.id);
+        
         if (session?.user) {
           try {
             const { profileService } = await import('../services/supabase.service');
@@ -131,7 +133,11 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
             store.dispatch(setUser({ user: session.user, profile: null }));
           }
         } else {
-          store.dispatch(setUser({ user: null, profile: null }));
+          // Only clear user if this is a SIGNED_OUT event, not just initialization
+          if (event === 'SIGNED_OUT') {
+            console.log('User signed out, clearing state');
+            store.dispatch(setUser({ user: null, profile: null }));
+          }
         }
       }
     );

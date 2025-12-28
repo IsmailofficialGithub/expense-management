@@ -1,6 +1,6 @@
 // src/screens/forms/EditExpenseScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, Image, TouchableOpacity } from 'react-native';
 import { Text, TextInput, Button, SegmentedButtons, Chip, Divider, HelperText, Card, IconButton, useTheme } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
 import { useExpenses } from '../../hooks/useExpenses';
@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { format } from 'date-fns';
 import SafeScrollView from '../../components/SafeScrollView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { expenseService } from '../../services/supabase.service';
 
 interface Props {
   navigation: any;
@@ -121,7 +122,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.8,
     });
@@ -253,19 +254,37 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
             });
 
             // Prepare receipt file (if new image selected)
-            let receiptFile: File | undefined;
+            let receiptFile: any;
+            let shouldDeleteOldReceipt = false;
+            
             if (receiptUri) {
-              try {
-                const response = await fetch(receiptUri);
-                const blob = await response.blob();
-                receiptFile = new File([blob], 'receipt.jpg', { type: 'image/jpeg' }) as any;
-              } catch (error) {
-                ErrorHandler.logError(error, 'Receipt Upload');
-                showToast('Failed to upload receipt', 'warning');
+              // New receipt selected - will replace old one
+              receiptFile = {
+                uri: receiptUri,
+                name: 'receipt.jpg',
+                type: 'image/jpeg'
+              };
+              // Mark old receipt for deletion if it exists
+              if (existingReceiptUrl) {
+                shouldDeleteOldReceipt = true;
               }
+            } else if (!receiptUri && !existingReceiptUrl && selectedExpense?.receipt_url) {
+              // User removed the receipt - delete from storage
+              shouldDeleteOldReceipt = true;
             }
 
             try {
+              // Delete old receipt if needed (before updating expense)
+              if (shouldDeleteOldReceipt && selectedExpense?.receipt_url) {
+                try {
+                  await expenseService.deleteReceipt(selectedExpense.receipt_url);
+                  console.log('✅ Old receipt deleted from storage');
+                } catch (error) {
+                  console.error('Failed to delete old receipt:', error);
+                  // Continue anyway - don't block the update
+                }
+              }
+
               await dispatch(updateExpense({
                 expenseId,
                 updates: {
@@ -275,6 +294,8 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                   date: format(selectedDate, 'yyyy-MM-dd'),
                   notes: notes.trim() || null,
                   split_type: splitType,
+                  // Set receipt_url to null if user removed it
+                  ...(!receiptUri && !existingReceiptUrl && selectedExpense?.receipt_url ? { receipt_url: null } : {}),
                 },
                 splits,
                 receipt: receiptFile,
@@ -503,18 +524,34 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Receipt</Text>
         <View style={styles.receiptContainer}>
           {receiptUri || existingReceiptUrl ? (
-            <View style={[styles.receiptPreview, { backgroundColor: theme.colors.primaryContainer }]}>
-              <Text style={[styles.receiptText, { color: theme.colors.onPrimaryContainer }]}>
-                {receiptUri ? 'New receipt selected ✓' : 'Receipt attached ✓'}
+            <View>
+              {/* Image Preview */}
+              <TouchableOpacity 
+                style={styles.imagePreviewContainer}
+                activeOpacity={0.9}
+              >
+                <Image
+                  source={{ uri: receiptUri || existingReceiptUrl || '' }}
+                  style={styles.imagePreview}
+                  resizeMode="cover"
+                />
+                {/* Remove button overlay */}
+                <IconButton
+                  icon="close-circle"
+                  size={32}
+                  iconColor="white"
+                  containerColor="rgba(0,0,0,0.6)"
+                  style={styles.removeButton}
+                  onPress={() => {
+                    setReceiptUri(null);
+                    setExistingReceiptUrl(null);
+                  }}
+                />
+              </TouchableOpacity>
+              {/* Info text */}
+              <Text style={[styles.receiptInfoText, { color: theme.colors.onSurfaceVariant }]}>
+                {receiptUri ? '📸 New receipt selected' : '📎 Current receipt'}
               </Text>
-              <IconButton
-                icon="close"
-                size={20}
-                onPress={() => {
-                  setReceiptUri(null);
-                  setExistingReceiptUrl(null);
-                }}
-              />
             </View>
           ) : (
             <View style={styles.receiptButtons}>
@@ -686,6 +723,29 @@ const styles = StyleSheet.create({
   },
   receiptButton: {
     flex: 1,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+    backgroundColor: '#f0f0f0',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  receiptInfoText: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   actions: {
     flexDirection: 'row',
