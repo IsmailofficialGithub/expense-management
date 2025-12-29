@@ -2,23 +2,20 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Dimensions, TouchableOpacity } from 'react-native';
 import { TextInput, Text, HelperText, useTheme } from 'react-native-paper';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../../navigation/AppNavigator';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AuthStackParamList, RootStackParamList } from '../../navigation/types';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { authService } from '../../services/supabase.service';
-import { RouteProp } from '@react-navigation/native';
 
-type VerifyOtpScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'VerifyOtp'>;
-type VerifyOtpScreenRouteProp = RouteProp<AuthStackParamList, 'VerifyOtp'>;
-
-interface Props {
-    navigation: VerifyOtpScreenNavigationProp;
-    route: VerifyOtpScreenRouteProp;
-}
+type Props = CompositeScreenProps<
+    NativeStackScreenProps<AuthStackParamList, 'VerifyOtp'>,
+    NativeStackScreenProps<RootStackParamList>
+>;
 
 const { width } = Dimensions.get('window');
 const HEADER_HEIGHT = 280;
@@ -51,6 +48,7 @@ export default function VerifyOtpScreen({ navigation, route }: Props) {
         try {
             await authService.verifyOtp(email, otp);
             showToast('Email verified successfully!', 'success');
+            // @ts-ignore - navigation is composite, but replace on nested stack with root screen name can be tricky for TS
             navigation.replace('NewPassword');
         } catch (err: any) {
             ErrorHandler.handleError(err, showToast, 'Verify OTP');

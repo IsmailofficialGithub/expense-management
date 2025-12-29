@@ -221,10 +221,10 @@ const bulkPaymentsSlice = createSlice({
         const { page } = action.meta.arg as any;
         if (page && page > 1) {
           // Filter out duplicates just in case
-          const newIds = new Set(action.payload.map(c => c.id));
+          const newIds = new Set((action.payload as GroupAdvanceCollection[]).map(c => c.id));
           state.advanceCollections = [
             ...state.advanceCollections.filter((c: GroupAdvanceCollection) => !newIds.has(c.id)),
-            ...action.payload
+            ...(action.payload as GroupAdvanceCollection[])
           ];
         } else {
           state.advanceCollections = action.payload;

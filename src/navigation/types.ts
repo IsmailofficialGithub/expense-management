@@ -45,6 +45,13 @@ export type MainTabParamList = {
     Profile: undefined;
 };
 
+export type AuthStackParamList = {
+    Login: undefined;
+    Signup: undefined;
+    ForgotPassword: undefined;
+    VerifyOtp: { email: string };
+};
+
 export type RootStackScreenProps<T extends keyof RootStackParamList> =
     NativeStackScreenProps<RootStackParamList, T>;
 
@@ -53,6 +60,9 @@ export type MainTabScreenProps<T extends keyof MainTabParamList> =
         BottomTabScreenProps<MainTabParamList, T>,
         NativeStackScreenProps<RootStackParamList>
     >;
+
+export type AuthStackScreenProps<T extends keyof AuthStackParamList> =
+    NativeStackScreenProps<AuthStackParamList, T>;
 
 declare global {
     namespace ReactNavigation {

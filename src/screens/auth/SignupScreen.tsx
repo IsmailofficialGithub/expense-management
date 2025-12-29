@@ -6,7 +6,7 @@ import { useAppDispatch } from '../../store';
 import { signUp } from '../../store/slices/authSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../../navigation/AppNavigator';
+import { AuthStackParamList } from '../../navigation/types';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { LinearGradient } from 'expo-linear-gradient';

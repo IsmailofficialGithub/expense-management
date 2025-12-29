@@ -47,9 +47,9 @@ import BulkPaymentStatsScreen from '../screens/details/BulkPaymentStatsScreen';
 import SplashScreen from '../screens/SplashScreen';
 import ShareHandlerScreen from '../screens/ShareHandlerScreen';
 
-import { RootStackParamList, MainTabParamList } from './types';
+import { RootStackParamList, MainTabParamList, AuthStackParamList } from './types';
 
-const AuthStack = createNativeStackNavigator();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const MainTab = createBottomTabNavigator<MainTabParamList>();
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 

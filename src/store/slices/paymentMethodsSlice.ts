@@ -28,7 +28,7 @@ export const fetchPaymentMethods = createAsyncThunk(
   async (userId: string, { getState }) => {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const methods = await paymentMethodService.getPaymentMethods(userId);
@@ -38,13 +38,13 @@ export const fetchPaymentMethods = createAsyncThunk(
         console.warn('Online fetch payment methods failed, trying offline:', error);
       }
     }
-    
+
     // Offline: load from local storage
     const cachedMethods = await storageService.getPaymentMethods();
     if (cachedMethods) {
       return cachedMethods;
     }
-    
+
     return [];
   }
 );
@@ -61,7 +61,7 @@ export const createPaymentMethod = createAsyncThunk(
   async (request: CreatePaymentMethodRequest, { getState }) => {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const method = await paymentMethodService.createPaymentMethod(request);
@@ -72,20 +72,30 @@ export const createPaymentMethod = createAsyncThunk(
         console.warn('Online create payment method failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: create temporary method and queue for sync
     const tempMethod: UserPaymentMethod = {
       id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       user_id: '',
       ...request,
+      is_default: request.is_default ?? false,
+      is_visible_to_groups: request.is_visible_to_groups ?? true,
+      bank_name: request.bank_name ?? null,
+      account_title: request.account_title ?? null,
+      account_number: request.account_number ?? null,
+      iban: request.iban ?? null,
+      phone_number: request.phone_number ?? null,
+      card_last_four: request.card_last_four ?? null,
+      custom_name: request.custom_name ?? null,
+      notes: request.notes ?? null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    
+
     await syncService.addToQueue('create', 'payment_method', request);
     const currentMethods = await storageService.getPaymentMethods() || [];
     await storageService.setPaymentMethods([tempMethod, ...currentMethods]);
-    
+
     return tempMethod;
   }
 );
@@ -95,12 +105,12 @@ export const updatePaymentMethod = createAsyncThunk(
   async ({ methodId, updates }: { methodId: string; updates: Partial<CreatePaymentMethodRequest> }, { getState }) => {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const method = await paymentMethodService.updatePaymentMethod(methodId, updates);
         const currentMethods = await storageService.getPaymentMethods() || [];
-        const updatedMethods = currentMethods.map((m: any) => 
+        const updatedMethods = currentMethods.map((m: any) =>
           m.id === methodId ? method : m
         );
         await storageService.setPaymentMethods(updatedMethods);
@@ -109,21 +119,21 @@ export const updatePaymentMethod = createAsyncThunk(
         console.warn('Online update payment method failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: update local storage and queue for sync
     const currentMethods = await storageService.getPaymentMethods() || [];
     const methodToUpdate = currentMethods.find((m: any) => m.id === methodId);
-    
+
     if (methodToUpdate) {
       const updatedMethod = { ...methodToUpdate, ...updates, updated_at: new Date().toISOString() };
       await syncService.addToQueue('update', 'payment_method', { id: methodId, updates });
-      const updatedMethods = currentMethods.map((m: any) => 
+      const updatedMethods = currentMethods.map((m: any) =>
         m.id === methodId ? updatedMethod : m
       );
       await storageService.setPaymentMethods(updatedMethods);
       return updatedMethod;
     }
-    
+
     throw new Error('Payment method not found');
   }
 );
@@ -133,7 +143,7 @@ export const setDefaultPaymentMethod = createAsyncThunk(
   async (methodId: string, { getState }) => {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         const method = await paymentMethodService.setDefaultPaymentMethod(methodId);
@@ -149,37 +159,37 @@ export const setDefaultPaymentMethod = createAsyncThunk(
         console.warn('Online set default payment method failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: update local storage and queue for sync
     const currentMethods = await storageService.getPaymentMethods() || [];
     const methodToUpdate = currentMethods.find((m: any) => m.id === methodId);
-    
+
     if (methodToUpdate) {
       // Update all methods: set the selected one as default, unset others
       const updatedMethods = currentMethods.map((m: any) => ({
         ...m,
         is_default: m.id === methodId
       }));
-      
-      await syncService.addToQueue('update', 'payment_method', { 
-        id: methodId, 
-        updates: { is_default: true } 
+
+      await syncService.addToQueue('update', 'payment_method', {
+        id: methodId,
+        updates: { is_default: true }
       });
-      
+
       // Also unset other defaults
       for (const method of currentMethods) {
         if (method.id !== methodId && method.is_default) {
-          await syncService.addToQueue('update', 'payment_method', { 
-            id: method.id, 
-            updates: { is_default: false } 
+          await syncService.addToQueue('update', 'payment_method', {
+            id: method.id,
+            updates: { is_default: false }
           });
         }
       }
-      
+
       await storageService.setPaymentMethods(updatedMethods);
       return { ...methodToUpdate, is_default: true };
     }
-    
+
     throw new Error('Payment method not found');
   }
 );
@@ -192,7 +202,7 @@ export const deletePaymentMethod = createAsyncThunk(
   async (methodId: string, { getState }) => {
     const state = getState() as any;
     const isOnline = state.ui.isOnline;
-    
+
     if (isOnline) {
       try {
         await paymentMethodService.deletePaymentMethod(methodId);
@@ -203,12 +213,12 @@ export const deletePaymentMethod = createAsyncThunk(
         console.warn('Online delete payment method failed, queueing for sync:', error);
       }
     }
-    
+
     // Offline or online failed: remove from local storage and queue for sync
     const currentMethods = await storageService.getPaymentMethods() || [];
     await syncService.addToQueue('delete', 'payment_method', { id: methodId });
     await storageService.setPaymentMethods(currentMethods.filter((m: any) => m.id !== methodId));
-    
+
     return methodId;
   }
 );
@@ -234,7 +244,7 @@ const paymentMethodsSlice = createSlice({
     builder.addCase(fetchPaymentMethods.fulfilled, (state, action) => {
       state.loading = false;
       state.paymentMethods = action.payload;
-      
+
       // Set default method
       const defaultMethod = action.payload.find(m => m.is_default);
       if (defaultMethod) {
@@ -254,11 +264,11 @@ const paymentMethodsSlice = createSlice({
     // Create payment method
     builder.addCase(createPaymentMethod.fulfilled, (state, action) => {
       state.paymentMethods.unshift(action.payload);
-      
+
       // If this is marked as default, update defaultMethod
       if (action.payload.is_default) {
         state.defaultMethod = action.payload;
-        
+
         // Unset other defaults
         state.paymentMethods.forEach(method => {
           if (method.id !== action.payload.id && method.is_default) {
@@ -302,7 +312,7 @@ const paymentMethodsSlice = createSlice({
     // Delete payment method
     builder.addCase(deletePaymentMethod.fulfilled, (state, action) => {
       state.paymentMethods = state.paymentMethods.filter(m => m.id !== action.payload);
-      
+
       // Clear default if deleted
       if (state.defaultMethod?.id === action.payload) {
         state.defaultMethod = null;
@@ -312,7 +322,7 @@ const paymentMethodsSlice = createSlice({
     builder.addCase(setPaymentMethodsFromCache, (state, action) => {
       state.paymentMethods = action.payload;
       state.loading = false;
-      
+
       // Set default method
       const defaultMethod = action.payload.find(m => m.is_default);
       if (defaultMethod) {
