@@ -2,6 +2,9 @@ import 'dotenv/config';
 
 export default ({ config }: { config: any }) => ({
   ...config,
+  plugins: [
+    "expo-share-intent"
+  ],
   extra: {
     ...config.extra,
     eas: {

@@ -1,50 +1,37 @@
-// src/screens/ShareHandlerScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Image, Alert, ActivityIndicator, Platform } from 'react-native';
 import { Text, Button, Card } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import * as Linking from 'expo-linking';
-import * as FileSystem from 'expo-file-system';
 import { useAuth } from '../hooks/useAuth';
+import { useShareIntent } from 'expo-share-intent';
 
 export default function ShareHandlerScreen() {
   const navigation = useNavigation<any>();
   const { isAuthenticated } = useAuth();
+  const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent();
   const [sharedImageUri, setSharedImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    handleSharedContent();
-  }, []);
-
-  const handleSharedContent = async () => {
-    try {
-      // Get the initial URL (for Android share intent)
-      const url = await Linking.getInitialURL();
-      
-      if (url) {
-        // Parse the shared content
-        const { queryParams } = Linking.parse(url);
-        
-        // On Android, the shared image URI comes as a query parameter
-        if (queryParams?.uri || queryParams?.path) {
-          const imageUri = (queryParams.uri || queryParams.path) as string;
-          setSharedImageUri(imageUri);
-        }
-      }
-    } catch (error) {
-      console.error('Error handling shared content:', error);
-      Alert.alert('Error', 'Failed to load shared image');
-    } finally {
+    if (hasShareIntent && (shareIntent.type === 'file' || shareIntent.type === 'media') && shareIntent.files && shareIntent.files.length > 0) {
+      setSharedImageUri(shareIntent.files[0].path);
+      setLoading(false);
+    } else if (error) {
+      console.error('Share intent error:', error);
+      setLoading(false);
+    } else if (!hasShareIntent) {
       setLoading(false);
     }
-  };
+  }, [hasShareIntent, shareIntent, error]);
 
   const handlePersonalExpense = () => {
     if (!sharedImageUri) {
       Alert.alert('Error', 'No image to share');
       return;
     }
+
+    // Reset share intent after consuming it
+    resetShareIntent();
 
     navigation.navigate('AddPersonalTransaction', {
       sharedImageUri,
@@ -57,12 +44,16 @@ export default function ShareHandlerScreen() {
       return;
     }
 
+    // Reset share intent after consuming it
+    resetShareIntent();
+
     navigation.navigate('AddExpense', {
       sharedImageUri,
     });
   };
 
   const handleCancel = () => {
+    resetShareIntent();
     navigation.navigate('Main');
   };
 
