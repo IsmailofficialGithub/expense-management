@@ -11,12 +11,26 @@
       "backgroundColor": "#6200EE",
       "resizeMode": "contain"
     },
+    "scheme": "flatmates",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yourname.flatmates"
     },
     "android": {
       "package": "com.yourname.flatmates",
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "image/*"
+            }
+          ]
+        }
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/splash-icon.png",
         "backgroundColor": "#6200EE"
