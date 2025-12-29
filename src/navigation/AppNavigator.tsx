@@ -119,7 +119,7 @@ function MainNavigator() {
 
 export default function AppNavigator() {
   const { isAuthenticated, initialized, isPasswordReset } = useAuth();
-  
+
   // Use a local state to ensure Splash is shown for a minimum time if needed,
   // but let initialized be the main driver.
   const [showSplash, setShowSplash] = useState(true);
@@ -154,7 +154,7 @@ export default function AppNavigator() {
           ) : (
             <RootStack.Screen name="Main" component={MainNavigator} />
           )}
-          
+
           <RootStack.Group screenOptions={detailScreenOptions}>
             <RootStack.Screen name="GroupDetails" component={GroupDetailsScreen} options={{ title: 'Group Details' }} />
             <RootStack.Screen name="GroupMemberDetails" component={GroupMemberDetailsScreen} options={{ title: 'Member Details' }} />
@@ -179,10 +179,19 @@ export default function AppNavigator() {
             <RootStack.Screen name="AdvanceCollection" component={AdvanceCollectionScreen} options={{ title: 'Advance Collection' }} />
             <RootStack.Screen name="BulkSettlement" component={BulkSettlementScreen} options={{ title: 'Bulk Settlement' }} />
             <RootStack.Screen name="BulkPaymentStats" component={BulkPaymentStatsScreen} options={{ title: 'Bulk Payment Stats' }} />
-            <RootStack.Screen name="ShareHandler" component={ShareHandlerScreen} options={{ title: 'Share to Expense' }} />
           </RootStack.Group>
         </>
       )}
+      <RootStack.Screen
+        name="ShareHandler"
+        component={ShareHandlerScreen}
+        options={{
+          headerShown: true,
+          title: 'Share to Expense',
+          headerStyle: { backgroundColor: '#6200EE' },
+          headerTintColor: '#fff',
+        }}
+      />
     </RootStack.Navigator>
   );
 }

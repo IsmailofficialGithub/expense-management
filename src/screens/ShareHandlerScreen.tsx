@@ -1,28 +1,45 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Image, Alert, ActivityIndicator, Platform } from 'react-native';
-import { Text, Button, Card } from 'react-native-paper';
+import { View, StyleSheet, Image, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import { Text, Button, Card, useTheme, Surface, IconButton } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useShareIntent } from 'expo-share-intent';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+
+const { width } = Dimensions.get('window');
 
 export default function ShareHandlerScreen() {
+  const theme = useTheme();
   const navigation = useNavigation<any>();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, initialized } = useAuth();
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent();
   const [sharedImageUri, setSharedImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (hasShareIntent && (shareIntent.type === 'file' || shareIntent.type === 'media') && shareIntent.files && shareIntent.files.length > 0) {
-      setSharedImageUri(shareIntent.files[0].path);
-      setLoading(false);
+    if (hasShareIntent && shareIntent.files && shareIntent.files.length > 0) {
+      const uri = shareIntent.files[0].path;
+      if (uri) {
+        setSharedImageUri(uri);
+        setLoading(false);
+      } else {
+        setLoading(false);
+      }
     } else if (error) {
       console.error('Share intent error:', error);
       setLoading(false);
-    } else if (!hasShareIntent) {
-      setLoading(false);
+    } else if (initialized && !hasShareIntent) {
+      // If we've initialized and there's no share intent, maybe we were opened normally?
+      // Wait a bit just in case it takes time to populate
+      const timer = setTimeout(() => {
+        if (!hasShareIntent) setLoading(false);
+      }, 1000);
+      return () => clearTimeout(timer);
     }
-  }, [hasShareIntent, shareIntent, error]);
+  }, [hasShareIntent, shareIntent, error, initialized]);
 
   const handlePersonalExpense = () => {
     if (!sharedImageUri) {
@@ -30,12 +47,15 @@ export default function ShareHandlerScreen() {
       return;
     }
 
-    // Reset share intent after consuming it
-    resetShareIntent();
-
+    const uri = sharedImageUri;
+    // We navigate first, then reset to avoid state loss in this screen during transition
     navigation.navigate('AddPersonalTransaction', {
-      sharedImageUri,
+      sharedImageUri: uri,
     });
+
+    // We delay reset slightly or handle it in navigation callback if possible
+    // But resetShareIntent usually clears the native bridge state
+    setTimeout(() => resetShareIntent(), 500);
   };
 
   const handleGroupExpense = () => {
@@ -44,12 +64,12 @@ export default function ShareHandlerScreen() {
       return;
     }
 
-    // Reset share intent after consuming it
-    resetShareIntent();
-
+    const uri = sharedImageUri;
     navigation.navigate('AddExpense', {
-      sharedImageUri,
+      sharedImageUri: uri,
     });
+
+    setTimeout(() => resetShareIntent(), 500);
   };
 
   const handleCancel = () => {
@@ -57,33 +77,42 @@ export default function ShareHandlerScreen() {
     navigation.navigate('Main');
   };
 
-  if (!isAuthenticated) {
+  if (!initialized || loading) {
     return (
-      <View style={styles.container}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleLarge" style={styles.title}>
-              Please Log In
-            </Text>
-            <Text variant="bodyMedium" style={styles.subtitle}>
-              You need to be logged in to create expenses
-            </Text>
-          </Card.Content>
-          <Card.Actions>
-            <Button mode="contained" onPress={() => navigation.navigate('Auth')}>
-              Go to Login
-            </Button>
-          </Card.Actions>
-        </Card>
+      <View style={styles.centered}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.primary, opacity: 0.1 }]} />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, { color: theme.colors.onSurfaceVariant }]}>
+          Processing shared content...
+        </Text>
       </View>
     );
   }
 
-  if (loading) {
+  if (!isAuthenticated) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#6200EE" />
-        <Text style={styles.loadingText}>Loading shared image...</Text>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.primary, opacity: 0.05 }]} />
+        <Surface style={styles.glassCard}>
+          <View style={styles.errorIconContainer}>
+            <Ionicons name="lock-closed-outline" size={60} color={theme.colors.error} />
+          </View>
+          <Text variant="headlineSmall" style={styles.title}>Session Required</Text>
+          <Text variant="bodyLarge" style={styles.subtitle}>
+            Please log in to your account to save this expense.
+          </Text>
+          <Button
+            mode="contained"
+            onPress={() => navigation.navigate('Auth')}
+            style={styles.actionButton}
+            contentStyle={styles.buttonContent}
+          >
+            Go to Login
+          </Button>
+          <Button mode="text" onPress={handleCancel} style={styles.textButton}>
+            Cancel
+          </Button>
+        </Surface>
       </View>
     );
   }
@@ -91,121 +120,237 @@ export default function ShareHandlerScreen() {
   if (!sharedImageUri) {
     return (
       <View style={styles.container}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleLarge" style={styles.title}>
-              No Image Found
-            </Text>
-            <Text variant="bodyMedium" style={styles.subtitle}>
-              No image was shared with the app
-            </Text>
-          </Card.Content>
-          <Card.Actions>
-            <Button mode="contained" onPress={handleCancel}>
-              Go to Dashboard
-            </Button>
-          </Card.Actions>
-        </Card>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#6200EE', opacity: 0.05 }]} />
+        <Surface style={styles.glassCard}>
+          <View style={styles.errorIconContainer}>
+            <Ionicons name="image-outline" size={60} color={theme.colors.onSurfaceVariant} />
+          </View>
+          <Text variant="headlineSmall" style={styles.title}>No Content Found</Text>
+          <Text variant="bodyLarge" style={styles.subtitle}>
+            We couldn't find any image or file shared with the app.
+          </Text>
+          <Button
+            mode="contained"
+            onPress={handleCancel}
+            style={styles.actionButton}
+            contentStyle={styles.buttonContent}
+          >
+            Back to Dashboard
+          </Button>
+        </Surface>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleLarge" style={styles.title}>
-            Create Expense from Image
-          </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            Choose expense type
-          </Text>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.primaryContainer, opacity: 0.2 }]} />
 
-          {sharedImageUri && (
-            <View style={styles.imagePreviewContainer}>
-              <Image
-                source={{ uri: sharedImageUri }}
-                style={styles.imagePreview}
-                resizeMode="cover"
-              />
+      <View style={styles.content}>
+        <Text variant="headlineMedium" style={styles.headerTitle}>New Expense</Text>
+        <Text variant="bodyLarge" style={styles.headerSubtitle}>
+          Complete your expense by choosing where to save it.
+        </Text>
+
+        <View style={styles.previewContainer}>
+          <Surface style={styles.imageCard}>
+            <Image
+              source={{ uri: sharedImageUri }}
+              style={styles.imagePreview}
+              resizeMode="cover"
+            />
+            <BlurView intensity={30} style={styles.imageOverlay}>
+              <IconButton icon="image" iconColor="#fff" size={24} />
+            </BlurView>
+          </Surface>
+        </View>
+
+        <View style={styles.optionsContainer}>
+          <Surface style={styles.optionCard}>
+            <IconButton
+              icon="wallet-outline"
+              size={32}
+              iconColor={theme.colors.primary}
+              style={styles.optionIcon}
+            />
+            <View style={styles.optionTextContainer}>
+              <Text variant="titleMedium">Personal Finance</Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Track this as your own personal spending.
+              </Text>
             </View>
-          )}
-        </Card.Content>
+            <Button
+              mode="contained"
+              onPress={handlePersonalExpense}
+              style={styles.selectButton}
+              labelStyle={{ fontSize: 12 }}
+            >
+              Choose
+            </Button>
+          </Surface>
 
-        <Card.Actions style={styles.actions}>
-          <Button
-            mode="contained"
-            onPress={handlePersonalExpense}
-            style={styles.button}
-            icon="wallet"
-          >
-            Personal Expense
-          </Button>
-          <Button
-            mode="contained"
-            onPress={handleGroupExpense}
-            style={styles.button}
-            icon="account-group"
-          >
-            Group Expense
-          </Button>
-        </Card.Actions>
+          <Surface style={styles.optionCard}>
+            <IconButton
+              icon="account-group-outline"
+              size={32}
+              iconColor={theme.colors.secondary}
+              style={styles.optionIcon}
+            />
+            <View style={styles.optionTextContainer}>
+              <Text variant="titleMedium">Group Expense</Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Split this with your flatmates or friends.
+              </Text>
+            </View>
+            <Button
+              mode="contained"
+              onPress={handleGroupExpense}
+              style={[styles.selectButton, { backgroundColor: theme.colors.secondary }]}
+              labelStyle={{ fontSize: 12 }}
+            >
+              Choose
+            </Button>
+          </Surface>
+        </View>
 
-        <Card.Actions>
-          <Button mode="text" onPress={handleCancel}>
-            Cancel
-          </Button>
-        </Card.Actions>
-      </Card>
-    </View>
+        <Button
+          mode="text"
+          onPress={handleCancel}
+          style={styles.cancelButton}
+          textColor={theme.colors.error}
+        >
+          Cancel and Discard
+        </Button>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   container: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 16,
   },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    elevation: 4,
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 40,
   },
-  title: {
+  headerTitle: {
+    fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  headerSubtitle: {
+    textAlign: 'center',
+    color: '#666',
+    marginBottom: 32,
+  },
+  glassCard: {
+    padding: 32,
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 360,
+    elevation: 4,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  errorIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  title: {
     fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   subtitle: {
     textAlign: 'center',
-    marginBottom: 16,
     color: '#666',
+    marginBottom: 32,
+    lineHeight: 22,
   },
-  imagePreviewContainer: {
-    marginTop: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#e0e0e0',
-  },
-  imagePreview: {
+  actionButton: {
     width: '100%',
-    height: 200,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  actions: {
-    flexDirection: 'column',
-    padding: 16,
-    gap: 12,
+  buttonContent: {
+    paddingVertical: 8,
   },
-  button: {
+  textButton: {
     width: '100%',
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 20,
     fontSize: 16,
-    color: '#666',
+    fontWeight: '500',
+  },
+  previewContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  imageCard: {
+    width: width - 48,
+    height: 240,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 8,
+    backgroundColor: '#000',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  optionsContainer: {
+    gap: 16,
+    marginBottom: 40,
+  },
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 20,
+    elevation: 2,
+    backgroundColor: '#fff',
+  },
+  optionIcon: {
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    margin: 0,
+  },
+  optionTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  selectButton: {
+    borderRadius: 10,
+    minWidth: 80,
+  },
+  cancelButton: {
+    marginTop: 'auto',
+    marginBottom: 20,
   },
 });
