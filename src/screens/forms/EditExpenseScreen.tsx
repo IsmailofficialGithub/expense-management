@@ -309,6 +309,14 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
             }
 
             try {
+              console.log('🚀 Starting expense update...', {
+                expenseId,
+                description,
+                amount: amountNum,
+                paid_by: selectedPayerId,
+                date: format(selectedDate, 'yyyy-MM-dd')
+              });
+
               // Delete old receipt if needed (before updating expense)
               if (shouldDeleteOldReceipt && selectedExpense?.receipt_url) {
                 try {
@@ -327,7 +335,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                   description: description.trim(),
                   amount: amountNum,
                   paid_by: selectedPayerId,
-                  date: selectedDate.toISOString(),
+                  date: format(selectedDate, 'yyyy-MM-dd'),
                   notes: notes.trim() || null,
                   split_type: splitType,
                   // Set receipt_url to null if user removed it
@@ -337,10 +345,16 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                 receipt: receiptFile,
               })).unwrap();
 
+              console.log('✅ Expense updated successfully');
               showToast('Expense updated successfully!', 'success');
               navigation.goBack();
-            } catch (error) {
+            } catch (error: any) {
+              console.error('❌ Update expense error:', error);
               ErrorHandler.handleError(error, showToast, 'Update Expense');
+              // Fallback
+              if (!error.message?.includes('Network')) {
+                showToast(error.message || "Failed to update expense", "error");
+              }
             } finally {
               setIsSubmitting(false);
             }
@@ -740,6 +754,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  flex1: {
+    flex: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   content: {
     padding: 16,

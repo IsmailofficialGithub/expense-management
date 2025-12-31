@@ -1,5 +1,6 @@
 // src/services/supabase.service.ts
 import { supabase } from './supabase';
+import { Platform } from 'react-native';
 import {
   Profile,
   Group,
@@ -728,12 +729,16 @@ export const invitationService = {
     `;
 
     try {
+      // Skip email on web (CORS issues - mobile only)
+      if (Platform.OS === 'web') {
+        console.log('Email sending skipped on web (mobile-only feature)');
+        return;
+      }
+
       // Call external email API directly
-      const response = await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+      await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: recipientEmail,
           subject: `You're invited to join "${groupName}" on Flatmates Expense Tracker`,
@@ -741,19 +746,9 @@ export const invitationService = {
         }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Email API error response:', errorText);
-        throw new Error(`Email API returned status ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Email sent successfully:', result);
+      console.log('Invitation email sent successfully to:', recipientEmail);
     } catch (error: any) {
-      console.error('Email sending failed:', error);
-      // Log the full error for debugging
-      console.error('Full error object:', JSON.stringify(error, null, 2));
-
+      console.error('Email sending failed:', error.message);
       // Don't throw - invitation is still created even if email fails
       // This allows the invitation to work even if email service is down
       // But we still log it for debugging
@@ -1068,8 +1063,8 @@ export const foodExpenseService = {
         category_id: request.category_id,
         description: request.description,
         amount: totalAmount,
-        paid_by: user.id,
-        date: request.date,
+        paid_by: request.paid_by || user.id,
+        date: request.date || new Date().toISOString().split('T')[0],
         notes: request.notes || null,
         split_type: request.split_type,
         hotel_id: request.hotel_id,
@@ -1112,13 +1107,9 @@ export const foodExpenseService = {
 
     if (splitsError) throw splitsError;
 
-    // Trigger notifications for group members
-    try {
-      await notificationService.triggerExpenseNotifications(expense.id, request.group_id);
-    } catch (error) {
-      console.error('Failed to trigger notifications:', error);
-      // Don't fail expense creation if notifications fail
-    }
+    // Trigger notifications for group members (non-blocking)
+    notificationService.triggerExpenseNotifications(expense.id, request.group_id)
+      .catch(error => console.error('Failed to trigger notifications:', error));
 
     // Fetch complete expense with details
     return expenseService.getExpense(expense.id);
@@ -1550,13 +1541,9 @@ export const expenseService = {
 
     if (splitsError) throw splitsError;
 
-    // Trigger notifications for group members
-    try {
-      await notificationService.triggerExpenseNotifications(expense.id, request.group_id);
-    } catch (error) {
-      console.error('Failed to trigger notifications:', error);
-      // Don't fail expense creation if notifications fail
-    }
+    // Trigger notifications for group members (non-blocking)
+    notificationService.triggerExpenseNotifications(expense.id, request.group_id)
+      .catch(error => console.error('Failed to trigger notifications:', error));
 
     return expense;
   },
@@ -2030,20 +2017,17 @@ export const bulkPaymentService = {
                 </html>
               `;
 
-              const response = await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  to: memberProfile.email,
-                  subject: `New Advance Collection in "${groupName}" - ₹${perMemberAmount!.toFixed(2)} per member`,
-                  html: emailHtml,
-                }),
-              });
-
-              if (!response.ok) {
-                console.error('Email API error:', await response.text());
+              // Skip email on web (CORS issues - mobile only)
+              if (Platform.OS !== 'web') {
+                fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    to: memberProfile.email,
+                    subject: `New Advance Collection in "${groupName}" - ₹${perMemberAmount!.toFixed(2)} per member`,
+                    html: emailHtml,
+                  }),
+                }).catch(error => console.log('Email send skipped (mobile-only feature)'));
               }
             } catch (error) {
               console.error('Error sending email to member:', error);
@@ -2786,6 +2770,11 @@ export const notificationService = {
         .eq('id', expenseId)
         .single();
 
+      if (expenseError || !expense) {
+        console.error('Error fetching expense for notifications:', expenseError);
+        return;
+      }
+
       const groupName = (expense.group as any)?.name || 'a group';
       const paidByName = (expense.paid_by_user as any)?.full_name || 'Someone';
 
@@ -2925,17 +2914,18 @@ export const notificationService = {
                 </html>
               `;
 
-              fetch('https://send-email-nu-five.vercel.app/api/send-email', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  to: memberProfile.email,
-                  subject: `Included in expense: ${expense.description} (${groupName})`,
-                  html: emailHtml,
-                }),
-              }).catch(e => console.error('Silent email fail:', e));
+              // Skip email on web (CORS issues - mobile only)
+              if (Platform.OS !== 'web') {
+                fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    to: memberProfile.email,
+                    subject: `Included in expense: ${expense.description} (${groupName})`,
+                    html: emailHtml,
+                  }),
+                }).catch(e => console.log('Email send skipped (mobile-only feature)'));
+              }
             } catch (error) {
               console.error('Error preparing email:', error);
             }

@@ -311,6 +311,13 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
       }
     }
     try {
+      console.log('🚀 Starting expense creation...', {
+        description,
+        amount: amountNum,
+        paid_by: selectedPayerId || profile?.id,
+        date: format(selectedDate, "yyyy-MM-dd")
+      });
+
       await dispatch(
         createExpense({
           group_id: selectedGroupId,
@@ -318,13 +325,15 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
           description: description.trim(),
           amount: amountNum,
           paid_by: selectedPayerId || profile!.id,
-          date: selectedDate.toISOString(),
+          date: format(selectedDate, "yyyy-MM-dd"),
           notes: notes.trim() || undefined,
           split_type: splitType,
           splits,
           receipt: receiptFile,
         })
       ).unwrap();
+
+      console.log('✅ Expense created successfully');
 
       // Show different message based on online status
       if (isOnline) {
@@ -333,8 +342,13 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
         showToast("Expense saved offline. Will sync when connection is restored.", "info");
       }
       navigation.goBack();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ Add expense error:', error);
       ErrorHandler.handleError(error, showToast, "Add Expense");
+      // Fallback if ErrorHandler doesn't show toast
+      if (!error.message?.includes('Network')) {
+        showToast(error.message || "Failed to create expense", "error");
+      }
     } finally {
       setIsSubmitting(false);
     }

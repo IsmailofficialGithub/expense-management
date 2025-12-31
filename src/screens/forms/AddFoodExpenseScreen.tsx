@@ -318,6 +318,12 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
 
     try {
+      console.log('🚀 Starting food expense creation...', {
+        description,
+        totalAmount,
+        paid_by: selectedPayerId || profile?.id
+      });
+
       // Find food category - look for "Food" or "Restaurant" category, otherwise use first available
       let foodCategoryId = categories.find(cat =>
         cat.name.toLowerCase().includes('food') ||
@@ -333,7 +339,8 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       // If still no category, show error
       if (!foodCategoryId) {
         showToast('No expense category available. Please contact support.', 'error');
-        return; // finally block will clear setIsSubmitting
+        setIsSubmitting(false);
+        return;
       }
 
       // Prepare splits
@@ -365,6 +372,8 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         payment_method_id: selectedPaymentMethodId,
       })).unwrap();
 
+      console.log('✅ Food expense created successfully');
+
       // Show different message based on online status
       if (isOnline) {
         showToast('Food expense added successfully!', 'success');
@@ -373,8 +382,8 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       }
       navigation.goBack();
     } catch (error: any) {
-      console.error('Create food expense error:', error);
-      showToast(error.message || 'Failed to create expense', 'error');
+      console.error('❌ Create food expense error:', error);
+      showToast(error.message || 'Failed to create food expense', 'error');
     } finally {
       setIsSubmitting(false);
     }
