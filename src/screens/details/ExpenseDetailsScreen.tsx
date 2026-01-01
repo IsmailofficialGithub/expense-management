@@ -45,28 +45,48 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
 
   const loadExpenseData = async () => {
     try {
+      console.log('🚀 Loading expense details for ID:', expenseId);
+
       if (!isOnline) {
         showToast('Unable to load expense. No internet connection.', 'error');
         return;
       }
 
       await dispatch(fetchExpense(expenseId)).unwrap();
-    } catch (error) {
-      ErrorHandler.handleError(error, showToast, 'Load Expense Details');
-      navigation.goBack();
+      console.log('✅ Expense loaded successfully');
+    } catch (error: any) {
+      console.error('❌ Error loading expense:', error);
+
+      // Check if expense doesn't exist
+      if (error.message?.includes('not found') || error.message?.includes('No data')) {
+        showToast('This expense no longer exists or has been deleted.', 'error');
+      } else {
+        ErrorHandler.handleError(error, showToast, 'Load Expense Details');
+      }
+
+      // Navigate back after a short delay
+      setTimeout(() => navigation.goBack(), 1500);
     }
   };
 
   const handleDeleteExpense = () => {
+    console.log('🗑️ Delete button clicked for expense:', expenseId);
+
     Alert.alert(
       'Delete Expense',
       'Are you sure you want to delete this expense? This action cannot be undone.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => console.log('Delete cancelled')
+        },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            console.log('🚀 Starting expense deletion...');
+
             if (!isOnline) {
               showToast('Cannot delete expense. No internet connection.', 'error');
               return;
@@ -75,10 +95,13 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
             setIsProcessing(true);
             try {
               await dispatch(deleteExpense(expenseId)).unwrap();
+              console.log('✅ Expense deleted successfully');
               showToast('Expense deleted successfully', 'success');
               navigation.goBack();
-            } catch (error) {
+            } catch (error: any) {
+              console.error('❌ Delete expense error:', error);
               ErrorHandler.handleError(error, showToast, 'Delete Expense');
+              showToast(error.message || 'Failed to delete expense', 'error');
             } finally {
               setIsProcessing(false);
             }
@@ -141,10 +164,25 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
     );
   };
 
-  if (!selectedExpense) {
+  // Show loading state while fetching
+  if (loading && !selectedExpense) {
     return (
       <View style={styles.loadingContainer}>
         <LoadingOverlay visible={true} message="Loading expense..." />
+      </View>
+    );
+  }
+
+  // Handle case where expense doesn't exist or failed to load
+  if (!selectedExpense) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+        <Text style={{ color: theme.colors.onSurface, fontSize: 16, textAlign: 'center', padding: 20 }}>
+          Expense not found or has been deleted.
+        </Text>
+        <Button mode="contained" onPress={() => navigation.goBack()} style={{ marginTop: 16 }}>
+          Go Back
+        </Button>
       </View>
     );
   }

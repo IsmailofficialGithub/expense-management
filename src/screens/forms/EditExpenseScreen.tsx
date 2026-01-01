@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import SafeScrollView from '../../components/SafeScrollView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { expenseService } from '../../services/supabase.service';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 interface Props {
   navigation: any;
@@ -49,8 +50,12 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
   const [splitType, setSplitType] = useState<'equal' | 'unequal'>('equal');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customSplits, setCustomSplits] = useState<{ [userId: string]: string }>({});
+  const [selectedPayerId, setSelectedPayerId] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   // Validation errors
   const [errors, setErrors] = useState({
@@ -59,6 +64,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
     category: '',
     members: '',
     splits: '',
+    payer: '',
   });
 
   useEffect(() => {
@@ -88,6 +94,8 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
           });
           setCustomSplits(splits);
         }
+
+        setSelectedPayerId(selectedExpense.paid_by);
       }
 
       setIsLoading(false);
@@ -106,11 +114,32 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
       const expense = await dispatch(fetchExpense(expenseId)).unwrap();
 
       if (expense.group_id) {
-        await dispatch(fetchGroup(expense.group_id)).unwrap();
+        const group = await dispatch(fetchGroup(expense.group_id)).unwrap();
+        // Check if current user is admin
+        const member = group.members.find((m: any) => m.user_id === profile?.id);
+        setIsAdmin(member?.role === 'admin');
       }
     } catch (error) {
       ErrorHandler.handleError(error, showToast, 'Load Expense');
       navigation.goBack();
+    }
+  };
+
+  const onChangeDate = (event: DateTimePickerEvent, date?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (date) {
+      const newDate = new Date(selectedDate);
+      newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+      setSelectedDate(newDate);
+    }
+  };
+
+  const onChangeTime = (event: DateTimePickerEvent, date?: Date) => {
+    setShowTimePicker(Platform.OS === 'ios');
+    if (date) {
+      const newDate = new Date(selectedDate);
+      newDate.setHours(date.getHours(), date.getMinutes());
+      setSelectedDate(newDate);
     }
   };
 
@@ -176,6 +205,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
       category: '',
       members: '',
       splits: '',
+      payer: '',
     };
 
     let isValid = true;
@@ -198,6 +228,11 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
 
     if (selectedMembers.length === 0) {
       newErrors.members = 'Please select at least one member';
+      isValid = false;
+    }
+
+    if (!selectedPayerId) {
+      newErrors.payer = 'Please select who paid';
       isValid = false;
     }
 
@@ -256,7 +291,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
             // Prepare receipt file (if new image selected)
             let receiptFile: any;
             let shouldDeleteOldReceipt = false;
-            
+
             if (receiptUri) {
               // New receipt selected - will replace old one
               receiptFile = {
@@ -274,6 +309,14 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
             }
 
             try {
+              console.log('🚀 Starting expense update...', {
+                expenseId,
+                description,
+                amount: amountNum,
+                paid_by: selectedPayerId,
+                date: format(selectedDate, 'yyyy-MM-dd')
+              });
+
               // Delete old receipt if needed (before updating expense)
               if (shouldDeleteOldReceipt && selectedExpense?.receipt_url) {
                 try {
@@ -291,6 +334,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                   category_id: selectedCategoryId,
                   description: description.trim(),
                   amount: amountNum,
+                  paid_by: selectedPayerId,
                   date: format(selectedDate, 'yyyy-MM-dd'),
                   notes: notes.trim() || null,
                   split_type: splitType,
@@ -301,10 +345,16 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                 receipt: receiptFile,
               })).unwrap();
 
+              console.log('✅ Expense updated successfully');
               showToast('Expense updated successfully!', 'success');
               navigation.goBack();
-            } catch (error) {
+            } catch (error: any) {
+              console.error('❌ Update expense error:', error);
               ErrorHandler.handleError(error, showToast, 'Update Expense');
+              // Fallback
+              if (!error.message?.includes('Network')) {
+                showToast(error.message || "Failed to update expense", "error");
+              }
             } finally {
               setIsSubmitting(false);
             }
@@ -329,14 +379,14 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeScrollView 
+      <SafeScrollView
         contentContainerStyle={[
           styles.content,
           {
             paddingTop: insets.top + 16,
             paddingBottom: insets.bottom + 32,
           }
-        ]} 
+        ]}
         hasTabBar={false}
       >
         {/* Info Banner */}
@@ -422,6 +472,41 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
           </HelperText>
         ) : null}
 
+        {isAdmin && selectedGroup && (
+          <>
+            <Divider style={styles.divider} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Who paid? (Admin Only)</Text>
+            <View style={styles.chipContainer}>
+              {selectedGroup.members.map((member) => {
+                const isSelected = selectedPayerId === member.user_id;
+                return (
+                  <Chip
+                    key={member.user_id}
+                    selected={isSelected}
+                    onPress={() => setSelectedPayerId(member.user_id)}
+                    style={styles.chip}
+                    avatar={
+                      <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: theme.colors.primaryContainer, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 10, color: theme.colors.onPrimaryContainer }}>
+                          {(member.user?.full_name || '?')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                    }
+                  >
+                    {member.user?.full_name || "Unknown"}
+                    {member.user_id === profile?.id ? " (You)" : ""}
+                  </Chip>
+                );
+              })}
+            </View>
+            {errors.payer ? (
+              <HelperText type="error" visible={!!errors.payer}>
+                {errors.payer}
+              </HelperText>
+            ) : null}
+          </>
+        )}
+
         <Divider style={styles.divider} />
 
         {/* Split Type */}
@@ -447,11 +532,11 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
             return (
               <Card
                 key={member.user_id}
-                    style={[
-                      styles.memberCard,
-                      { backgroundColor: theme.colors.surface },
-                      isSelected && { backgroundColor: theme.colors.primaryContainer }
-                    ]}
+                style={[
+                  styles.memberCard,
+                  { backgroundColor: theme.colors.surface },
+                  isSelected && { backgroundColor: theme.colors.primaryContainer }
+                ]}
                 onPress={() => toggleMember(member.user_id)}
               >
                 <Card.Content style={styles.memberCardContent}>
@@ -504,9 +589,67 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         {/* Optional: Date, Notes, Receipt */}
         <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Additional Details (Optional)</Text>
 
-        {/* Date - Simple display for now */}
-        <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Date</Text>
-        <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>{format(selectedDate, 'MMMM dd, yyyy')}</Text>
+        <View style={styles.row}>
+          <TouchableOpacity
+            onPress={() => {
+              if (isAdmin) {
+                setShowDatePicker(true);
+              } else {
+                showToast("Only admins can change the date", "info");
+              }
+            }}
+            style={[styles.flex1, { marginRight: 8 }]}
+          >
+            <TextInput
+              label="Date"
+              value={format(selectedDate, "MMM dd, yyyy")}
+              mode="outlined"
+              editable={false}
+              left={<TextInput.Icon icon="calendar" />}
+              style={styles.input}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              if (isAdmin) {
+                setShowTimePicker(true);
+              } else {
+                showToast("Only admins can change the time", "info");
+              }
+            }}
+            style={styles.flex1}
+          >
+            <TextInput
+              label="Time"
+              value={format(selectedDate, "hh:mm a")}
+              mode="outlined"
+              editable={false}
+              left={<TextInput.Icon icon="clock-outline" />}
+              style={styles.input}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            testID="datePicker"
+            value={selectedDate}
+            mode="date"
+            display="default"
+            onChange={onChangeDate}
+          />
+        )}
+
+        {showTimePicker && (
+          <DateTimePicker
+            testID="timePicker"
+            value={selectedDate}
+            mode="time"
+            display="default"
+            onChange={onChangeTime}
+          />
+        )}
 
         {/* Notes */}
         <TextInput
@@ -526,7 +669,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
           {receiptUri || existingReceiptUrl ? (
             <View>
               {/* Image Preview */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.imagePreviewContainer}
                 activeOpacity={0.9}
               >
@@ -611,6 +754,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  flex1: {
+    flex: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   content: {
     padding: 16,

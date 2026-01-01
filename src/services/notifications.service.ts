@@ -101,7 +101,12 @@ export const notificationsService = {
         console.log('Expo push token obtained:', token);
         return token;
       } catch (error: any) {
-        console.error('Error getting Expo push token:', error.message);
+        // Suppress VAPID warning on web - this is a mobile-only app
+        if (Platform.OS === 'web' && error.message?.includes('vapidPublicKey')) {
+          console.log('Push notifications not available on web (mobile-only app)');
+        } else {
+          console.error('Error getting Expo push token:', error.message);
+        }
         // Still return null - local notifications will work
         return null;
       }

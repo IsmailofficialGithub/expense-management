@@ -166,11 +166,11 @@ export const createExpense = createAsyncThunk('expenses/createExpense', async (r
               personalCategories.find((c: any) => c.name === 'Others' && c.type === 'expense') ||
               personalCategories.find((c: any) => c.type === 'expense');
 
-            if (defaultCat && defaultCat.id) {
+            if (defaultCat && defaultCat.name) {
               const personalTx = {
                 amount: request.amount,
                 type: 'expense' as const,
-                category_id: defaultCat.id,
+                category: defaultCat.name, // Use category name, not ID
                 date: request.date || new Date().toISOString(),
                 description: `Group Exp: ${request.description}`,
               };

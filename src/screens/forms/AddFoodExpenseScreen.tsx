@@ -53,11 +53,13 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
   const [selectedGroupId, setSelectedGroupId] = useState(preSelectedGroupId || '');
   const [selectedHotelId, setSelectedHotelId] = useState('');
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState(defaultMethod?.id || '');
+  const [selectedPayerId, setSelectedPayerId] = useState(profile?.id || '');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [notes, setNotes] = useState('');
   const [splitType, setSplitType] = useState<'equal' | 'unequal'>('equal');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customSplits, setCustomSplits] = useState<{ [userId: string]: string }>({});
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Food items state
   const [selectedFoodItems, setSelectedFoodItems] = useState<SelectedFoodItem[]>([]);
@@ -79,6 +81,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
     members: '',
     splits: '',
     paymentMethod: '',
+    payer: '',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,9 +102,19 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
           splits[id] = '';
         });
         setCustomSplits(splits);
+
+        // Check if current user is admin
+        const member = group.members.find(m => m.user_id === profile?.id);
+        setIsAdmin(member?.role === 'admin');
+
+        // Reset payer to current user if not in group
+        const isCurrentPayerInGroup = memberIds.includes(selectedPayerId);
+        if (!isCurrentPayerInGroup && profile?.id) {
+          setSelectedPayerId(profile.id);
+        }
       }
     }
-  }, [selectedGroupId, groups]);
+  }, [selectedGroupId, groups, profile?.id]);
 
   useEffect(() => {
     if (defaultMethod) {
@@ -113,10 +126,10 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
     try {
       // Try to load data - will use cached data if offline
       await Promise.all([
-        dispatch(fetchGroups()).unwrap().catch(() => {}),
-        dispatch(fetchHotels()).unwrap().catch(() => {}),
-        dispatch(fetchPaymentMethods(profile!.id)).unwrap().catch(() => {}),
-        dispatch(fetchCategories()).unwrap().catch(() => {}),
+        dispatch(fetchGroups()).unwrap().catch(() => { }),
+        dispatch(fetchHotels()).unwrap().catch(() => { }),
+        dispatch(fetchPaymentMethods(profile!.id)).unwrap().catch(() => { }),
+        dispatch(fetchCategories()).unwrap().catch(() => { }),
       ]);
     } catch (error: any) {
       console.error('Load data error:', error);
@@ -241,6 +254,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       members: '',
       splits: '',
       paymentMethod: '',
+      payer: '',
     };
 
     let isValid = true;
@@ -275,6 +289,11 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       isValid = false;
     }
 
+    if (!selectedPayerId) {
+      newErrors.payer = 'Please select who paid';
+      isValid = false;
+    }
+
     // Validate custom splits
     if (splitType === 'unequal') {
       const totalAmount = calculateTotalAmount();
@@ -299,6 +318,12 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
 
     try {
+      console.log('🚀 Starting food expense creation...', {
+        description,
+        totalAmount,
+        paid_by: selectedPayerId || profile?.id
+      });
+
       // Find food category - look for "Food" or "Restaurant" category, otherwise use first available
       let foodCategoryId = categories.find(cat =>
         cat.name.toLowerCase().includes('food') ||
@@ -314,7 +339,8 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       // If still no category, show error
       if (!foodCategoryId) {
         showToast('No expense category available. Please contact support.', 'error');
-        return; // finally block will clear setIsSubmitting
+        setIsSubmitting(false);
+        return;
       }
 
       // Prepare splits
@@ -336,7 +362,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         group_id: selectedGroupId,
         category_id: foodCategoryId,
         description: description.trim(),
-        paid_by: profile!.id,
+        paid_by: selectedPayerId || profile!.id,
         date: format(selectedDate, 'yyyy-MM-dd'),
         notes: notes.trim() || undefined,
         split_type: splitType,
@@ -346,6 +372,8 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
         payment_method_id: selectedPaymentMethodId,
       })).unwrap();
 
+      console.log('✅ Food expense created successfully');
+
       // Show different message based on online status
       if (isOnline) {
         showToast('Food expense added successfully!', 'success');
@@ -354,8 +382,8 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       }
       navigation.goBack();
     } catch (error: any) {
-      console.error('Create food expense error:', error);
-      showToast(error.message || 'Failed to create expense', 'error');
+      console.error('❌ Create food expense error:', error);
+      showToast(error.message || 'Failed to create food expense', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -376,14 +404,14 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeScrollView 
+      <SafeScrollView
         contentContainerStyle={[
           styles.content,
           {
             paddingTop: insets.top + 16,
             paddingBottom: insets.bottom + 32,
           }
-        ]} 
+        ]}
         hasTabBar={false}
       >
         {/* Description */}
@@ -573,6 +601,39 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
           <HelperText type="error">{errors.paymentMethod}</HelperText>
         ) : null}
 
+        {isAdmin && selectedGroup && (
+          <>
+            <Divider style={styles.divider} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Who paid? (Admin Only)</Text>
+            <View style={styles.chipContainer}>
+              {selectedGroup.members.map((member) => {
+                const isSelected = selectedPayerId === member.user_id;
+                return (
+                  <Chip
+                    key={member.user_id}
+                    selected={isSelected}
+                    onPress={() => setSelectedPayerId(member.user_id)}
+                    style={styles.chip}
+                    avatar={
+                      <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: theme.colors.primaryContainer, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 10, color: theme.colors.onPrimaryContainer }}>
+                          {(member.user?.full_name || '?')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                    }
+                  >
+                    {member.user?.full_name || "Unknown"}
+                    {member.user_id === profile?.id ? " (You)" : ""}
+                  </Chip>
+                );
+              })}
+            </View>
+            {errors.payer ? (
+              <HelperText type="error">{errors.payer}</HelperText>
+            ) : null}
+          </>
+        )}
+
         <Divider style={styles.divider} />
 
         {/* Split Type */}
@@ -601,7 +662,7 @@ export default function AddFoodExpenseScreen({ navigation, route }: Props) {
                   <Card
                     key={member.user_id}
                     style={[
-                      styles.memberCard, 
+                      styles.memberCard,
                       { backgroundColor: theme.colors.surface },
                       isSelected && { backgroundColor: theme.colors.primaryContainer }
                     ]}

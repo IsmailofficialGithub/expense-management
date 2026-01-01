@@ -59,6 +59,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
   const { isOnline } = useNetworkCheck();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const preSelectedGroupId = route?.params?.groupId;
   const sharedImageUri = route?.params?.sharedImageUri;
@@ -69,6 +70,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
     preSelectedGroupId || ""
   );
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedPayerId, setSelectedPayerId] = useState(profile?.id || "");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [notes, setNotes] = useState("");
   const [receiptUri, setReceiptUri] = useState<string | null>(sharedImageUri || null);
@@ -85,6 +87,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
     category: "",
     members: "",
     splits: "",
+    payer: "",
   });
 
   useEffect(() => {
@@ -104,17 +107,42 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
           splits[id] = "";
         });
         setCustomSplits(splits);
+
+        // Reset payer to current user if not in group, otherwise keep current or default to current user
+        const isCurrentPayerInGroup = memberIds.includes(selectedPayerId);
+        if (!isCurrentPayerInGroup && profile?.id) {
+          setSelectedPayerId(profile.id);
+        }
       }
     }
-  }, [selectedGroupId, groups]);
+  }, [selectedGroupId, groups, profile?.id]);
+
+  const selectedGroup = groups.find((g) => g.id === selectedGroupId);
+  const userMember = selectedGroup?.members?.find((m) => m.user_id === profile?.id);
+  const isAdmin = userMember?.role === "admin";
 
   const onChangeDate = (
     event: DateTimePickerEvent,
     date?: Date
   ) => {
-    const currentDate = date || selectedDate;
     setShowDatePicker(Platform.OS === "ios");
-    setSelectedDate(currentDate);
+    if (date) {
+      const newDate = new Date(selectedDate);
+      newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+      setSelectedDate(newDate);
+    }
+  };
+
+  const onChangeTime = (
+    event: DateTimePickerEvent,
+    date?: Date
+  ) => {
+    setShowTimePicker(Platform.OS === "ios");
+    if (date) {
+      const newDate = new Date(selectedDate);
+      newDate.setHours(date.getHours(), date.getMinutes());
+      setSelectedDate(newDate);
+    }
   };
 
   const handlePickImage = async () => {
@@ -180,6 +208,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
       category: "",
       members: "",
       splits: "",
+      payer: "",
     };
 
     if (!description.trim()) {
@@ -211,6 +240,12 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
       newErrors.members = "Please select at least one member";
       setErrors(newErrors);
       return "Please select at least one member";
+    }
+
+    if (!selectedPayerId) {
+      newErrors.payer = "Please select who paid this expense";
+      setErrors(newErrors);
+      return "Please select who paid";
     }
 
     if (splitType === "unequal") {
@@ -276,13 +311,20 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
       }
     }
     try {
+      console.log('🚀 Starting expense creation...', {
+        description,
+        amount: amountNum,
+        paid_by: selectedPayerId || profile?.id,
+        date: format(selectedDate, "yyyy-MM-dd")
+      });
+
       await dispatch(
         createExpense({
           group_id: selectedGroupId,
           category_id: selectedCategoryId,
           description: description.trim(),
           amount: amountNum,
-          paid_by: profile!.id,
+          paid_by: selectedPayerId || profile!.id,
           date: format(selectedDate, "yyyy-MM-dd"),
           notes: notes.trim() || undefined,
           split_type: splitType,
@@ -291,6 +333,8 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
         })
       ).unwrap();
 
+      console.log('✅ Expense created successfully');
+
       // Show different message based on online status
       if (isOnline) {
         showToast("Expense added successfully!", "success");
@@ -298,14 +342,18 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
         showToast("Expense saved offline. Will sync when connection is restored.", "info");
       }
       navigation.goBack();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ Add expense error:', error);
       ErrorHandler.handleError(error, showToast, "Add Expense");
+      // Fallback if ErrorHandler doesn't show toast
+      if (!error.message?.includes('Network')) {
+        showToast(error.message || "Failed to create expense", "error");
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const selectedGroup = groups.find((g) => g.id === selectedGroupId);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -462,6 +510,52 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
                   {errors.category}
                 </HelperText>
               ) : null}
+
+              {isAdmin && selectedGroup && (
+                <>
+                  <Divider style={styles.divider} />
+                  <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Who paid? (Admin Only)</Text>
+                  <View style={styles.chipContainer}>
+                    {selectedGroup.members.map((member: any) => {
+                      const isSelected = selectedPayerId === member.user_id;
+                      return (
+                        <Chip
+                          key={member.user_id}
+                          selected={isSelected}
+                          onPress={() => setSelectedPayerId(member.user_id)}
+                          style={[
+                            styles.chip,
+                            isSelected && {
+                              backgroundColor: theme.colors.primary,
+                            },
+                          ]}
+                          textStyle={[
+                            styles.chipText,
+                            isSelected && {
+                              color: theme.colors.onPrimary,
+                            },
+                          ]}
+                          avatar={
+                            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: theme.colors.primaryContainer, alignItems: 'center', justifyContent: 'center' }}>
+                              <Text style={{ fontSize: 10, color: theme.colors.onPrimaryContainer }}>
+                                {(member.user?.full_name || '?')[0].toUpperCase()}
+                              </Text>
+                            </View>
+                          }
+                        >
+                          {member.user?.full_name || "Unknown"}
+                          {member.user_id === profile?.id ? " (You)" : ""}
+                        </Chip>
+                      );
+                    })}
+                  </View>
+                  {errors.payer ? (
+                    <HelperText type="error" visible={!!errors.payer}>
+                      {errors.payer}
+                    </HelperText>
+                  ) : null}
+                </>
+              )}
             </Card.Content>
           </Card>
 
@@ -484,7 +578,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
                 <>
                   <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Split with *</Text>
                   <View style={styles.membersContainer}>
-                    {selectedGroup.members?.map((member) => {
+                    {selectedGroup.members?.map((member: any) => {
                       const isSelected = selectedMembers.includes(member.user_id);
                       const user = member.user;
                       const splitAmount =
@@ -559,23 +653,68 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
             <Card.Content>
               <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Additional Details (Optional)</Text>
 
-              <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-                <TextInput
-                  label="Date"
-                  value={format(selectedDate, "MMMM dd, yyyy")}
-                  mode="outlined"
-                  editable={false}
-                  left={<TextInput.Icon icon="calendar" />}
-                  style={styles.input}
-                />
-              </TouchableOpacity>
+              <View style={styles.row}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const currentGroup = groups.find(g => g.id === selectedGroupId);
+                    const userMember = currentGroup?.members?.find(m => m.user_id === profile?.id);
+                    const isAdmin = userMember?.role === 'admin';
+                    if (isAdmin) {
+                      setShowDatePicker(true);
+                    } else {
+                      showToast("Only admins can change the date", "info");
+                    }
+                  }}
+                  style={[styles.flex1, { marginRight: 8 }]}
+                >
+                  <TextInput
+                    label="Date"
+                    value={format(selectedDate, "MMM dd, yyyy")}
+                    mode="outlined"
+                    editable={false}
+                    left={<TextInput.Icon icon="calendar" />}
+                    style={styles.input}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    if (isAdmin) {
+                      setShowTimePicker(true);
+                    } else {
+                      showToast("Only admins can change the time", "info");
+                    }
+                  }}
+                  style={styles.flex1}
+                >
+                  <TextInput
+                    label="Time"
+                    value={format(selectedDate, "hh:mm a")}
+                    mode="outlined"
+                    editable={false}
+                    left={<TextInput.Icon icon="clock-outline" />}
+                    style={styles.input}
+                  />
+                </TouchableOpacity>
+              </View>
+
               {showDatePicker && (
                 <DateTimePicker
-                  testID="dateTimePicker"
+                  testID="datePicker"
                   value={selectedDate}
                   mode="date"
                   display="default"
                   onChange={onChangeDate}
+                />
+              )}
+
+              {showTimePicker && (
+                <DateTimePicker
+                  testID="timePicker"
+                  value={selectedDate}
+                  mode="time"
+                  display="default"
+                  onChange={onChangeTime}
                 />
               )}
 
@@ -772,5 +911,12 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderRadius: 8,
     borderStyle: 'dashed',
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  flex1: {
+    flex: 1,
   },
 });

@@ -163,8 +163,10 @@ export default function DashboardScreen({ navigation }: any) {
   // Overall balance (Income - Personal Expenses - Group Debts + Group Credits)
   const overallBalance = personalIncome - personalExpenses - totalIOwe + totalOwedToMe;
 
-  // Get recent expenses (last 5)
-  const recentExpenses = expenses.slice(0, 5);
+  // Get recent expenses (last 5) - sorted by date, newest first
+  const recentExpenses = [...expenses]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 5);
 
   // Get recent personal transactions (last 5)
   const recentPersonalTransactions = transactions.slice(0, 5);
@@ -491,7 +493,7 @@ export default function DashboardScreen({ navigation }: any) {
             <Card
               key={transaction.id}
               style={styles.transactionCard}
-              onPress={() => navigation.navigate("PersonalFinance", { transactionId: transaction.id })}
+              onPress={() => navigation.navigate("PersonalTransactionDetails", { transactionId: transaction.id })}
             >
               <Card.Content style={styles.transactionContent}>
                 <View style={styles.transactionLeft}>

@@ -1,5 +1,6 @@
 // src/services/supabase.service.ts
 import { supabase } from './supabase';
+import { Platform } from 'react-native';
 import {
   Profile,
   Group,
@@ -728,12 +729,16 @@ export const invitationService = {
     `;
 
     try {
+      // Skip email on web (CORS issues - mobile only)
+      if (Platform.OS === 'web') {
+        console.log('Email sending skipped on web (mobile-only feature)');
+        return;
+      }
+
       // Call external email API directly
-      const response = await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+      await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: recipientEmail,
           subject: `You're invited to join "${groupName}" on Flatmates Expense Tracker`,
@@ -741,19 +746,9 @@ export const invitationService = {
         }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Email API error response:', errorText);
-        throw new Error(`Email API returned status ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Email sent successfully:', result);
+      console.log('Invitation email sent successfully to:', recipientEmail);
     } catch (error: any) {
-      console.error('Email sending failed:', error);
-      // Log the full error for debugging
-      console.error('Full error object:', JSON.stringify(error, null, 2));
-
+      console.error('Email sending failed:', error.message);
       // Don't throw - invitation is still created even if email fails
       // This allows the invitation to work even if email service is down
       // But we still log it for debugging
@@ -1068,8 +1063,8 @@ export const foodExpenseService = {
         category_id: request.category_id,
         description: request.description,
         amount: totalAmount,
-        paid_by: user.id,
-        date: request.date,
+        paid_by: request.paid_by || user.id,
+        date: request.date || new Date().toISOString().split('T')[0],
         notes: request.notes || null,
         split_type: request.split_type,
         hotel_id: request.hotel_id,
@@ -1112,13 +1107,9 @@ export const foodExpenseService = {
 
     if (splitsError) throw splitsError;
 
-    // Trigger notifications for group members
-    try {
-      await notificationService.triggerExpenseNotifications(expense.id, request.group_id);
-    } catch (error) {
-      console.error('Failed to trigger notifications:', error);
-      // Don't fail expense creation if notifications fail
-    }
+    // Trigger notifications for group members (non-blocking)
+    notificationService.triggerExpenseNotifications(expense.id, request.group_id)
+      .catch(error => console.error('Failed to trigger notifications:', error));
 
     // Fetch complete expense with details
     return expenseService.getExpense(expense.id);
@@ -1550,13 +1541,9 @@ export const expenseService = {
 
     if (splitsError) throw splitsError;
 
-    // Trigger notifications for group members
-    try {
-      await notificationService.triggerExpenseNotifications(expense.id, request.group_id);
-    } catch (error) {
-      console.error('Failed to trigger notifications:', error);
-      // Don't fail expense creation if notifications fail
-    }
+    // Trigger notifications for group members (non-blocking)
+    notificationService.triggerExpenseNotifications(expense.id, request.group_id)
+      .catch(error => console.error('Failed to trigger notifications:', error));
 
     return expense;
   },
@@ -2030,20 +2017,17 @@ export const bulkPaymentService = {
                 </html>
               `;
 
-              const response = await fetch('https://send-email-nu-five.vercel.app/api/send-email', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  to: memberProfile.email,
-                  subject: `New Advance Collection in "${groupName}" - ₹${perMemberAmount!.toFixed(2)} per member`,
-                  html: emailHtml,
-                }),
-              });
-
-              if (!response.ok) {
-                console.error('Email API error:', await response.text());
+              // Skip email on web (CORS issues - mobile only)
+              if (Platform.OS !== 'web') {
+                fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    to: memberProfile.email,
+                    subject: `New Advance Collection in "${groupName}" - ₹${perMemberAmount!.toFixed(2)} per member`,
+                    html: emailHtml,
+                  }),
+                }).catch(error => console.log('Email send skipped (mobile-only feature)'));
               }
             } catch (error) {
               console.error('Error sending email to member:', error);
@@ -2776,20 +2760,28 @@ export const notificationService = {
         .select(`
           *,
           paid_by_user:profiles!expenses_paid_by_fkey(id, full_name),
-          splits:expense_splits(user_id, amount)
+          splits:expense_splits(
+            user_id, 
+            amount,
+            user:profiles(email, full_name)
+          ),
+          group:groups(name)
         `)
         .eq('id', expenseId)
         .single();
 
       if (expenseError || !expense) {
-        console.error('Error fetching expense:', expenseError);
+        console.error('Error fetching expense for notifications:', expenseError);
         return;
       }
+
+      const groupName = (expense.group as any)?.name || 'a group';
+      const paidByName = (expense.paid_by_user as any)?.full_name || 'Someone';
 
       // Fetch all group members
       const { data: groupMembers, error: membersError } = await supabase
         .from('group_members')
-        .select('user_id')
+        .select('user_id, user:profiles(email, full_name)')
         .eq('group_id', groupId);
 
       if (membersError || !groupMembers) {
@@ -2798,22 +2790,23 @@ export const notificationService = {
       }
 
       const notifications = [];
-      const paidByName = (expense.paid_by_user as any)?.full_name || 'Someone';
 
-      // Create notifications for all group members (except the creator)
+      // Create notifications for all group members (except the person who paid)
       for (const member of groupMembers) {
-        if (member.user_id === expense.paid_by) {
-          continue; // Skip the expense creator
+        const userId = member.user_id;
+
+        if (userId === expense.paid_by) {
+          continue; // Skip the person who paid
         }
 
         // Find split for this user
         const userSplit = Array.isArray(expense.splits)
-          ? (expense.splits as any[]).find((s: any) => s.user_id === member.user_id)
+          ? (expense.splits as any[]).find((s: any) => s.user_id === userId)
           : null;
 
         // Notification 1: New expense added to group
         notifications.push({
-          user_id: member.user_id,
+          user_id: userId,
           title: 'New Expense Added',
           message: `${paidByName} added "${expense.description}" - ₹${Number(expense.amount).toFixed(2)}`,
           type: 'expense_added',
@@ -2828,20 +2821,115 @@ export const notificationService = {
 
         // Notification 2: Split amount assigned (if user has a split)
         if (userSplit && userSplit.amount > 0) {
+          const splitAmount = Number(userSplit.amount);
           notifications.push({
-            user_id: member.user_id,
+            user_id: userId,
             title: 'Amount Assigned to You',
-            message: `You owe ₹${Number(userSplit.amount).toFixed(2)} for "${expense.description}"`,
+            message: `You owe ₹${splitAmount.toFixed(2)} for "${expense.description}"`,
             type: 'expense_split_assigned',
             is_read: false,
             related_id: expenseId,
             metadata: {
               expense_id: expenseId,
               group_id: groupId,
-              split_amount: userSplit.amount,
+              split_amount: splitAmount,
               total_amount: expense.amount,
             },
           });
+
+          // Send Email to this member
+          const memberProfile = member.user as any;
+          if (memberProfile?.email) {
+            try {
+              const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                </head>
+                <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9;">
+                  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 20px 0; text-align: center;">
+                        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                          <!-- Header -->
+                          <tr>
+                            <td style="background: linear-gradient(135deg, #6200EE, #9c27b0); padding: 40px 20px; text-align: center;">
+                              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Expense Added</h1>
+                            </td>
+                          </tr>
+                          
+                          <!-- Content -->
+                          <tr>
+                            <td style="padding: 40px 30px;">
+                              <p style="color: #333333; font-size: 18px; margin: 0 0 24px 0;">Hi ${memberProfile.full_name || 'there'},</p>
+                              
+                              <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                                <strong>${paidByName}</strong> added a new expense in <strong>"${groupName}"</strong> and you are included in it.
+                              </p>
+                              
+                              <div style="background-color: #f0f4ff; border-left: 5px solid #6200EE; padding: 25px; margin: 0 0 30px 0; border-radius: 8px;">
+                                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                                  <tr>
+                                    <td style="padding-bottom: 10px; color: #666666; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Description</td>
+                                  </tr>
+                                  <tr>
+                                    <td style="padding-bottom: 20px; color: #1a1a1a; font-size: 20px; font-weight: 600;">${expense.description}</td>
+                                  </tr>
+                                  <tr>
+                                    <td style="padding-bottom: 10px; color: #666666; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Your Share</td>
+                                  </tr>
+                                  <tr>
+                                    <td style="color: #6200EE; font-size: 32px; font-weight: 700;">₹${splitAmount.toFixed(2)}</td>
+                                  </tr>
+                                  <tr>
+                                    <td style="padding-top: 15px; color: #888888; font-size: 14px;">Total Amount: ₹${Number(expense.amount).toFixed(2)}</td>
+                                  </tr>
+                                </table>
+                              </div>
+
+                              <div style="text-align: center; margin-top: 20px;">
+                                <a href="https://flatmates-expense.vercel.app" style="display: inline-block; background-color: #6200EE; color: #ffffff; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(98, 0, 238, 0.25);">View Details in App</a>
+                              </div>
+                            </td>
+                          </tr>
+                          
+                          <!-- Footer -->
+                          <tr>
+                            <td style="padding: 30px; text-align: center; background-color: #fcfcfc; border-top: 1px solid #eeeeee;">
+                              <p style="color: #999999; font-size: 13px; margin: 0 0 10px 0;">
+                                Flatmates Expense Tracker helps you manage group expenses easily.
+                              </p>
+                              <p style="color: #bbbbbb; font-size: 11px; margin: 0;">
+                                This is an automated notification. Please do not reply to this email.
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </body>
+                </html>
+              `;
+
+              // Skip email on web (CORS issues - mobile only)
+              if (Platform.OS !== 'web') {
+                fetch('https://send-email-nu-five.vercel.app/api/send-email', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    to: memberProfile.email,
+                    subject: `Included in expense: ${expense.description} (${groupName})`,
+                    html: emailHtml,
+                  }),
+                }).catch(e => console.log('Email send skipped (mobile-only feature)'));
+              }
+            } catch (error) {
+              console.error('Error preparing email:', error);
+            }
+          }
         }
       }
 

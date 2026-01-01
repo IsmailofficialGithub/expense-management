@@ -12,6 +12,7 @@ import Toast from './src/components/Toast';
 import OfflineIndicator from './src/components/OfflineIndicator';
 import NotificationInitializer from './src/components/NotificationInitializer';
 import { useUI } from './src/hooks/useUI';
+import { useShareIntent } from 'expo-share-intent';
 
 // Combine Paper theme with Navigation theme
 const CombinedLightTheme = {
@@ -35,23 +36,31 @@ function AppContent() {
   const { theme: userTheme } = useUI();
   const systemTheme = useColorScheme();
   const navigationRef = React.useRef<any>(null);
-  
+  const { hasShareIntent } = useShareIntent();
+
   // Determine the actual theme to use
-  const actualTheme = userTheme === 'auto' 
+  const actualTheme = userTheme === 'auto'
     ? (systemTheme === 'dark' ? 'dark' : 'light')
     : userTheme;
-  
+
   const paperTheme = actualTheme === 'dark' ? CombinedDarkTheme : CombinedLightTheme;
   const navigationTheme = actualTheme === 'dark' ? NavigationDarkTheme : NavigationDefaultTheme;
+
+  // Handle share intent navigation
+  React.useEffect(() => {
+    if (hasShareIntent && navigationRef.current) {
+      navigationRef.current.navigate('ShareHandler');
+    }
+  }, [hasShareIntent]);
 
   // Setup notifications
   React.useEffect(() => {
     const setupNotifications = async () => {
       const { notificationsService } = await import('./src/services/notifications.service');
-      
+
       // Request permissions
       await notificationsService.requestPermissions();
-      
+
       // Setup listeners for navigation
       if (navigationRef.current) {
         notificationsService.setupListeners(navigationRef.current);
@@ -60,10 +69,10 @@ function AppContent() {
 
     setupNotifications();
   }, []);
-  
+
   return (
     <PaperProvider theme={paperTheme}>
-      <NavigationContainer 
+      <NavigationContainer
         ref={navigationRef}
         theme={navigationTheme}
       >
