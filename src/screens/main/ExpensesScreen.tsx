@@ -8,7 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAppDispatch } from '../../store';
 import { fetchExpenses, setFilters, clearFilters } from '../../store/slices/expensesSlice';
 import { fetchCategories } from '../../store/slices/expensesSlice';
-import { format } from 'date-fns';
+import { format, startOfWeek, endOfWeek, isToday, isYesterday, isSameDay } from 'date-fns';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from 'react-native-paper';
@@ -20,7 +20,7 @@ export default function ExpensesScreen({ navigation }: any) {
   const { groups } = useGroups();
   const { profile } = useAuth();
   const dispatch = useAppDispatch();
-   const { showToast } = useToast();
+  const { showToast } = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,7 +47,7 @@ export default function ExpensesScreen({ navigation }: any) {
   };
 
   const onRefresh = async () => {
-     setRefreshing(true);
+    setRefreshing(true);
     try {
       await loadData();
     } catch (error) {
@@ -59,7 +59,7 @@ export default function ExpensesScreen({ navigation }: any) {
 
   const handleFilterChange = (value: string) => {
     setSelectedFilter(value as 'all' | 'paid' | 'owe');
-    
+
     if (value === 'paid') {
       dispatch(setFilters({ ...filters, paid_by: profile?.id }));
     } else if (value === 'owe') {
@@ -73,28 +73,40 @@ export default function ExpensesScreen({ navigation }: any) {
   // Filter expenses based on search and selected filter
   const filteredExpenses = expenses.filter(expense => {
     const matchesSearch = expense.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     if (selectedFilter === 'paid') {
       return matchesSearch && expense.paid_by === profile?.id;
     } else if (selectedFilter === 'owe') {
       const hasMySplit = expense.splits?.some(s => s.user_id === profile?.id);
       return matchesSearch && hasMySplit && expense.paid_by !== profile?.id;
     }
-    
+
     return matchesSearch;
   });
 
-  // Group expenses by date
+  // Group expenses by week
   const groupedExpenses = filteredExpenses.reduce((acc: any, expense) => {
-    const date = format(new Date(expense.date), 'MMMM dd, yyyy');
-    if (!acc[date]) {
-      acc[date] = [];
+    const expenseDate = new Date(expense.date);
+    const weekStart = startOfWeek(expenseDate, { weekStartsOn: 1 }); // Monday as start
+    const weekEnd = endOfWeek(expenseDate, { weekStartsOn: 1 });
+
+    // Create a week key for grouping
+    const weekKey = format(weekStart, 'yyyy-MM-dd');
+
+    // Create a readable week label
+    const weekLabel = `${format(weekStart, 'MMM dd')} - ${format(weekEnd, 'MMM dd, yyyy')}`;
+
+    if (!acc[weekKey]) {
+      acc[weekKey] = {
+        label: weekLabel,
+        expenses: []
+      };
     }
-    acc[date].push(expense);
+    acc[weekKey].expenses.push(expense);
     return acc;
   }, {});
 
-const renderExpenseCard = (expense: any) => {
+  const renderExpenseCard = (expense: any) => {
     const isPaidByMe = expense.paid_by === profile?.id;
     const mySplit = expense.splits?.find((s: { user_id: string; amount: number }) =>
       s.user_id === profile?.id
@@ -102,7 +114,7 @@ const renderExpenseCard = (expense: any) => {
 
     // Calculate the amount relevant to the user
     const myShare = mySplit ? Number(mySplit.amount) : 0;
-    const amountDisplay = isPaidByMe 
+    const amountDisplay = isPaidByMe
       ? Number(expense.amount) - myShare // Amount I get back
       : myShare; // Amount I owe
 
@@ -123,15 +135,15 @@ const renderExpenseCard = (expense: any) => {
 
             {/* 2. Main Details (Description & Group/Payer) */}
             <View style={styles.detailsContainer}>
-              <Text 
-                style={[styles.expenseTitle, { color: theme.colors.onSurface }]} 
+              <Text
+                style={[styles.expenseTitle, { color: theme.colors.onSurface }]}
                 numberOfLines={1}
               >
                 {expense.description}
               </Text>
-              
+
               <View style={styles.subDetailRow}>
-                 {/* Group Name */}
+                {/* Group Name */}
                 <Text style={[styles.groupName, { color: theme.colors.onSurfaceVariant }]}>
                   {groups.find(g => g.id === expense.group_id)?.name}
                 </Text>
@@ -154,7 +166,7 @@ const renderExpenseCard = (expense: any) => {
               >
                 {isPaidByMe ? '+' : '-'}₹{amountDisplay.toFixed(0)}
               </Text>
-              
+
               {/* Secondary Number: Total Bill */}
               <Text style={[styles.totalBillLabel, { color: theme.colors.onSurfaceDisabled }]}>
                 Total: ₹{expense.amount}
@@ -166,12 +178,57 @@ const renderExpenseCard = (expense: any) => {
     );
   };
   const renderSection = ({ item }: any) => {
-    const [date, expensesList] = item;
-    
+    const [weekKey, weekData] = item;
+
+    // Sort expenses within the week by date (newest first)
+    const sortedExpenses = [...weekData.expenses].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    // Group expenses by day within the week
+    const expensesByDay: { [key: string]: { label: string; expenses: any[] } } = {};
+
+    sortedExpenses.forEach(expense => {
+      const expenseDate = new Date(expense.date);
+      const dayKey = format(expenseDate, 'yyyy-MM-dd');
+
+      if (!expensesByDay[dayKey]) {
+        // Create smart day label
+        let dayLabel = '';
+        if (isToday(expenseDate)) {
+          dayLabel = 'Today';
+        } else if (isYesterday(expenseDate)) {
+          dayLabel = 'Yesterday';
+        } else {
+          dayLabel = format(expenseDate, 'EEEE'); // Full day name (e.g., "Monday")
+        }
+
+        expensesByDay[dayKey] = {
+          label: dayLabel,
+          expenses: []
+        };
+      }
+
+      expensesByDay[dayKey].expenses.push(expense);
+    });
+
+    // Sort days (newest first)
+    const sortedDays = Object.entries(expensesByDay).sort((a, b) => b[0].localeCompare(a[0]));
+
     return (
       <View style={styles.section}>
-        <Text style={[styles.sectionHeader, { color: theme.colors.onSurfaceVariant }]}>{date}</Text>
-        {expensesList.map(renderExpenseCard)}
+        <Text style={[styles.sectionHeader, { color: theme.colors.onSurfaceVariant }]}>
+          {weekData.label}
+        </Text>
+
+        {sortedDays.map(([dayKey, dayData]) => (
+          <View key={dayKey} style={styles.dayGroup}>
+            <Text style={[styles.dayLabel, { color: theme.colors.primary }]}>
+              {dayData.label}
+            </Text>
+            {dayData.expenses.map(renderExpenseCard)}
+          </View>
+        ))}
       </View>
     );
   };
@@ -186,7 +243,10 @@ const renderExpenseCard = (expense: any) => {
     </View>
   );
 
-  const sectionsData = Object.entries(groupedExpenses);
+  // Sort sections by week (newest first)
+  const sectionsData = Object.entries(groupedExpenses).sort(
+    (a, b) => b[0].localeCompare(a[0])
+  );
 
   // Show error state if there's an error and no expenses
   if (error && expenses.length === 0 && !loading) {
@@ -224,16 +284,16 @@ const renderExpenseCard = (expense: any) => {
             />
           }
         >
-          <Menu.Item onPress={() => {}} title="Filter by Category" />
-          <Menu.Item onPress={() => {}} title="Filter by Group" />
-          <Menu.Item onPress={() => {}} title="Date Range" />
+          <Menu.Item onPress={() => { }} title="Filter by Category" />
+          <Menu.Item onPress={() => { }} title="Filter by Group" />
+          <Menu.Item onPress={() => { }} title="Date Range" />
           <Divider />
-          <Menu.Item 
+          <Menu.Item
             onPress={() => {
               dispatch(clearFilters());
               setFilterMenuVisible(false);
-            }} 
-            title="Clear Filters" 
+            }}
+            title="Clear Filters"
           />
         </Menu>
       </View>
@@ -319,7 +379,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
- expenseCard: {
+  dayGroup: {
+    marginBottom: 16,
+  },
+  dayLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+    marginTop: 4,
+    textTransform: 'capitalize',
+  },
+  expenseCard: {
     marginBottom: 10,
     // backgroundColor: 'white',
     borderRadius: 16, // Softer corners
@@ -344,7 +414,7 @@ const styles = StyleSheet.create({
   emojiIcon: {
     fontSize: 24,
   },
-  
+
   // Middle: Details
   detailsContainer: {
     flex: 1,
@@ -360,6 +430,10 @@ const styles = StyleSheet.create({
   subDetailRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  expenseDate: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   groupName: {
     fontSize: 12,
@@ -514,5 +588,5 @@ const styles = StyleSheet.create({
   paidByLabel: {
     fontSize: 12,
   },
- 
+
 });

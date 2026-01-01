@@ -7,10 +7,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
-import { fetchGroup } from '../../store/slices/groupsSlice';
+import { fetchGroup, fetchGroupBalances } from '../../store/slices/groupsSlice';
 import { fetchExpenses, fetchSettlements, settleUp as settleUpAction } from '../../store/slices/expensesSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
-import { format } from 'date-fns';
+import { format, startOfWeek, endOfWeek, isToday, isYesterday } from 'date-fns';
 import { useTheme } from 'react-native-paper';
 import { CsvService } from '../../services/csv.service';
 
@@ -28,7 +28,7 @@ interface Props {
 export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
     const { groupId, userId, userName } = route.params;
     const theme = useTheme();
-    const { selectedGroup } = useGroups();
+    const { selectedGroup, balances } = useGroups();
     const { expenses, settlements } = useExpenses();
     const { profile } = useAuth();
     const { showToast } = useToast();
@@ -57,6 +57,7 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
                 dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
                 dispatch(fetchSettlements(groupId)).unwrap(),
                 dispatch(fetchGroup(groupId)).unwrap(),
+                dispatch(fetchGroupBalances(groupId)).unwrap(),
             ]);
         } catch (error) {
             ErrorHandler.handleError(error, showToast, 'Load Data');
@@ -99,38 +100,43 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
         return [...relevantExpenses, ...relevantSettlements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [expenses, settlements, profile, userId, otherUser]);
 
+    console.log('=== ALL TRANSACTIONS ===');
+    console.log('Transactions count:', allTransactions.length);
+    allTransactions.slice(0, 10).forEach((t, i) => {
+        const settledAt = t.type === 'settlement' ? t.settled_at : 'N/A';
+        console.log(`${i + 1}. ${t.type === 'settlement' ? 'SETTLEMENT' : 'EXPENSE'}: ${t.description || 'Payment'} - Date: ${t.date} - settled_at: ${settledAt}`);
+    });
+    console.log('========================');
+
     const pairwiseBalance = useMemo(() => {
         if (!profile) return 0;
 
-        let balance = 0; // Positive = They owe Me. Negative = I owe Them.
+        // Use the same logic as Group Details
+        const memberBalance = balances.find(b => b.user_id === userId);
 
-        allTransactions.forEach(item => {
-            if (item.type === 'expense') {
-                const expense = item as any;
-                if (expense.paid_by === profile.id) {
-                    const theirSplit = expense.splits?.find((s: any) => s.user_id === userId);
-                    if (theirSplit && !theirSplit.is_settled) balance += Number(theirSplit.amount);
-                } else if (expense.paid_by === userId) {
-                    const mySplit = expense.splits?.find((s: any) => s.user_id === profile.id);
-                    if (mySplit && !mySplit.is_settled) balance -= Number(mySplit.amount);
-                }
-            } else {
-                // Settlement
-                const settlement = item as any;
-                if (settlement.from_user === profile.id) {
-                    // I paid them -> +Balance (They owe me more / I owe less)
-                    // Wait. If I owe them 50 (Balance -50), and I pay 50.
-                    // Balance should go to 0. So +50. Correct.
-                    balance += Number(settlement.amount);
-                } else {
-                    // They paid me -> -Balance (They owe less)
-                    balance -= Number(settlement.amount);
-                }
-            }
-        });
+        console.log('=== BALANCE DEBUG ===');
+        console.log('userId:', userId);
+        console.log('profile.id:', profile.id);
+        console.log('memberBalance:', memberBalance);
+        console.log('All balances:', balances);
 
-        return balance;
-    }, [allTransactions, profile, userId]);
+        // Get settlements FROM them TO you (they paid you)
+        const settlementsReceived = settlements
+            .filter(s => s.from_user === userId && s.to_user === profile.id)
+            .reduce((sum, s) => sum + s.amount, 0);
+
+        console.log('Settlements from them to me:', settlementsReceived);
+        console.log('All settlements:', settlements);
+
+        // Add settlements because when they pay you, it reduces what you owe them
+        // If balance is -3928.83 (you owe them) and they paid you 3486, then -3928.83 + 3486 = -442.83
+        const adjustedBalance = memberBalance ? memberBalance.balance + settlementsReceived : settlementsReceived;
+
+        console.log('Final adjustedBalance:', adjustedBalance);
+        console.log('===================');
+
+        return adjustedBalance;
+    }, [balances, settlements, profile, userId]);
 
     // Get unsettled expenses where I paid (They owe me)
     const unsettledDebtsTheyOwe = useMemo(() => {
@@ -243,6 +249,59 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
         }
     };
 
+    // Group transactions by week and day
+    const groupedTransactions = useMemo(() => {
+        const grouped: { [weekKey: string]: { label: string; days: { [dayKey: string]: { label: string; transactions: any[] } } } } = {};
+
+        allTransactions.forEach(transaction => {
+            const transactionDate = new Date(transaction.date);
+            const weekStart = startOfWeek(transactionDate, { weekStartsOn: 1 });
+            const weekEnd = endOfWeek(transactionDate, { weekStartsOn: 1 });
+
+            const weekKey = format(weekStart, 'yyyy-MM-dd');
+            const weekLabel = `${format(weekStart, 'MMM dd')} - ${format(weekEnd, 'MMM dd, yyyy')}`;
+
+            if (!grouped[weekKey]) {
+                grouped[weekKey] = {
+                    label: weekLabel,
+                    days: {}
+                };
+            }
+
+            const dayKey = format(transactionDate, 'yyyy-MM-dd');
+            let dayLabel = '';
+            if (isToday(transactionDate)) {
+                dayLabel = 'Today';
+            } else if (isYesterday(transactionDate)) {
+                dayLabel = 'Yesterday';
+            } else {
+                dayLabel = format(transactionDate, 'EEEE');
+            }
+
+            if (!grouped[weekKey].days[dayKey]) {
+                grouped[weekKey].days[dayKey] = {
+                    label: dayLabel,
+                    transactions: []
+                };
+            }
+
+            grouped[weekKey].days[dayKey].transactions.push(transaction);
+        });
+
+        // Sort transactions within each day by date/time (newest first)
+        Object.values(grouped).forEach(week => {
+            Object.values(week.days).forEach(day => {
+                day.transactions.sort((a, b) => {
+                    const dateA = new Date(a.type === 'settlement' ? a.settled_at : a.date);
+                    const dateB = new Date(b.type === 'settlement' ? b.settled_at : b.date);
+                    return dateB.getTime() - dateA.getTime();
+                });
+            });
+        });
+
+        return grouped;
+    }, [allTransactions]);
+
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
@@ -305,60 +364,80 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
                         No shared activity yet.
                     </Text>
                 ) : (
-                    allTransactions.map((item: any) => {
-                        const isSettlement = item.type === 'settlement';
+                    Object.entries(groupedTransactions)
+                        .sort((a, b) => b[0].localeCompare(a[0])) // Sort weeks newest first
+                        .map(([weekKey, weekData]) => (
+                            <View key={weekKey} style={styles.weekSection}>
+                                <Text style={[styles.weekHeader, { color: theme.colors.onSurfaceVariant }]}>
+                                    {weekData.label}
+                                </Text>
 
-                        if (isSettlement) {
-                            const iPaid = item.from_user === profile?.id;
-                            return (
-                                <Card key={`settle_${item.id}`} style={[styles.expenseCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-                                    <Card.Content style={styles.expenseContent}>
-                                        <View style={styles.expenseMain}>
-                                            <Text style={[styles.expenseDesc, { color: theme.colors.onSurface }]}>Payment</Text>
-                                            <Text style={[styles.expenseDate, { color: theme.colors.onSurfaceVariant }]}>
-                                                {format(new Date(item.settled_at), 'MMM dd')} • {iPaid ? 'You paid' : `${otherUser.full_name} paid`}
+                                {Object.entries(weekData.days)
+                                    .sort((a, b) => b[0].localeCompare(a[0])) // Sort days newest first
+                                    .map(([dayKey, dayData]) => (
+                                        <View key={dayKey} style={styles.daySection}>
+                                            <Text style={[styles.dayHeader, { color: theme.colors.primary }]}>
+                                                {dayData.label}
                                             </Text>
-                                        </View>
-                                        <View>
-                                            <Text style={[
-                                                styles.expenseAmount,
-                                                iPaid ? styles.positive : styles.negative
-                                            ]}>
-                                                {iPaid ? 'sent' : 'received'} ₹{item.amount}
-                                            </Text>
-                                        </View>
-                                    </Card.Content>
-                                </Card>
-                            );
-                        }
 
-                        // Expense
-                        const expense = item;
-                        const iPaid = expense.paid_by === profile?.id;
-                        const split = expense.splits?.find((s: any) => s.user_id === (iPaid ? userId : profile?.id));
-                        const amount = split ? split.amount : 0;
+                                            {dayData.transactions.map((item: any) => {
+                                                const isSettlement = item.type === 'settlement';
 
-                        return (
-                            <Card key={expense.id} style={styles.expenseCard} onPress={() => navigation.navigate('ExpenseDetails', { expenseId: expense.id })}>
-                                <Card.Content style={styles.expenseContent}>
-                                    <View style={styles.expenseMain}>
-                                        <Text style={[styles.expenseDesc, { color: theme.colors.onSurface }]}>{expense.description}</Text>
-                                        <Text style={[styles.expenseDate, { color: theme.colors.onSurfaceVariant }]}>
-                                            {format(new Date(expense.date), 'MMM dd')} • {iPaid ? 'You paid' : `${otherUser.full_name} paid`}
-                                        </Text>
-                                    </View>
-                                    <View>
-                                        <Text style={[
-                                            styles.expenseAmount,
-                                            iPaid ? styles.positive : styles.negative
-                                        ]}>
-                                            {iPaid ? 'lens' : 'borrows'} ₹{amount}
-                                        </Text>
-                                    </View>
-                                </Card.Content>
-                            </Card>
-                        );
-                    })
+                                                if (isSettlement) {
+                                                    const iPaid = item.from_user === profile?.id;
+                                                    return (
+                                                        <Card key={`settle_${item.id}`} style={[styles.expenseCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                                                            <Card.Content style={styles.expenseContent}>
+                                                                <View style={styles.expenseMain}>
+                                                                    <Text style={[styles.expenseDesc, { color: theme.colors.onSurface }]}>Payment</Text>
+                                                                    <Text style={[styles.expenseSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                                                                        {iPaid ? 'You paid' : `${otherUser.full_name} paid`}
+                                                                    </Text>
+                                                                </View>
+                                                                <View>
+                                                                    <Text style={[
+                                                                        styles.expenseAmount,
+                                                                        iPaid ? styles.positive : styles.negative
+                                                                    ]}>
+                                                                        {iPaid ? 'sent' : 'received'} ₹{item.amount}
+                                                                    </Text>
+                                                                </View>
+                                                            </Card.Content>
+                                                        </Card>
+                                                    );
+                                                }
+
+                                                // Expense
+                                                const expense = item;
+                                                const iPaid = expense.paid_by === profile?.id;
+                                                const split = expense.splits?.find((s: any) => s.user_id === (iPaid ? userId : profile?.id));
+                                                const amount = split ? split.amount : 0;
+
+                                                return (
+                                                    <Card key={expense.id} style={styles.expenseCard} onPress={() => navigation.navigate('ExpenseDetails', { expenseId: expense.id })}>
+                                                        <Card.Content style={styles.expenseContent}>
+                                                            <View style={styles.expenseMain}>
+                                                                <Text style={[styles.expenseDesc, { color: theme.colors.onSurface }]}>{expense.description}</Text>
+                                                                <Text style={[styles.expenseSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                                                                    {iPaid ? 'You paid' : `${otherUser.full_name} paid`}
+                                                                </Text>
+                                                            </View>
+                                                            <View>
+                                                                <Text style={[
+                                                                    styles.expenseAmount,
+                                                                    iPaid ? styles.positive : styles.negative
+                                                                ]}>
+                                                                    {iPaid ? 'lens' : 'borrows'} ₹{amount}
+                                                                </Text>
+                                                            </View>
+                                                        </Card.Content>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </View>
+                                    ))}
+                            </View>
+                        ))
                 )}
             </ScrollView>
 
@@ -450,11 +529,28 @@ const styles = StyleSheet.create({
     neutral: { color: '#666' },
     sectionHeader: { marginBottom: 12 },
     sectionTitle: { fontSize: 18, fontWeight: 'bold' },
+    weekSection: { marginBottom: 24 },
+    weekHeader: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 12,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5
+    },
+    daySection: { marginBottom: 16 },
+    dayHeader: {
+        fontSize: 13,
+        fontWeight: '700',
+        marginBottom: 8,
+        marginTop: 4,
+        textTransform: 'capitalize'
+    },
     expenseCard: { marginBottom: 8 },
     expenseContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     expenseMain: { flex: 1 },
     expenseDesc: { fontSize: 16, fontWeight: '500' },
     expenseDate: { fontSize: 12 },
+    expenseSubtext: { fontSize: 12, marginTop: 2 },
     expenseAmount: { fontSize: 16, fontWeight: 'bold' },
     modal: { padding: 24, margin: 20, borderRadius: 8 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
