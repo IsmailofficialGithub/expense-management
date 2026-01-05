@@ -695,7 +695,7 @@ export const invitationService = {
                       <table role="presentation" style="width: 100%;">
                         <tr>
                           <td style="text-align: center; padding: 0;">
-                            <a href="https://github.com/IsmailofficialGithub/expense-management/releases/tag/1.0" style="display: inline-block; background-color: #FF9800; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; font-size: 14px; text-align: center;">
+                            <a href="https://github.com/IsmailofficialGithub/expense-management/releases/download/1.0/expense-management.apk" style="display: inline-block; background-color: #FF9800; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; font-size: 14px; text-align: center;">
                               Download App
                             </a>
                           </td>
