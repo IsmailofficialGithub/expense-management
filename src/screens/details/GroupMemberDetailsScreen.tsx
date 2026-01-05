@@ -43,7 +43,7 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
     const [settleNotes, setSettleNotes] = useState('');
 
     const otherUser = useMemo(() => {
-        return selectedGroup?.members?.find((m: any) => m.user_id === userId)?.user || { full_name: userName || 'User', email: '', id: userId };
+        return selectedGroup?.members?.find((m: any) => m.user_id === userId)?.user || { full_name: userName || 'User', email: '', id: userId, avatar_url: null };
     }, [selectedGroup, userId, userName]);
 
     useEffect(() => {
@@ -73,13 +73,16 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
     const allTransactions = useMemo(() => {
         if (!profile) return [];
 
-        // Expenses where (I paid & They split) OR (They paid & I split)
+        // Expenses where both users are involved (I paid and they split, OR they paid and I split)
         const relevantExpenses = expenses.filter(expense => {
             const iPaid = expense.paid_by === profile.id;
-            const theyAreSplit = expense.splits?.some((s: any) => s.user_id === userId);
             const theyPaid = expense.paid_by === userId;
-            const iAmSplit = expense.splits?.some((s: any) => s.user_id === profile.id);
-            return (iPaid && theyAreSplit) || (theyPaid && iAmSplit);
+            
+            // Check if they have a split when I paid, or I have a split when they paid
+            const theyHaveSplit = expense.splits?.some((s: any) => s.user_id === userId);
+            const iHaveSplit = expense.splits?.some((s: any) => s.user_id === profile.id);
+            
+            return (iPaid && theyHaveSplit) || (theyPaid && iHaveSplit);
         }).map(e => ({ ...e, type: 'expense' as const }));
 
         // Settlements where (I paid them) OR (They paid me)
@@ -106,37 +109,61 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
         const settledAt = t.type === 'settlement' ? t.settled_at : 'N/A';
         console.log(`${i + 1}. ${t.type === 'settlement' ? 'SETTLEMENT' : 'EXPENSE'}: ${t.description || 'Payment'} - Date: ${t.date} - settled_at: ${settledAt}`);
     });
-    console.log('========================');
 
     const pairwiseBalance = useMemo(() => {
         if (!profile) return 0;
 
-        // Use the same logic as Group Details
-        const memberBalance = balances.find(b => b.user_id === userId);
+        // Calculate balance based on filtered transactions (only between these two users)
+        let calculatedBalance = 0;
+
+
+        // Calculate from expenses - include ALL expenses where both are involved (settled and unsettled)
+        expenses.forEach(expense => {
+            const iPaid = expense.paid_by === profile.id;
+            const theyPaid = expense.paid_by === userId;
+
+            if (iPaid) {
+                // I paid - check if they have a split
+                const theirSplit = expense.splits?.find((s: any) => s.user_id === userId);
+                if (theirSplit) {
+                    calculatedBalance += theirSplit.amount; // Positive = they owe me
+                }
+            } else if (theyPaid) {
+                // They paid - check if I have a split
+                const mySplit = expense.splits?.find((s: any) => s.user_id === profile.id);
+                if (mySplit) {
+                    calculatedBalance -= mySplit.amount; // Negative = I owe them
+                }
+            }
+        });
+
+        // Adjust for settlements between us two
+        const settlementsReceived = settlements
+            .filter(s => s.from_user === userId && s.to_user === profile.id)  // They paid you
+            .reduce((sum, s) => sum + s.amount, 0);
+
+        const settlementsPaid = settlements
+            .filter(s => s.from_user === profile.id && s.to_user === userId)  // You paid them
+            .reduce((sum, s) => sum + s.amount, 0);
 
         console.log('=== BALANCE DEBUG ===');
         console.log('userId:', userId);
         console.log('profile.id:', profile.id);
-        console.log('memberBalance:', memberBalance);
-        console.log('All balances:', balances);
-
-        // Get settlements FROM them TO you (they paid you)
-        const settlementsReceived = settlements
-            .filter(s => s.from_user === userId && s.to_user === profile.id)
-            .reduce((sum, s) => sum + s.amount, 0);
-
+        console.log('Calculated balance from expenses:', calculatedBalance);
         console.log('Settlements from them to me:', settlementsReceived);
-        console.log('All settlements:', settlements);
+        console.log('Settlements from me to them:', settlementsPaid);
 
-        // Add settlements because when they pay you, it reduces what you owe them
-        // If balance is -3928.83 (you owe them) and they paid you 3486, then -3928.83 + 3486 = -442.83
-        const adjustedBalance = memberBalance ? memberBalance.balance + settlementsReceived : settlementsReceived;
+        // When you owe them (negative balance), paying them (settlementsPaid) reduces the debt
+        // Example: You owe -4000, you pay 3701.5 → -4000 + 3701.5 = -298.5 (still owe 298.5)
+        // When they owe you (positive balance), they pay you (settlementsReceived) reduces what they owe
+        // Example: They owe +1000, they pay 500 → +1000 - 500 = +500 (still owe you 500)
+        const adjustedBalance = calculatedBalance - settlementsReceived + settlementsPaid;
 
         console.log('Final adjustedBalance:', adjustedBalance);
         console.log('===================');
 
         return adjustedBalance;
-    }, [balances, settlements, profile, userId]);
+    }, [expenses, settlements, profile, userId]);
 
     // Get unsettled expenses where I paid (They owe me)
     const unsettledDebtsTheyOwe = useMemo(() => {
@@ -177,8 +204,8 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
 
             await dispatch(settleUpAction({
                 group_id: groupId,
-                from_user: profile!.id,
-                to_user: userId,
+                from_user: profile!.id,  // You are paying
+                to_user: userId,  // They are receiving
                 amount: amount,
                 notes: settleNotes || undefined,
                 related_expense_ids: relatedIds // Mark my debts as settled
@@ -307,11 +334,19 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
             <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
 
             <View style={styles.profileHeader}>
-                <Avatar.Text
-                    size={80}
-                    label={otherUser?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                    style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
-                />
+                {otherUser?.avatar_url ? (
+                    <Avatar.Image
+                        size={80}
+                        source={{ uri: otherUser.avatar_url }}
+                        style={styles.avatar}
+                    />
+                ) : (
+                    <Avatar.Text
+                        size={80}
+                        label={otherUser?.full_name?.substring(0, 2).toUpperCase() || 'U'}
+                        style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+                    />
+                )}
                 <Text style={[styles.userName, { color: theme.colors.onSurface }]}>{otherUser?.full_name || 'User'}</Text>
                 <Text style={[styles.userEmail, { color: theme.colors.onSurfaceVariant }]}>{otherUser?.email}</Text>
             </View>
@@ -323,26 +358,26 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
                 <Card style={styles.card}>
                     <Card.Content style={styles.balanceContainer}>
                         <Text style={[styles.balanceLabel, { color: theme.colors.onSurfaceVariant }]}>
-                            {pairwiseBalance > 0 ? "Owes you" : pairwiseBalance < 0 ? "You owe" : "Settled up"}
+                            {pairwiseBalance > 0 ? "You are owed" : pairwiseBalance < 0 ? "You owe" : "Settled up"}
                         </Text>
                         <Text style={[
                             styles.balanceAmount,
                             pairwiseBalance > 0 ? styles.positive : pairwiseBalance < 0 ? styles.negative : styles.neutral
                         ]}>
-                            ₹{Math.abs(pairwiseBalance).toFixed(2)}
+                            {pairwiseBalance < 0 ? '₹-' : '₹'}{Math.abs(pairwiseBalance).toFixed(2)}
                         </Text>
 
                         <View style={styles.actionButtons}>
-                            {pairwiseBalance < -0.01 && (
-                                <Button mode="contained" onPress={openSettleModal} style={styles.button}>
-                                    Settle Up
-                                </Button>
-                            )}
-                            {pairwiseBalance > 0.01 && (
-                                <Button mode="contained" onPress={openReceiveModal} style={styles.button} buttonColor={theme.colors.primary}>
-                                    Mark Settled
-                                </Button>
-                            )}
+                            {/* {pairwiseBalance < -0.01 && (
+                            // )} */}
+                            <Button mode="contained" onPress={openSettleModal} style={styles.button}>
+                                Settle Up
+                            </Button>
+                            <Button mode="contained" onPress={openReceiveModal} style={styles.button} buttonColor={theme.colors.primary}>
+                                Mark Settled
+                            </Button>
+                            {/* {pairwiseBalance > 0.01 && (
+                            )} */}
                             <Button
                                 mode="outlined"
                                 icon="download"
@@ -389,17 +424,19 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
                                                         <Card key={`settle_${item.id}`} style={[styles.expenseCard, { backgroundColor: theme.colors.surfaceVariant }]}>
                                                             <Card.Content style={styles.expenseContent}>
                                                                 <View style={styles.expenseMain}>
-                                                                    <Text style={[styles.expenseDesc, { color: theme.colors.onSurface }]}>Payment</Text>
-                                                                    <Text style={[styles.expenseSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                                                                    <Text style={[styles.expenseDesc, { color: theme.colors.onSurface }]}>
                                                                         {iPaid ? 'You paid' : `${otherUser.full_name} paid`}
+                                                                    </Text>
+                                                                    <Text style={[styles.expenseSubtext, { color: theme.colors.onSurfaceVariant }]}>
+                                                                        Payment
                                                                     </Text>
                                                                 </View>
                                                                 <View>
                                                                     <Text style={[
                                                                         styles.expenseAmount,
-                                                                        iPaid ? styles.positive : styles.negative
+                                                                        styles.neutral
                                                                     ]}>
-                                                                        {iPaid ? 'sent' : 'received'} ₹{item.amount}
+                                                                        Settled ₹{item.amount}
                                                                     </Text>
                                                                 </View>
                                                             </Card.Content>
@@ -467,7 +504,7 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
 
                     <View style={styles.modalActions}>
                         <Button onPress={() => setSettleModalVisible(false)} disabled={isProcessing}>Cancel</Button>
-                        <Button mode="contained" onPress={handleSettleUp} loading={isProcessing} disabled={isProcessing}>
+                        <Button mode="contained" onPress={handleSettleUp} loading={isProcessing} disabled={!isProcessing}>
                             PAY ₹{settleAmount || '0'}
                         </Button>
                     </View>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar, TouchableOpacity } from 'react-native';
 import { Text, Card, Avatar, Button, IconButton, Chip, Divider, FAB, Portal, Modal, TextInput, HelperText, List } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
 import { useExpenses } from '../../hooks/useExpenses';
@@ -49,6 +49,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [memberEmail, setMemberEmail] = useState('');
   const [errors, setErrors] = useState({ name: '', email: '' });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'my'>('all'); // Tab state
 
   useFocusEffect(
     useCallback(() => {
@@ -420,12 +421,12 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
           </Card>
         )}
 
-        {/* Members Section */}
+
+        {/* Members Section with Tabs */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Members</Text>
             <View style={{ display: 'flex', flexDirection: 'row' }}>
-
               <IconButton
                 icon="account-plus"
                 size={24}
@@ -446,70 +447,182 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             </View>
           </View>
 
-          {selectedGroup.members?.map((member) => {
-            const memberBalance = balances.find(b => b.user_id === member.user_id);
-            const isCurrentUser = member.user_id === profile?.id;
+          {/* Tab Buttons */}
+          <View style={styles.tabContainer}>
+            <Button
+              mode={activeTab === 'all' ? 'contained' : 'outlined'}
+              onPress={() => setActiveTab('all')}
+              style={[styles.tabButton, activeTab === 'all' && { backgroundColor: theme.colors.primary }]}
+              compact
+            >
+              All Members
+            </Button>
+            <Button
+              mode={activeTab === 'my' ? 'contained' : 'outlined'}
+              onPress={() => setActiveTab('my')}
+              style={[styles.tabButton, activeTab === 'my' && { backgroundColor: theme.colors.primary }]}
+              compact
+            >
+              My Transactions
+            </Button>
+          </View>
 
-            const settlementsGiven = settlements
-              .filter(s => s.from_user === member.user_id && s.group_id === groupId)
-              .reduce((sum, s) => sum + s.amount, 0);
+          {/* Tab Content */}
+          {activeTab === 'all' ? (
+            // All Members Tab
+            selectedGroup.members?.map((member) => {
+              const memberBalance = balances.find(b => b.user_id === member.user_id);
+              const isCurrentUser = member.user_id === profile?.id;
 
-            const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
+              const settlementsGiven = settlements
+                .filter(s => s.from_user === member.user_id && s.group_id === groupId)
+                .reduce((sum, s) => sum + s.amount, 0);
 
-            return (
-              <Card
-                key={member.id}
-                style={styles.memberCard}
-                onPress={() => navigation.navigate('GroupMemberDetails', {
-                  groupId: groupId,
-                  userId: member.user_id,
-                  userName: member.user?.full_name
-                })}
-              >
-                <Card.Content style={styles.memberContent}>
-                  <View style={styles.memberLeft}>
-                    <Avatar.Text
-                      size={40}
-                      label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                    />
-                    <View style={styles.memberInfo}>
-                      <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
-                        {member.user?.full_name || 'Unknown'}
-                        {isCurrentUser && ' (You)'}
-                      </Text>
-                      <Text style={[styles.memberEmail, { color: theme.colors.onSurfaceVariant }]}>{member.user?.email}</Text>
-                    </View>
-                  </View>
+              const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
 
-                  <View style={styles.memberRight}>
-                    {memberBalance && (
-                      <Text
-                        style={[
-                          styles.memberBalance,
-                          adjustedBalance > 0
-                            ? styles.positiveBalance
-                            : adjustedBalance < 0
-                              ? styles.negativeBalance
-                              : styles.neutralBalance,
-                        ]}
-                      >
-                        ₹{adjustedBalance.toFixed(2)}
-                      </Text>
-                    )}
-                    {isAdmin && !isCurrentUser && (
-                      <IconButton
-                        icon="close"
-                        size={20}
-                        onPress={() =>
-                          handleRemoveMember(member.user_id, member.user?.full_name || 'User')
-                        }
+              return (
+                <Card
+                  key={member.id}
+                  style={styles.memberCard}
+                >
+                  <Card.Content style={styles.memberContent}>
+                    <TouchableOpacity
+                      style={styles.memberLeft}
+                      onPress={() => navigation.navigate('GroupMemberDetails', {
+                        groupId: groupId,
+                        userId: member.user_id,
+                        userName: member.user?.full_name
+                      })}
+                    >
+                      <Avatar.Text
+                        size={40}
+                        label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
                       />
-                    )}
-                  </View>
-                </Card.Content>
-              </Card>
-            );
-          })}
+                      <View style={styles.memberInfo}>
+                        <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
+                          {member.user?.full_name || 'Unknown'}
+                          {isCurrentUser && ' (You)'}
+                        </Text>
+                        <Text style={[styles.memberEmail, { color: theme.colors.onSurfaceVariant }]}>{member.user?.email}</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <View style={styles.memberRight}>
+                      {memberBalance && (
+                        <Text
+                          style={[
+                            styles.memberBalance,
+                            adjustedBalance > 0
+                              ? styles.positiveBalance
+                              : adjustedBalance < 0
+                                ? styles.negativeBalance
+                                : styles.neutralBalance,
+                          ]}
+                        >
+                          ₹{adjustedBalance.toFixed(2)}
+                        </Text>
+                      )}
+                      {isAdmin && !isCurrentUser && (
+                        <IconButton
+                          icon="close"
+                          size={20}
+                          onPress={() => handleRemoveMember(member.user_id, member.user?.full_name || 'User')}
+                        />
+                      )}
+                    </View>
+                  </Card.Content>
+                </Card>
+              );
+            })
+          ) : (
+            // My Transactions Tab
+            selectedGroup.members
+              ?.filter(member => member.user_id !== profile?.id) // Exclude current user
+              .map((member) => {
+                // Calculate pairwise balance between current user and this member
+                let pairwiseBalance = 0;
+
+                // Calculate from expenses - include ALL expenses where both are involved
+                expenses.forEach(expense => {
+                  const iPaid = expense.paid_by === profile?.id;
+                  const theyPaid = expense.paid_by === member.user_id;
+
+                  if (iPaid) {
+                    // I paid - check if they have an unsettled split
+                    const theirSplit = expense.splits?.find((s: any) => s.user_id === member.user_id);
+                    if (theirSplit && !theirSplit.is_settled) {
+                      pairwiseBalance += theirSplit.amount; // Positive = they owe me
+                    }
+                  } else if (theyPaid) {
+                    // They paid - check if I have an unsettled split
+                    const mySplit = expense.splits?.find((s: any) => s.user_id === profile?.id);
+                    if (mySplit && !mySplit.is_settled) {
+                      pairwiseBalance -= mySplit.amount; // Negative = I owe them
+                    }
+                  }
+                });
+
+                // Adjust for settlements between us two
+                const settlementsReceived = settlements
+                  .filter(s => s.from_user === member.user_id && s.to_user === profile?.id)
+                  .reduce((sum, s) => sum + s.amount, 0);
+
+                const settlementsPaid = settlements
+                  .filter(s => s.from_user === profile?.id && s.to_user === member.user_id)
+                  .reduce((sum, s) => sum + s.amount, 0);
+
+                pairwiseBalance = pairwiseBalance + settlementsReceived - settlementsPaid;
+
+                return (
+                  <Card
+                    key={member.id}
+                    style={styles.memberCard}
+                    onPress={() => navigation.navigate('GroupMemberDetails', {
+                      groupId: groupId,
+                      userId: member.user_id,
+                      userName: member.user?.full_name
+                    })}
+                  >
+                    <Card.Content style={styles.memberContent}>
+                      <View style={styles.memberLeft}>
+                        <Avatar.Text
+                          size={40}
+                          label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
+                        />
+                        <View style={styles.memberInfo}>
+                          <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
+                            {member.user?.full_name || 'Unknown'}
+                          </Text>
+                          <Text style={[styles.memberEmail, { color: theme.colors.onSurfaceVariant }]}>
+                            {pairwiseBalance > 0 
+                              ? `Owes you ₹${pairwiseBalance.toFixed(2)}` 
+                              : pairwiseBalance < 0 
+                                ? `You owe ₹${Math.abs(pairwiseBalance).toFixed(2)}`
+                                : 'Settled up'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.memberRight}>
+                        <Text
+                          style={[
+                            styles.memberBalance,
+                            pairwiseBalance > 0
+                              ? styles.positiveBalance
+                              : pairwiseBalance < 0
+                                ? styles.negativeBalance
+                                : styles.neutralBalance,
+                          ]}
+                        >
+                          ₹{pairwiseBalance.toFixed(2)}
+                        </Text>
+                      </View>
+                    </Card.Content>
+                  </Card>
+                );
+              })
+          )}
+
         </View>
 
         {/* Bulk Payment Features */}
@@ -841,6 +954,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  tabButton: {
+    flex: 1,
   },
   memberCard: {
     marginBottom: 8,

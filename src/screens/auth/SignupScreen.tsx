@@ -1,4 +1,3 @@
-// src/screens/auth/SignupScreen.tsx
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Dimensions, TouchableOpacity } from 'react-native';
 import { TextInput, Text, HelperText, useTheme } from 'react-native-paper';
@@ -102,13 +101,15 @@ export default function SignupScreen({ navigation, route }: Props) {
       })).unwrap();
 
       if (result.requiresVerification) {
-        showToast(
-          'Account created! Please check your email to verify your account.',
-          'success'
-        );
-        navigation.navigate('Login');
+        // Navigate to login with verification message
+        showToast('Account created successfully!', 'success');
+        navigation.navigate('Login', {
+          verificationEmail: email,
+          showVerificationMessage: true,
+        });
       } else {
         showToast('Account created successfully!', 'success');
+        navigation.navigate('Login');
       }
     } catch (err) {
       console.error('Signup failed:', err);

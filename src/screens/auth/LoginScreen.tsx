@@ -1,7 +1,7 @@
 // src/screens/auth/LoginScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Dimensions, TouchableOpacity } from 'react-native';
-import { TextInput, Text, Headline, HelperText, useTheme } from 'react-native-paper';
+import { TextInput, Text, Headline, HelperText, useTheme, IconButton } from 'react-native-paper';
 import { useAppDispatch } from '../../store';
 import { signIn } from '../../store/slices/authSlice';
 import { useAuth } from '../../hooks/useAuth';
@@ -18,23 +18,39 @@ type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, '
 
 interface Props {
   navigation: LoginScreenNavigationProp;
+  route?: {
+    params?: {
+      verificationEmail?: string;
+      showVerificationMessage?: boolean;
+    };
+  };
 }
 
 const { width } = Dimensions.get('window');
 const HEADER_HEIGHT = 280;
 
-export default function LoginScreen({ navigation }: Props) {
+export default function LoginScreen({ navigation, route }: Props) {
   const theme = useTheme();
-  const [email, setEmail] = useState('');
+  const verificationEmail = route?.params?.verificationEmail;
+  const showVerificationMessage = route?.params?.showVerificationMessage;
+  
+  const [email, setEmail] = useState(verificationEmail || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
+  const [showVerificationBanner, setShowVerificationBanner] = useState(showVerificationMessage || false);
 
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
   const { error } = useAuth();
+
+  useEffect(() => {
+    if (showVerificationMessage && verificationEmail) {
+      showToast(`Verification email sent to ${verificationEmail}`, 'success');
+    }
+  }, []);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -112,6 +128,29 @@ export default function LoginScreen({ navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {showVerificationBanner && verificationEmail && (
+            <View style={styles.verificationBanner}>
+              <View style={styles.verificationContent}>
+                <Text style={styles.verificationIcon}>✉️</Text>
+                <View style={styles.verificationTextContainer}>
+                  <Text style={styles.verificationTitle}>Verification Email Sent!</Text>
+                  <Text style={styles.verificationMessage}>
+                    We've sent a verification link to{' '}
+                    <Text style={styles.verificationEmail}>{verificationEmail}</Text>
+                  </Text>
+                  <Text style={styles.verificationInstruction}>
+                    Please check your inbox and click the link to verify your account before logging in.
+                  </Text>
+                </View>
+                <IconButton
+                  icon="close"
+                  size={20}
+                  onPress={() => setShowVerificationBanner(false)}
+                  style={styles.closeButton}
+                />
+              </View>
+            </View>
+          )}
           <View style={styles.card}>
 
             <View style={styles.inputContainer}>
@@ -314,5 +353,50 @@ const styles = StyleSheet.create({
     color: '#0072FF',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  verificationBanner: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+    overflow: 'hidden',
+  },
+  verificationContent: {
+    flexDirection: 'row',
+    padding: 16,
+    alignItems: 'flex-start',
+  },
+  verificationIcon: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  verificationTextContainer: {
+    flex: 1,
+  },
+  verificationTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1565C0',
+    marginBottom: 6,
+  },
+  verificationMessage: {
+    fontSize: 14,
+    color: '#1976D2',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  verificationEmail: {
+    fontWeight: 'bold',
+    color: '#0D47A1',
+  },
+  verificationInstruction: {
+    fontSize: 13,
+    color: '#1976D2',
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  closeButton: {
+    margin: 0,
   },
 });

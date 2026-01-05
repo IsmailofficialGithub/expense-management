@@ -20,22 +20,61 @@ export default function ShareHandlerScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (hasShareIntent && shareIntent.files && shareIntent.files.length > 0) {
-      const uri = shareIntent.files[0].path;
+    console.log('ShareHandler - hasShareIntent:', hasShareIntent);
+    console.log('ShareHandler - shareIntent:', JSON.stringify(shareIntent, null, 2));
+    console.log('ShareHandler - error:', error);
+    
+    if (hasShareIntent && shareIntent) {
+      // Try to extract URI from different possible locations
+      let uri: string | null = null;
+      
+      // Check files array
+      if (shareIntent.files && shareIntent.files.length > 0) {
+        const file = shareIntent.files[0] as any;
+        console.log('ShareHandler - file object:', JSON.stringify(file, null, 2));
+        
+        // Try different possible properties
+        uri = file.path || file.uri || file.url || file.webPath || null;
+      }
+      
+      // Check if there's a direct URI property
+      if (!uri && (shareIntent as any).uri) {
+        uri = (shareIntent as any).uri;
+      }
+      
+      // Check if there's a direct url property
+      if (!uri && (shareIntent as any).url) {
+        uri = (shareIntent as any).url;
+      }
+      
+      // Check text property (might contain file path)
+      if (!uri && shareIntent.text) {
+        console.log('ShareHandler - text property:', shareIntent.text);
+        // Sometimes the URI is in the text field
+        if (shareIntent.text.startsWith('file://') || shareIntent.text.startsWith('content://')) {
+          uri = shareIntent.text;
+        }
+      }
+      
+      console.log('ShareHandler - extracted URI:', uri);
+      
       if (uri) {
         setSharedImageUri(uri);
         setLoading(false);
       } else {
+        console.warn('ShareHandler - No URI found in share intent');
         setLoading(false);
       }
     } else if (error) {
       console.error('Share intent error:', error);
       setLoading(false);
     } else if (initialized && !hasShareIntent) {
-      // If we've initialized and there's no share intent, maybe we were opened normally?
-      // Wait a bit just in case it takes time to populate
+      // If we've initialized and there's no share intent, wait a bit
       const timer = setTimeout(() => {
-        if (!hasShareIntent) setLoading(false);
+        if (!hasShareIntent) {
+          console.log('ShareHandler - No share intent after timeout');
+          setLoading(false);
+        }
       }, 1000);
       return () => clearTimeout(timer);
     }

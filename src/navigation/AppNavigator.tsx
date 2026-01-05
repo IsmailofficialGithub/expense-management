@@ -120,17 +120,27 @@ function MainNavigator() {
 export default function AppNavigator() {
   const { isAuthenticated, initialized, isPasswordReset } = useAuth();
 
+  console.log('🟢 [APP NAV] Render - isAuthenticated:', isAuthenticated, 'initialized:', initialized, 'isPasswordReset:', isPasswordReset);
+
   // Use a local state to ensure Splash is shown for a minimum time if needed,
   // but let initialized be the main driver.
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
+    console.log('🟢 [APP NAV] useEffect triggered - initialized:', initialized);
     if (initialized) {
+      console.log('🟢 [APP NAV] App initialized, hiding splash in 1500ms...');
       // Small delay to allow the splash animation to be seen
       const timer = setTimeout(() => {
+        console.log('✅ [APP NAV] Hiding splash screen now');
         setShowSplash(false);
       }, 1500);
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('🟢 [APP NAV] Cleanup timer');
+        clearTimeout(timer);
+      };
+    } else {
+      console.log('⏳ [APP NAV] Waiting for initialization...');
     }
   }, [initialized]);
 
