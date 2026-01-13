@@ -7,6 +7,7 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  TouchableOpacity,
 } from "react-native";
 import {
   Text,
@@ -170,6 +171,26 @@ export default function DashboardScreen({ navigation }: any) {
 
   // Get recent personal transactions (last 5)
   const recentPersonalTransactions = transactions.slice(0, 5);
+
+  // Calculate expenses by category for Expense Cards section
+  const expensesByCategory = expenses.reduce((acc: any, exp: any) => {
+    const categoryName = exp.category?.name || 'Other';
+    if (!acc[categoryName]) {
+      acc[categoryName] = {
+        name: categoryName,
+        icon: exp.category?.icon || '💰',
+        amount: 0,
+        color: exp.category?.color || theme.colors.primary,
+      };
+    }
+    acc[categoryName].amount += Number(exp.amount);
+    return acc;
+  }, {});
+
+  // Get top 4 expense categories
+  const topExpenseCategories = Object.values(expensesByCategory)
+    .sort((a: any, b: any) => b.amount - a.amount)
+    .slice(0, 4) as any[];
 
   const showBalanceInfo = () => {
     Alert.alert(
@@ -417,10 +438,54 @@ export default function DashboardScreen({ navigation }: any) {
         </Card.Content>
       </Card>
 
+      {/* Expense Cards Section */}
+      {topExpenseCategories.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Expense Cards</Text>
+          </View>
+          <View style={styles.expenseCardsGrid}>
+            {topExpenseCategories.map((category, index) => {
+              // Use solid theme colors
+              const cardColors = [
+                theme.colors.primary,
+                theme.colors.secondary,
+                theme.colors.tertiary || theme.colors.primaryContainer,
+                theme.colors.primaryContainer,
+              ];
+              const cardColor = cardColors[index % cardColors.length];
+              
+              return (
+                <TouchableOpacity
+                  key={category.name}
+                  activeOpacity={0.9}
+                  onPress={() => navigation.navigate("Expenses", { categoryFilter: category.name })}
+                  style={[
+                    styles.expenseCardItem,
+                    index === 0 && styles.expenseCardLarge,
+                    { backgroundColor: cardColor },
+                  ]}
+                >
+                  <View style={styles.expenseCardContent}>
+                    <Text style={styles.expenseCardIcon}>{category.icon}</Text>
+                    <Text style={styles.expenseCardName} numberOfLines={1}>
+                      {category.name}
+                    </Text>
+                    <Text style={styles.expenseCardAmount}>
+                      PKR {category.amount.toFixed(0)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* My Groups Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>My Groups</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Groups</Text>
           <Button
             mode="text"
             onPress={() => navigation.navigate("Groups")}
@@ -445,31 +510,60 @@ export default function DashboardScreen({ navigation }: any) {
             </Card.Content>
           </Card>
         ) : (
-          groups.slice(0, 3).map((group) => (
-            <Card
-              key={group.id}
-              style={styles.groupCard}
-              onPress={() => {
-                navigation.navigate("GroupDetails", { groupId: group.id });
-              }}
-            >
-              <Card.Content style={styles.groupContent}>
-                <View style={styles.groupInfo}>
-                  <Avatar.Text
-                    size={40}
-                    label={group.name.substring(0, 2).toUpperCase()}
-                  />
-                  <View style={styles.groupText}>
-                    <Text style={[styles.groupName, { color: theme.colors.onSurface }]}>{group.name}</Text>
-                    <Text style={[styles.groupMembers, { color: theme.colors.onSurfaceVariant }]}>
-                      {group.members?.length || 0} members
-                    </Text>
-                  </View>
-                </View>
-                <IconButton icon="chevron-right" size={24} />
-              </Card.Content>
-            </Card>
-          ))
+          <View style={styles.groupsCircleContainer}>
+            {groups.slice(0, 3).map((group) => {
+              // Get first member's avatar or use group initial
+              const firstMember = group.members?.[0];
+              const avatarUrl = firstMember?.user?.avatar_url;
+              const groupInitials = group.name.substring(0, 2).toUpperCase();
+              const memberCount = group.members?.length || 0;
+
+              // Gradient colors for circle backgrounds
+              const circleGradients = [
+                [theme.colors.primary, theme.colors.secondary],
+                [theme.colors.tertiary || theme.colors.primary, theme.colors.primaryContainer],
+                [theme.colors.secondary, theme.colors.tertiary || theme.colors.secondaryContainer],
+              ];
+              const gradient = circleGradients[groups.indexOf(group) % circleGradients.length] as [string, string];
+
+              return (
+                <TouchableOpacity
+                  key={group.id}
+                  style={styles.groupCircleItem}
+                  onPress={() => navigation.navigate("GroupDetails", { groupId: group.id })}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.groupCircle}
+                  >
+                    {avatarUrl ? (
+                      <Avatar.Image
+                        size={60}
+                        source={{ uri: avatarUrl }}
+                        style={styles.groupCircleAvatar}
+                      />
+                    ) : (
+                      <Avatar.Text
+                        size={60}
+                        label={groupInitials}
+                        style={styles.groupCircleAvatar}
+                        labelStyle={styles.groupCircleAvatarLabel}
+                      />
+                    )}
+                  </LinearGradient>
+                  <Text style={[styles.groupCircleName, { color: theme.colors.onSurface }]} numberOfLines={1}>
+                    {group.name}
+                  </Text>
+                  <Text style={[styles.groupCircleMembers, { color: theme.colors.onSurfaceVariant }]}>
+                    {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         )}
       </View>
 
@@ -930,6 +1024,49 @@ const styles = StyleSheet.create({
   emptyButton: {
     marginTop: 8,
   },
+  groupsCircleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    paddingVertical: 8,
+  },
+  groupCircleItem: {
+    alignItems: 'center',
+    width: '30%',
+    marginBottom: 16,
+  },
+  groupCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  groupCircleAvatar: {
+    backgroundColor: 'transparent',
+  },
+  groupCircleAvatarLabel: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  groupCircleName: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  groupCircleMembers: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
   groupCard: {
     marginBottom: 8,
   },
@@ -1073,5 +1210,44 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 4,
     textAlign: 'center',
+  },
+  expenseCardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  expenseCardItem: {
+    width: '47%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  expenseCardLarge: {
+    width: '100%',
+    marginBottom: 0,
+  },
+  expenseCardContent: {
+    padding: 16,
+    minHeight: 120,
+    justifyContent: 'space-between',
+  },
+  expenseCardIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  expenseCardName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  expenseCardAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });
