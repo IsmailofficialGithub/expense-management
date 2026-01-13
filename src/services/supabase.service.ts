@@ -1,6 +1,7 @@
 // src/services/supabase.service.ts
 import { supabase } from './supabase';
 import { Platform } from 'react-native';
+import { sendWhatsAppMessageFromHtml } from './whatsapp.service';
 import {
   Profile,
   Group,
@@ -747,6 +748,27 @@ export const invitationService = {
       });
 
       console.log('Invitation email sent successfully to:', recipientEmail);
+
+      // Send WhatsApp message if phone number is available
+      try {
+        // Get user profile by email to find phone number
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('phone')
+          .eq('email', recipientEmail.toLowerCase())
+          .maybeSingle();
+
+        if (userProfile?.phone) {
+          await sendWhatsAppMessageFromHtml(
+            userProfile.phone,
+            emailHtml,
+            `${inviterName} has invited you to join "${groupName}" on Flatmates Expense Tracker. ${password ? `Use email: ${recipientEmail} and password: ${password} to sign up.` : 'Open the app to view and accept this invitation.'}`
+          );
+        }
+      } catch (whatsappError: any) {
+        // Log but don't throw - WhatsApp is optional
+        console.error('WhatsApp sending failed for invitation:', whatsappError.message);
+      }
     } catch (error: any) {
       console.error('Email sending failed:', error.message);
       // Don't throw - invitation is still created even if email fails
@@ -1108,7 +1130,13 @@ export const foodExpenseService = {
     if (splitsError) throw splitsError;
 
     // Trigger notifications for group members (non-blocking)
+    // Trigger notifications (including WhatsApp)
+    console.log('[Create Expense] 📢 Triggering expense notifications', {
+      expenseId: expense.id,
+      groupId: request.group_id,
+    });
     notificationService.triggerExpenseNotifications(expense.id, request.group_id)
+      .catch(err => console.error('[Create Expense] ❌ Notification trigger failed:', err))
       .catch(error => console.error('Failed to trigger notifications:', error));
 
     // Fetch complete expense with details
@@ -1542,7 +1570,13 @@ export const expenseService = {
     if (splitsError) throw splitsError;
 
     // Trigger notifications for group members (non-blocking)
+    // Trigger notifications (including WhatsApp)
+    console.log('[Create Expense] 📢 Triggering expense notifications', {
+      expenseId: expense.id,
+      groupId: request.group_id,
+    });
     notificationService.triggerExpenseNotifications(expense.id, request.group_id)
+      .catch(err => console.error('[Create Expense] ❌ Notification trigger failed:', err))
       .catch(error => console.error('Failed to trigger notifications:', error));
 
     return expense;
@@ -1919,7 +1953,7 @@ export const bulkPaymentService = {
     try {
       const { data: members } = await supabase
         .from('group_members')
-        .select('user_id, user:profiles(email, full_name)')
+        .select('user_id, user:profiles(email, full_name, phone)')
         .eq('group_id', request.group_id);
 
       if (members) {
@@ -2028,6 +2062,20 @@ export const bulkPaymentService = {
                     html: emailHtml,
                   }),
                 }).catch(error => console.log('Email send skipped (mobile-only feature)'));
+              }
+
+              // Send WhatsApp message if phone number is available
+              if (memberProfile?.phone) {
+                try {
+                  await sendWhatsAppMessageFromHtml(
+                    memberProfile.phone,
+                    emailHtml,
+                    `New Advance Collection in "${groupName}". Amount per member: ₹${perMemberAmount!.toFixed(2)}. Recipient: ${recipientName}. Open the app to mark your contribution as paid.`
+                  );
+                } catch (whatsappError: any) {
+                  // Log but don't throw - WhatsApp is optional
+                  console.error('WhatsApp sending failed for advance collection:', whatsappError.message);
+                }
               }
             } catch (error) {
               console.error('Error sending email to member:', error);
@@ -2750,9 +2798,17 @@ export const notificationService = {
   },
 
   triggerExpenseNotifications: async (expenseId: string, groupId: string): Promise<void> => {
+    console.log('[Expense Notification] 🚀 triggerExpenseNotifications called', {
+      expenseId,
+      groupId,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+
+      console.log('[Expense Notification] User authenticated:', user.id);
 
       // Fetch expense details with splits and paid_by user
       const { data: expense, error: expenseError } = await supabase
@@ -2771,23 +2827,43 @@ export const notificationService = {
         .single();
 
       if (expenseError || !expense) {
-        console.error('Error fetching expense for notifications:', expenseError);
+        console.error('[Expense Notification] ❌ Error fetching expense:', expenseError);
         return;
       }
+
+      console.log('[Expense Notification] Expense fetched:', {
+        description: expense.description,
+        amount: expense.amount,
+        paidBy: expense.paid_by,
+      });
 
       const groupName = (expense.group as any)?.name || 'a group';
       const paidByName = (expense.paid_by_user as any)?.full_name || 'Someone';
 
+      console.log('[Expense Notification] Group info:', {
+        groupName,
+        paidByName,
+      });
+
       // Fetch all group members
       const { data: groupMembers, error: membersError } = await supabase
         .from('group_members')
-        .select('user_id, user:profiles(email, full_name)')
+        .select('user_id, user:profiles(email, full_name, phone)')
         .eq('group_id', groupId);
 
       if (membersError || !groupMembers) {
-        console.error('Error fetching group members:', membersError);
+        console.error('[Expense Notification] ❌ Error fetching group members:', membersError);
         return;
       }
+
+      console.log('[Expense Notification] Group members fetched:', {
+        count: groupMembers.length,
+        members: groupMembers.map(m => ({
+          userId: m.user_id,
+          email: (m.user as any)?.email,
+          phone: (m.user as any)?.phone,
+        })),
+      });
 
       const notifications = [];
 
@@ -2839,6 +2915,15 @@ export const notificationService = {
 
           // Send Email to this member
           const memberProfile = member.user as any;
+          console.log('[Expense Notification] Processing member:', {
+            userId,
+            email: memberProfile?.email,
+            phone: memberProfile?.phone,
+            fullName: memberProfile?.full_name,
+            hasSplit: !!userSplit,
+            splitAmount: userSplit?.amount,
+          });
+
           if (memberProfile?.email) {
             try {
               const emailHtml = `
@@ -2925,6 +3010,42 @@ export const notificationService = {
                     html: emailHtml,
                   }),
                 }).catch(e => console.log('Email send skipped (mobile-only feature)'));
+              }
+
+              // Send WhatsApp message if phone number is available
+              console.log('[Expense Notification] Checking WhatsApp send', {
+                hasPhone: !!memberProfile?.phone,
+                phone: memberProfile?.phone,
+              });
+
+              if (memberProfile?.phone) {
+                console.log('[Expense Notification] 📱 Attempting to send WhatsApp message');
+                try {
+                  const fallbackText = `${paidByName} added expense "${expense.description}" in "${groupName}". Your share: ₹${splitAmount.toFixed(2)}. Total: ₹${Number(expense.amount).toFixed(2)}. Open the app to view details.`;
+                  
+                  console.log('[Expense Notification] Calling sendWhatsAppMessageFromHtml', {
+                    phone: memberProfile.phone,
+                    htmlLength: emailHtml.length,
+                    fallbackText,
+                  });
+
+                  const whatsappResult = await sendWhatsAppMessageFromHtml(
+                    memberProfile.phone,
+                    emailHtml,
+                    fallbackText
+                  );
+
+                  console.log('[Expense Notification] WhatsApp send result:', whatsappResult);
+                } catch (whatsappError: any) {
+                  // Log but don't throw - WhatsApp is optional
+                  console.error('[Expense Notification] ❌ WhatsApp sending failed:', {
+                    error: whatsappError.message,
+                    stack: whatsappError.stack,
+                    phone: memberProfile.phone,
+                  });
+                }
+              } else {
+                console.log('[Expense Notification] ⚠️ WhatsApp skipped: No phone number for user', userId);
               }
             } catch (error) {
               console.error('Error preparing email:', error);
