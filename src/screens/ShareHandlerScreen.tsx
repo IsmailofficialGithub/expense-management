@@ -20,22 +20,57 @@ export default function ShareHandlerScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[ShareHandler] Checking share intent...', {
+      hasShareIntent,
+      filesCount: shareIntent?.files?.length || 0,
+      error,
+      initialized,
+      shareIntentKeys: shareIntent ? Object.keys(shareIntent) : [],
+    });
+
     if (hasShareIntent && shareIntent.files && shareIntent.files.length > 0) {
-      const uri = shareIntent.files[0].path;
+      const file = shareIntent.files[0];
+      console.log('[ShareHandler] File received:', {
+        path: file.path,
+        name: file.name,
+        mimeType: file.mimeType,
+        size: file.size,
+        allKeys: Object.keys(file),
+      });
+
+      // Try different possible path properties
+      let uri = file.path || file.uri || file.url;
+      
+      // Ensure URI is properly formatted
       if (uri) {
+        // On Android, paths might need file:// prefix, but content:// URIs are fine as-is
+        if (!uri.startsWith('file://') && !uri.startsWith('content://') && !uri.startsWith('http') && !uri.startsWith('/')) {
+          uri = `file://${uri}`;
+        }
+        
+        console.log('[ShareHandler] ✅ Setting image URI:', uri);
         setSharedImageUri(uri);
         setLoading(false);
       } else {
+        console.error('[ShareHandler] ❌ No path/uri found in file object. File object:', JSON.stringify(file, null, 2));
         setLoading(false);
       }
+    } else if (hasShareIntent && shareIntent.text) {
+      // Handle text sharing (not image)
+      console.log('[ShareHandler] Text shared (not image):', shareIntent.text);
+      setLoading(false);
     } else if (error) {
-      console.error('Share intent error:', error);
+      console.error('[ShareHandler] ❌ Share intent error:', error);
       setLoading(false);
     } else if (initialized && !hasShareIntent) {
       // If we've initialized and there's no share intent, maybe we were opened normally?
       // Wait a bit just in case it takes time to populate
+      console.log('[ShareHandler] No share intent, waiting...');
       const timer = setTimeout(() => {
-        if (!hasShareIntent) setLoading(false);
+        if (!hasShareIntent) {
+          console.log('[ShareHandler] No share intent after timeout');
+          setLoading(false);
+        }
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -158,6 +193,17 @@ export default function ShareHandlerScreen() {
               source={{ uri: sharedImageUri }}
               style={styles.imagePreview}
               resizeMode="cover"
+              onError={(error) => {
+                console.error('[ShareHandler] Image load error:', error.nativeEvent.error);
+                Alert.alert(
+                  'Image Error',
+                  'Failed to load the shared image. The file might be corrupted or inaccessible.',
+                  [{ text: 'OK' }]
+                );
+              }}
+              onLoad={() => {
+                console.log('[ShareHandler] Image loaded successfully');
+              }}
             />
             <BlurView intensity={30} style={styles.imageOverlay}>
               <IconButton icon="image" iconColor="#fff" size={24} />

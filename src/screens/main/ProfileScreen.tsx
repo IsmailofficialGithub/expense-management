@@ -310,12 +310,44 @@ export default function ProfileScreen({ navigation }: any) {
 
     setIsProcessing(true);
     try {
-      // Note: You'll need to implement this in authSlice
-      showToast('Password change feature coming soon!', 'info');
+      // Verify current password by attempting to sign in
+      const { authService } = await import('../../services/supabase.service');
+      const { supabase } = await import('../../services/supabase');
+      const userEmail = user?.email;
+      
+      if (!userEmail) {
+        setIsProcessing(false);
+        showToast('Unable to verify password. Please try again.', 'error');
+        return;
+      }
+
+      // Verify current password
+      try {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: currentPassword,
+        });
+
+        if (signInError) {
+          setIsProcessing(false);
+          setErrors(prev => ({ ...prev, currentPassword: 'Current password is incorrect' }));
+          return;
+        }
+      } catch (verifyError: any) {
+        setIsProcessing(false);
+        setErrors(prev => ({ ...prev, currentPassword: 'Failed to verify current password' }));
+        return;
+      }
+
+      // Update to new password
+      await authService.updatePassword(newPassword);
+      
+      showToast('Password changed successfully!', 'success');
       setChangePasswordModalVisible(false);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setErrors({ name: '', phone: '', email: '', currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error) {
       ErrorHandler.handleError(error, showToast, 'Change Password');
     } finally {

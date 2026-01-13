@@ -14,14 +14,58 @@ const WHATSAPP_API_URL =
 console.log('[WhatsApp Service] Initialized with API URL:', WHATSAPP_API_URL);
 
 /**
- * Convert HTML content to plain text for WhatsApp
- * Removes HTML tags and converts to readable text
+ * Convert HTML content to formatted plain text for WhatsApp
+ * Preserves structure and uses WhatsApp formatting (bold, emojis, etc.)
  */
 function htmlToPlainText(html: string): string {
   if (!html) return '';
 
-  // Remove HTML tags
-  let text = html.replace(/<[^>]*>/g, '');
+  let text = html;
+
+  // Replace line breaks and block elements with newlines
+  text = text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/td>/gi, ' | ')
+    .replace(/<\/th>/gi, ' | ');
+
+  // Convert headings to bold with emoji
+  text = text
+    .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '📌 *$1*\n')
+    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '📌 *$1*\n')
+    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '📌 *$1*\n');
+
+  // Convert strong/bold to WhatsApp bold
+  text = text.replace(/<(strong|b)[^>]*>(.*?)<\/\1>/gi, '*$2*');
+
+  // Convert emphasis/italic to WhatsApp italic
+  text = text.replace(/<(em|i)[^>]*>(.*?)<\/\1>/gi, '_$2_');
+
+  // Convert lists
+  text = text
+    .replace(/<ul[^>]*>/gi, '\n')
+    .replace(/<ol[^>]*>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<\/ul>/gi, '\n')
+    .replace(/<\/ol>/gi, '\n');
+
+  // Convert tables to readable format
+  text = text.replace(/<table[^>]*>/gi, '\n');
+  text = text.replace(/<\/table>/gi, '\n');
+  text = text.replace(/<thead[^>]*>/gi, '');
+  text = text.replace(/<\/thead>/gi, '');
+  text = text.replace(/<tbody[^>]*>/gi, '');
+  text = text.replace(/<\/tbody>/gi, '');
+  text = text.replace(/<tr[^>]*>/gi, '');
+  text = text.replace(/<td[^>]*>/gi, '');
+  text = text.replace(/<th[^>]*>/gi, '*');
+
+  // Remove all remaining HTML tags
+  text = text.replace(/<[^>]*>/g, '');
 
   // Decode HTML entities
   text = text
@@ -31,10 +75,31 @@ function htmlToPlainText(html: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&mdash;/g, '—')
+    .replace(/&ndash;/g, '–')
+    .replace(/&hellip;/g, '...')
+    .replace(/&copy;/g, '©')
+    .replace(/&reg;/g, '®')
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"');
 
-  // Clean up whitespace
-  text = text.replace(/\s+/g, ' ').trim();
+  // Clean up multiple newlines (max 2 consecutive)
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  // Clean up multiple spaces (but preserve intentional spacing)
+  text = text.replace(/[ \t]+/g, ' ');
+
+  // Clean up spaces around newlines
+  text = text.replace(/ +\n/g, '\n');
+  text = text.replace(/\n +/g, '\n');
+
+  // Remove leading/trailing whitespace from each line
+  text = text.split('\n').map(line => line.trim()).join('\n');
+
+  // Final trim
+  text = text.trim();
 
   return text;
 }
