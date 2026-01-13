@@ -8,7 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
-import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember } from '../../store/slices/groupsSlice';
+import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember, setSelectedGroup } from '../../store/slices/groupsSlice';
 import { fetchExpenses, fetchSettlements } from '../../store/slices/expensesSlice';
 import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
 import { useAppSelector } from '../../store';
@@ -32,7 +32,7 @@ interface Props {
 export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const theme = useTheme();
-  const { selectedGroup, balances, loading } = useGroups();
+  const { selectedGroup, balances, loading, groups } = useGroups();
   const { expenses, settlements } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
@@ -49,11 +49,21 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [memberEmail, setMemberEmail] = useState('');
   const [errors, setErrors] = useState({ name: '', email: '' });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [hasTriedCache, setHasTriedCache] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
+      // First check if group is already in the groups list (from cache)
+      const existingGroup = groups.find(g => g.id === groupId);
+      if (existingGroup && !selectedGroup) {
+        console.log('[GroupDetails] Using group from groups list');
+        dispatch(setSelectedGroup(existingGroup));
+      }
+      
+      // Then try to load fresh data
       loadGroupData();
-    }, [groupId])
+    }, [groupId, groups, selectedGroup, dispatch])
   );
 
   useEffect(() => {
@@ -64,21 +74,82 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   }, [selectedGroup]);
 
   const loadGroupData = async () => {
+    setLoadError(null);
+    
     try {
-      if (!isOnline) {
-        showToast('Unable to load group data. No internet connection.', 'error');
-        return;
+      // Try to fetch data (fetchGroup now handles offline/cache automatically)
+      // Use Promise.allSettled so one failure doesn't stop others
+      const fetchPromises = [
+        dispatch(fetchGroup(groupId)).unwrap(),
+        dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+      ];
+
+      // Only fetch these if online (they require network)
+      if (isOnline) {
+        fetchPromises.push(
+          dispatch(fetchGroupBalances(groupId)).unwrap(),
+          dispatch(fetchSettlements(groupId)).unwrap(),
+          dispatch(fetchBulkPaymentStats(groupId)).unwrap()
+        );
       }
 
-      await Promise.all([
-        dispatch(fetchGroup(groupId)).unwrap(),
-        dispatch(fetchGroupBalances(groupId)).unwrap(),
-        dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
-        dispatch(fetchSettlements(groupId)).unwrap(),
-        dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
-      ]);
-    } catch (error) {
-      ErrorHandler.handleError(error, showToast, 'Load Group Details');
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout - taking too long')), isOnline ? 10000 : 3000);
+      });
+
+      const results = await Promise.race([
+        Promise.allSettled(fetchPromises),
+        timeoutPromise,
+      ]) as PromiseSettledResult<any>[];
+
+      // Check if group was loaded successfully
+      const groupResult = results[0];
+      if (groupResult.status === 'rejected' && !selectedGroup) {
+        throw new Error(groupResult.reason?.message || 'Group not found');
+      }
+    } catch (error: any) {
+      console.error('[GroupDetails] Load error:', error);
+      
+      // If fetch failed, try to use cached data from groups list
+      if (!hasTriedCache) {
+        setHasTriedCache(true);
+        const groupInList = groups.find(g => g.id === groupId);
+        
+        if (groupInList) {
+          console.log('[GroupDetails] Using group from groups list (cache)');
+          dispatch(setSelectedGroup(groupInList));
+          if (!isOnline) {
+            showToast('Showing cached data. Some features may be limited offline.', 'info');
+          }
+          return;
+        }
+
+        // Also try direct cache access
+        try {
+          const { storageService } = await import('../../services/storage.service');
+          const cachedGroups = await storageService.getGroups() || [];
+          const cachedGroup = cachedGroups.find(g => g.id === groupId);
+          
+          if (cachedGroup) {
+            console.log('[GroupDetails] Using cached group data from storage');
+            dispatch(setSelectedGroup(cachedGroup));
+            showToast('Showing cached data. Some features may be limited offline.', 'info');
+            return;
+          }
+        } catch (cacheError) {
+          console.error('[GroupDetails] Cache check failed:', cacheError);
+        }
+      }
+
+      // Show error only if we truly have no data
+      if (!selectedGroup) {
+        const errorMessage = error?.message || 'Failed to load group data';
+        setLoadError(errorMessage);
+        if (isOnline) {
+          ErrorHandler.handleError(error, showToast, 'Load Group Details');
+        }
+      }
     }
   };
 
@@ -220,6 +291,64 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
     );
   };
 
+  // Check if group exists in groups list but not selected
+  useEffect(() => {
+    if (!selectedGroup && groups.length > 0) {
+      const groupInList = groups.find(g => g.id === groupId);
+      if (groupInList) {
+        console.log('[GroupDetails] Found group in groups list, setting as selected');
+        dispatch(setSelectedGroup(groupInList));
+      }
+    }
+  }, [groups, groupId, selectedGroup, dispatch]);
+
+  // Show loading only if we haven't tried cache yet and no error
+  if (!selectedGroup && !loadError && !hasTriedCache && loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <LoadingOverlay visible={true} message="Loading group..." />
+      </View>
+    );
+  }
+
+  // Show error state if loading failed and no cached data
+  if (!selectedGroup && loadError && hasTriedCache) {
+    return (
+      <View style={[styles.container, styles.errorContainer, { backgroundColor: theme.colors.background }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+        <View style={styles.errorContent}>
+          <Text style={[styles.errorIcon, { color: theme.colors.error }]}>⚠️</Text>
+          <Text style={[styles.errorTitle, { color: theme.colors.onSurface }]}>Unable to Load Group</Text>
+          <Text style={[styles.errorMessage, { color: theme.colors.onSurfaceVariant }]}>
+            {loadError}
+          </Text>
+          <Text style={[styles.errorSubtext, { color: theme.colors.onSurfaceVariant }]}>
+            {!isOnline ? 'No internet connection. Please check your network and try again.' : 'Please try again later.'}
+          </Text>
+          <Button
+            mode="contained"
+            onPress={() => {
+              setLoadError(null);
+              setHasTriedCache(false);
+              loadGroupData();
+            }}
+            style={styles.retryButton}
+          >
+            Retry
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            Go Back
+          </Button>
+        </View>
+      </View>
+    );
+  }
+
+  // Safety check - if selectedGroup is still null, return early
   if (!selectedGroup) {
     return (
       <View style={styles.loadingContainer}>
@@ -994,5 +1123,43 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     minWidth: 100,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorContent: {
+    alignItems: 'center',
+    maxWidth: 400,
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryButton: {
+    marginBottom: 12,
+    minWidth: 200,
+  },
+  backButton: {
+    minWidth: 200,
   },
 });

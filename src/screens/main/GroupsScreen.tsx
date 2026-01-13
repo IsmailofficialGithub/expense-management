@@ -1,11 +1,12 @@
 // src/screens/main/GroupsScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Text, Card, Avatar, Button, FAB, Searchbar, IconButton, Portal, Modal, TextInput, HelperText } from 'react-native-paper';
+import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
+import { Text, Avatar, Button, FAB, Searchbar, IconButton, Portal, Modal, TextInput, HelperText } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useGroups } from '../../hooks/useGroups';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppDispatch } from '../../store';
-import { fetchGroups, createGroup } from '../../store/slices/groupsSlice';
+import { fetchGroups, createGroup, fetchGroupBalances } from '../../store/slices/groupsSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
@@ -19,12 +20,21 @@ export default function GroupsScreen({ navigation }: any) {
     showToast: true,
     onOnline: () => loadGroups(),
   });
-  const { groups, loading } = useGroups();
+  const { groups, loading, balances } = useGroups();
   const { profile, user } = useAuth();
   const dispatch = useAppDispatch();
 
   // Use profile ID or fallback to user ID
   const currentUserId = profile?.id || user?.id;
+
+  // Load balances for all groups
+  useEffect(() => {
+    if (groups.length > 0 && isOnline && currentUserId) {
+      groups.forEach((group: any) => {
+        dispatch(fetchGroupBalances(group.id));
+      });
+    }
+  }, [groups.length, isOnline, currentUserId]);
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,47 +122,119 @@ export default function GroupsScreen({ navigation }: any) {
     group.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const renderGroupCard = ({ item }: any) => {
+  // Gradient color schemes for cards
+  const gradientColors = [
+    ['#8B5CF6', '#EC4899'], // Purple to Pink
+    ['#3B82F6', '#60A5FA'], // Blue gradient
+    ['#14B8A6', '#10B981'], // Teal to Green
+    ['#F59E0B', '#EF4444'], // Orange to Red
+    ['#6366F1', '#8B5CF6'], // Indigo to Purple
+    ['#EC4899', '#F472B6'], // Pink gradient
+  ];
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    const absAmount = Math.abs(amount);
+    if (absAmount >= 1000) {
+      return `PKR ${amount >= 0 ? '+' : '-'}${absAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `PKR ${amount >= 0 ? '+' : '-'}${absAmount.toFixed(2)}`;
+  };
+
+  const renderGroupCard = ({ item, index }: any) => {
     const memberCount = item.members?.length || 0;
-    const isCreator = item.created_by === currentUserId;
+    const gradientIndex = index % gradientColors.length;
+    const gradient = gradientColors[gradientIndex] as [string, string];
+
+    // Get user's balance for this group
+    const userBalance = balances.find((b: any) => b.group_id === item.id && b.user_id === currentUserId);
+    const balance = userBalance?.balance ?? 0;
+
+    // Get first 5 members for avatars
+    const displayMembers = item.members?.slice(0, 5) || [];
 
     return (
-      <Card
-        style={styles.groupCard}
-        onPress={() => {
-          // This is the navigation call
-          navigation.navigate('GroupDetails', { groupId: item.id });
-        }}
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => navigation.navigate('GroupDetails', { groupId: item.id })}
+        style={styles.cardContainer}
       >
-        <Card.Content style={styles.cardContent}>
-          <View style={styles.groupHeader}>
-            <Avatar.Text
-              size={56}
-              label={item.name.substring(0, 2).toUpperCase()}
-              style={styles.groupAvatar}
-            />
-            <View style={styles.groupInfo}>
-              <Text style={[styles.groupName, { color: theme.colors.onSurface }]}>{item.name}</Text>
-              {item.description ? (
-                <Text style={[styles.groupDescription, { color: theme.colors.onSurfaceVariant }]} numberOfLines={2}>
-                  {item.description}
-                </Text>
-              ) : null}
-              <View style={styles.groupMeta}>
-                <IconButton icon="account-group" size={16} style={styles.metaIcon} />
-                <Text style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{memberCount} members</Text>
-                {isCreator && (
-                  <>
-                    <Text style={[styles.metaDivider, { color: theme.colors.onSurfaceVariant }]}>•</Text>
-                    <Text style={styles.creatorBadge}>Admin</Text>
-                  </>
-                )}
+        <LinearGradient
+          colors={gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.gradientCard}
+        >
+          <View style={styles.cardContent}>
+            {/* Header: Group Name and Balance */}
+            <View style={styles.cardHeader}>
+              <Text style={styles.groupName}>{item.name}</Text>
+              <Text style={[styles.balanceAmount, balance < 0 && styles.negativeBalance]}>
+                {formatCurrency(balance)}
+              </Text>
+            </View>
+
+            {/* Members Section */}
+            <View style={styles.membersSection}>
+              <View style={styles.memberInfo}>
+                <IconButton 
+                  icon="account-group" 
+                  size={16} 
+                  iconColor="#FFFFFF" 
+                  style={styles.memberIcon}
+                />
+                <Text style={styles.memberCount}>{memberCount} Members</Text>
+              </View>
+
+              {/* Member Avatars */}
+              <View style={styles.avatarsContainer}>
+                {displayMembers.map((member: any, idx: number) => {
+                  const userName = member.user?.full_name || 'Unknown';
+                  const initials = userName.substring(0, 2).toUpperCase();
+                  const avatarUrl = member.user?.avatar_url;
+                  
+                  return (
+                    <View 
+                      key={member.id || idx} 
+                      style={[
+                        styles.avatarWrapper,
+                        idx > 0 && styles.avatarOverlap
+                      ]}
+                    >
+                      {avatarUrl ? (
+                        <Avatar.Image 
+                          size={40} 
+                          source={{ uri: avatarUrl }} 
+                          style={styles.memberAvatar}
+                        />
+                      ) : (
+                        <Avatar.Text 
+                          size={40} 
+                          label={initials} 
+                          style={styles.memberAvatar}
+                          labelStyle={styles.avatarLabel}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             </View>
-            <IconButton icon="chevron-right" size={24} />
+
+            {/* View Details Button */}
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={styles.viewDetailsButton}
+                onPress={() => navigation.navigate('GroupDetails', { groupId: item.id })}
+              >
+                <Text style={[styles.viewDetailsText, { color: gradient[0] }]}>
+                  View Details
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </Card.Content>
-      </Card>
+        </LinearGradient>
+      </TouchableOpacity>
     );
   };
 
@@ -191,13 +273,16 @@ export default function GroupsScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Search Bar */}
-      <Searchbar
-        placeholder="Search groups"
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={styles.searchBar}
-      />
+
+      {/* Search Bar (Optional - can be hidden) */}
+      {filteredGroups.length > 3 && (
+        <Searchbar
+          placeholder="Search groups"
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={styles.searchBar}
+        />
+      )}
 
       {/* Groups List */}
       <FlatList
@@ -209,6 +294,7 @@ export default function GroupsScreen({ navigation }: any) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        showsVerticalScrollIndicator={false}
       />
 
       {/* Floating Action Button */}
@@ -285,6 +371,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
   searchBar: {
     margin: 16,
     marginBottom: 8,
@@ -294,57 +390,100 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 8,
   },
-  groupCard: {
+  cardContainer: {
     marginBottom: 12,
-    elevation: 2,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  gradientCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   cardContent: {
     padding: 16,
   },
-  groupHeader: {
+  cardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  groupAvatar: {
-    backgroundColor: '#6200EE',
-  },
-  groupInfo: {
-    flex: 1,
-    marginLeft: 16,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   groupName: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 4,
+    color: '#FFFFFF',
+    flex: 1,
+    marginRight: 12,
   },
-  groupDescription: {
-    fontSize: 14,
+  balanceAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  negativeBalance: {
+    color: '#FFEBEE',
+  },
+  membersSection: {
+    marginBottom: 12,
+  },
+  memberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  groupMeta: {
+  memberIcon: {
+    margin: 0,
+    padding: 0,
+    width: 20,
+    height: 20,
+  },
+  memberCount: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    marginLeft: 3,
+  },
+  avatarsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  metaIcon: {
-    margin: 0,
-    padding: 0,
+  avatarWrapper: {
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
   },
-  metaText: {
-    fontSize: 12,
-    marginLeft: -4,
+  avatarOverlap: {
+    marginLeft: -12,
   },
-  metaDivider: {
-    fontSize: 12,
-    marginHorizontal: 8,
+  memberAvatar: {
+    backgroundColor: '#E0E0E0',
   },
-  creatorBadge: {
-    fontSize: 11,
-    color: '#6200EE',
+  avatarLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    backgroundColor: '#E8DEF8',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    color: '#424242',
+  },
+  buttonContainer: {
+    alignItems: 'flex-end',
+    marginTop: 4,
+  },
+  viewDetailsButton: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  viewDetailsText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
@@ -358,11 +497,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 16,
     marginBottom: 8,
+    color: '#1A1A1A',
   },
   emptyText: {
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 24,
+    color: '#666666',
   },
   emptyButton: {
     paddingHorizontal: 16,

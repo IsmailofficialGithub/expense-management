@@ -132,34 +132,31 @@ export const authService = {
 
   getCurrentUser: async () => {
     try {
-      // getSession() reads from local storage and is offline-friendly
-      const { data: { session }, error } = await supabase.auth.getSession();
+      // ALWAYS use getSession() first - it reads from local storage and is offline-friendly
+      // This prevents mixing online/offline tokens
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      // If we have a session (even if expired/refresh failed), use it for offline access
+      console.log('[AuthService] getSession result:', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userId: session?.user?.id,
+        error: sessionError?.message,
+      });
+
+      // If we have a session with user, return it (works offline)
       if (session?.user) {
-        if (error) {
-          console.warn('getSession had error but returned session (ignoring for offline support):', error);
+        // Even if there's an error (like refresh failed), we still have the user from storage
+        if (sessionError) {
+          console.warn('[AuthService] getSession had error but session exists (offline mode):', sessionError.message);
         }
         return session.user;
       }
 
-      if (error) {
-        console.warn('getSession failed:', error);
-        // Fallback to getUser only if we have working network, but here we just try-catch it
-        // If we are offline, getUser will throw, so we catch it
-        try {
-          const { data: { user }, error: userError } = await supabase.auth.getUser();
-          if (userError) throw userError;
-          return user;
-        } catch (e) {
-          console.warn('getUser fallback failed (likely offline):', e);
-          return null; // Return null instead of throwing to prevent app crash/logout loop
-        }
-      }
-
+      // No session in storage - user is logged out
+      console.log('[AuthService] No session found in storage');
       return null;
     } catch (err) {
-      console.error('getCurrentUser unexpected error:', err);
+      console.error('[AuthService] getCurrentUser unexpected error:', err);
       return null;
     }
   },

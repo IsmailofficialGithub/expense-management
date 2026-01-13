@@ -48,11 +48,50 @@ export const fetchGroups = createAsyncThunk('groups/fetchGroups', async (_, { re
   }
 });
 
-export const fetchGroup = createAsyncThunk('groups/fetchGroup', async (groupId: string, { rejectWithValue }) => {
+export const fetchGroup = createAsyncThunk('groups/fetchGroup', async (groupId: string, { rejectWithValue, getState }) => {
   try {
-    return await groupService.getGroup(groupId);
+    const state = getState() as any;
+    const isOnline = state.ui.isOnline;
+
+    // Try online fetch first if available
+    if (isOnline) {
+      try {
+        const group = await groupService.getGroup(groupId);
+        // Update cache
+        const currentGroups = await storageService.getGroups() || [];
+        const index = currentGroups.findIndex(g => g.id === groupId);
+        if (index !== -1) {
+          currentGroups[index] = group;
+        } else {
+          currentGroups.push(group);
+        }
+        await storageService.setGroups(currentGroups);
+        return group;
+      } catch (error: any) {
+        console.warn('[fetchGroup] Online fetch failed, trying cache:', error.message);
+      }
+    }
+
+    // Fallback to cache (offline or online failed)
+    const cachedGroups = await storageService.getGroups() || [];
+    const cachedGroup = cachedGroups.find(g => g.id === groupId);
+    
+    if (cachedGroup) {
+      console.log('[fetchGroup] Using cached group data');
+      return cachedGroup;
+    }
+
+    // Also check if group is already in Redux state
+    const reduxState = getState() as any;
+    const groupInState = reduxState.groups.groups.find((g: any) => g.id === groupId);
+    if (groupInState) {
+      console.log('[fetchGroup] Using group from Redux state');
+      return groupInState;
+    }
+
+    throw new Error('Group not found in cache or online');
   } catch (error: any) {
-    return rejectWithValue(error.message);
+    return rejectWithValue(error.message || 'Failed to load group');
   }
 });
 
@@ -225,10 +264,21 @@ const groupsSlice = createSlice({
       state.loading = false;
       state.error = action.payload as string;
     });
+    builder.addCase(fetchGroup.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
     builder.addCase(fetchGroup.fulfilled, (state, action) => {
+      state.loading = false;
+      state.error = null;
       state.selectedGroup = action.payload;
       const index = state.groups.findIndex(g => g.id === action.payload.id);
       if (index !== -1) state.groups[index] = action.payload;
+    });
+    builder.addCase(fetchGroup.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+      // Don't clear selectedGroup on error - keep cached data if available
     });
     builder.addCase(createGroup.pending, (state) => {
       state.loading = true;
