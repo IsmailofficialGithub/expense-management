@@ -20,24 +20,8 @@ export default function ShareHandlerScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('[ShareHandler] Checking share intent...', {
-      hasShareIntent,
-      filesCount: shareIntent?.files?.length || 0,
-      error,
-      initialized,
-      shareIntentKeys: shareIntent ? Object.keys(shareIntent) : [],
-    });
-
     if (hasShareIntent && shareIntent.files && shareIntent.files.length > 0) {
       const file = shareIntent.files[0];
-      console.log('[ShareHandler] File received:', {
-        path: file.path,
-        name: file.name,
-        mimeType: file.mimeType,
-        size: file.size,
-        allKeys: Object.keys(file),
-      });
-
       // Try different possible path properties
       let uri = file.path || file.uri || file.url;
       
