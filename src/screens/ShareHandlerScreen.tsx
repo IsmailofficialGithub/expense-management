@@ -20,59 +20,55 @@ export default function ShareHandlerScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('ShareHandler - hasShareIntent:', hasShareIntent);
-    console.log('ShareHandler - shareIntent:', JSON.stringify(shareIntent, null, 2));
-    console.log('ShareHandler - error:', error);
-    
-    if (hasShareIntent && shareIntent) {
-      // Try to extract URI from different possible locations
-      let uri: string | null = null;
+    console.log('[ShareHandler] Checking share intent...', {
+      hasShareIntent,
+      filesCount: shareIntent?.files?.length || 0,
+      error,
+      initialized,
+      shareIntentKeys: shareIntent ? Object.keys(shareIntent) : [],
+    });
+
+    if (hasShareIntent && shareIntent.files && shareIntent.files.length > 0) {
+      const file = shareIntent.files[0];
+      console.log('[ShareHandler] File received:', {
+        path: file.path,
+        name: file.name,
+        mimeType: file.mimeType,
+        size: file.size,
+        allKeys: Object.keys(file),
+      });
+
+      // Try different possible path properties
+      let uri = file.path || file.uri || file.url;
       
-      // Check files array
-      if (shareIntent.files && shareIntent.files.length > 0) {
-        const file = shareIntent.files[0] as any;
-        console.log('ShareHandler - file object:', JSON.stringify(file, null, 2));
-        
-        // Try different possible properties
-        uri = file.path || file.uri || file.url || file.webPath || null;
-      }
-      
-      // Check if there's a direct URI property
-      if (!uri && (shareIntent as any).uri) {
-        uri = (shareIntent as any).uri;
-      }
-      
-      // Check if there's a direct url property
-      if (!uri && (shareIntent as any).url) {
-        uri = (shareIntent as any).url;
-      }
-      
-      // Check text property (might contain file path)
-      if (!uri && shareIntent.text) {
-        console.log('ShareHandler - text property:', shareIntent.text);
-        // Sometimes the URI is in the text field
-        if (shareIntent.text.startsWith('file://') || shareIntent.text.startsWith('content://')) {
-          uri = shareIntent.text;
-        }
-      }
-      
-      console.log('ShareHandler - extracted URI:', uri);
-      
+      // Ensure URI is properly formatted
       if (uri) {
+        // On Android, paths might need file:// prefix, but content:// URIs are fine as-is
+        if (!uri.startsWith('file://') && !uri.startsWith('content://') && !uri.startsWith('http') && !uri.startsWith('/')) {
+          uri = `file://${uri}`;
+        }
+        
+        console.log('[ShareHandler] ✅ Setting image URI:', uri);
         setSharedImageUri(uri);
         setLoading(false);
       } else {
-        console.warn('ShareHandler - No URI found in share intent');
+        console.error('[ShareHandler] ❌ No path/uri found in file object. File object:', JSON.stringify(file, null, 2));
         setLoading(false);
       }
+    } else if (hasShareIntent && shareIntent.text) {
+      // Handle text sharing (not image)
+      console.log('[ShareHandler] Text shared (not image):', shareIntent.text);
+      setLoading(false);
     } else if (error) {
-      console.error('Share intent error:', error);
+      console.error('[ShareHandler] ❌ Share intent error:', error);
       setLoading(false);
     } else if (initialized && !hasShareIntent) {
-      // If we've initialized and there's no share intent, wait a bit
+      // If we've initialized and there's no share intent, maybe we were opened normally?
+      // Wait a bit just in case it takes time to populate
+      console.log('[ShareHandler] No share intent, waiting...');
       const timer = setTimeout(() => {
         if (!hasShareIntent) {
-          console.log('ShareHandler - No share intent after timeout');
+          console.log('[ShareHandler] No share intent after timeout');
           setLoading(false);
         }
       }, 1000);
@@ -197,6 +193,17 @@ export default function ShareHandlerScreen() {
               source={{ uri: sharedImageUri }}
               style={styles.imagePreview}
               resizeMode="cover"
+              onError={(error) => {
+                console.error('[ShareHandler] Image load error:', error.nativeEvent.error);
+                Alert.alert(
+                  'Image Error',
+                  'Failed to load the shared image. The file might be corrupted or inaccessible.',
+                  [{ text: 'OK' }]
+                );
+              }}
+              onLoad={() => {
+                console.log('[ShareHandler] Image loaded successfully');
+              }}
             />
             <BlurView intensity={30} style={styles.imageOverlay}>
               <IconButton icon="image" iconColor="#fff" size={24} />

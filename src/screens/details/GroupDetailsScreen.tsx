@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, StatusBar } from 'react-native';
 import { Text, Card, Avatar, Button, IconButton, Chip, Divider, FAB, Portal, Modal, TextInput, HelperText, List } from 'react-native-paper';
 import { useGroups } from '../../hooks/useGroups';
 import { useExpenses } from '../../hooks/useExpenses';
@@ -8,7 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
-import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember } from '../../store/slices/groupsSlice';
+import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember, setSelectedGroup } from '../../store/slices/groupsSlice';
 import { fetchExpenses, fetchSettlements } from '../../store/slices/expensesSlice';
 import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
 import { useAppSelector } from '../../store';
@@ -32,7 +32,7 @@ interface Props {
 export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const theme = useTheme();
-  const { selectedGroup, balances, loading } = useGroups();
+  const { selectedGroup, balances, loading, groups } = useGroups();
   const { expenses, settlements } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
@@ -49,12 +49,21 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [memberEmail, setMemberEmail] = useState('');
   const [errors, setErrors] = useState({ name: '', email: '' });
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'my'>('all'); // Tab state
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [hasTriedCache, setHasTriedCache] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
+      // First check if group is already in the groups list (from cache)
+      const existingGroup = groups.find(g => g.id === groupId);
+      if (existingGroup && !selectedGroup) {
+        console.log('[GroupDetails] Using group from groups list');
+        dispatch(setSelectedGroup(existingGroup));
+      }
+      
+      // Then try to load fresh data
       loadGroupData();
-    }, [groupId])
+    }, [groupId, groups, selectedGroup, dispatch])
   );
 
   useEffect(() => {
@@ -65,21 +74,82 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   }, [selectedGroup]);
 
   const loadGroupData = async () => {
+    setLoadError(null);
+    
     try {
-      if (!isOnline) {
-        showToast('Unable to load group data. No internet connection.', 'error');
-        return;
+      // Try to fetch data (fetchGroup now handles offline/cache automatically)
+      // Use Promise.allSettled so one failure doesn't stop others
+      const fetchPromises = [
+        dispatch(fetchGroup(groupId)).unwrap(),
+        dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+      ];
+
+      // Only fetch these if online (they require network)
+      if (isOnline) {
+        fetchPromises.push(
+          dispatch(fetchGroupBalances(groupId)).unwrap(),
+          dispatch(fetchSettlements(groupId)).unwrap(),
+          dispatch(fetchBulkPaymentStats(groupId)).unwrap()
+        );
       }
 
-      await Promise.all([
-        dispatch(fetchGroup(groupId)).unwrap(),
-        dispatch(fetchGroupBalances(groupId)).unwrap(),
-        dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
-        dispatch(fetchSettlements(groupId)).unwrap(),
-        dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
-      ]);
-    } catch (error) {
-      ErrorHandler.handleError(error, showToast, 'Load Group Details');
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout - taking too long')), isOnline ? 10000 : 3000);
+      });
+
+      const results = await Promise.race([
+        Promise.allSettled(fetchPromises),
+        timeoutPromise,
+      ]) as PromiseSettledResult<any>[];
+
+      // Check if group was loaded successfully
+      const groupResult = results[0];
+      if (groupResult.status === 'rejected' && !selectedGroup) {
+        throw new Error(groupResult.reason?.message || 'Group not found');
+      }
+    } catch (error: any) {
+      console.error('[GroupDetails] Load error:', error);
+      
+      // If fetch failed, try to use cached data from groups list
+      if (!hasTriedCache) {
+        setHasTriedCache(true);
+        const groupInList = groups.find(g => g.id === groupId);
+        
+        if (groupInList) {
+          console.log('[GroupDetails] Using group from groups list (cache)');
+          dispatch(setSelectedGroup(groupInList));
+          if (!isOnline) {
+            showToast('Showing cached data. Some features may be limited offline.', 'info');
+          }
+          return;
+        }
+
+        // Also try direct cache access
+        try {
+          const { storageService } = await import('../../services/storage.service');
+          const cachedGroups = await storageService.getGroups() || [];
+          const cachedGroup = cachedGroups.find(g => g.id === groupId);
+          
+          if (cachedGroup) {
+            console.log('[GroupDetails] Using cached group data from storage');
+            dispatch(setSelectedGroup(cachedGroup));
+            showToast('Showing cached data. Some features may be limited offline.', 'info');
+            return;
+          }
+        } catch (cacheError) {
+          console.error('[GroupDetails] Cache check failed:', cacheError);
+        }
+      }
+
+      // Show error only if we truly have no data
+      if (!selectedGroup) {
+        const errorMessage = error?.message || 'Failed to load group data';
+        setLoadError(errorMessage);
+        if (isOnline) {
+          ErrorHandler.handleError(error, showToast, 'Load Group Details');
+        }
+      }
     }
   };
 
@@ -221,6 +291,64 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
     );
   };
 
+  // Check if group exists in groups list but not selected
+  useEffect(() => {
+    if (!selectedGroup && groups.length > 0) {
+      const groupInList = groups.find(g => g.id === groupId);
+      if (groupInList) {
+        console.log('[GroupDetails] Found group in groups list, setting as selected');
+        dispatch(setSelectedGroup(groupInList));
+      }
+    }
+  }, [groups, groupId, selectedGroup, dispatch]);
+
+  // Show loading only if we haven't tried cache yet and no error
+  if (!selectedGroup && !loadError && !hasTriedCache && loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <LoadingOverlay visible={true} message="Loading group..." />
+      </View>
+    );
+  }
+
+  // Show error state if loading failed and no cached data
+  if (!selectedGroup && loadError && hasTriedCache) {
+    return (
+      <View style={[styles.container, styles.errorContainer, { backgroundColor: theme.colors.background }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
+        <View style={styles.errorContent}>
+          <Text style={[styles.errorIcon, { color: theme.colors.error }]}>⚠️</Text>
+          <Text style={[styles.errorTitle, { color: theme.colors.onSurface }]}>Unable to Load Group</Text>
+          <Text style={[styles.errorMessage, { color: theme.colors.onSurfaceVariant }]}>
+            {loadError}
+          </Text>
+          <Text style={[styles.errorSubtext, { color: theme.colors.onSurfaceVariant }]}>
+            {!isOnline ? 'No internet connection. Please check your network and try again.' : 'Please try again later.'}
+          </Text>
+          <Button
+            mode="contained"
+            onPress={() => {
+              setLoadError(null);
+              setHasTriedCache(false);
+              loadGroupData();
+            }}
+            style={styles.retryButton}
+          >
+            Retry
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            Go Back
+          </Button>
+        </View>
+      </View>
+    );
+  }
+
+  // Safety check - if selectedGroup is still null, return early
   if (!selectedGroup) {
     return (
       <View style={styles.loadingContainer}>
@@ -421,12 +549,12 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
           </Card>
         )}
 
-
-        {/* Members Section with Tabs */}
+        {/* Members Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Members</Text>
             <View style={{ display: 'flex', flexDirection: 'row' }}>
+
               <IconButton
                 icon="account-plus"
                 size={24}
@@ -447,182 +575,70 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             </View>
           </View>
 
-          {/* Tab Buttons */}
-          <View style={styles.tabContainer}>
-            <Button
-              mode={activeTab === 'all' ? 'contained' : 'outlined'}
-              onPress={() => setActiveTab('all')}
-              style={[styles.tabButton, activeTab === 'all' && { backgroundColor: theme.colors.primary }]}
-              compact
-            >
-              All Members
-            </Button>
-            <Button
-              mode={activeTab === 'my' ? 'contained' : 'outlined'}
-              onPress={() => setActiveTab('my')}
-              style={[styles.tabButton, activeTab === 'my' && { backgroundColor: theme.colors.primary }]}
-              compact
-            >
-              My Transactions
-            </Button>
-          </View>
+          {selectedGroup.members?.map((member) => {
+            const memberBalance = balances.find(b => b.user_id === member.user_id);
+            const isCurrentUser = member.user_id === profile?.id;
 
-          {/* Tab Content */}
-          {activeTab === 'all' ? (
-            // All Members Tab
-            selectedGroup.members?.map((member) => {
-              const memberBalance = balances.find(b => b.user_id === member.user_id);
-              const isCurrentUser = member.user_id === profile?.id;
+            const settlementsGiven = settlements
+              .filter(s => s.from_user === member.user_id && s.group_id === groupId)
+              .reduce((sum, s) => sum + s.amount, 0);
 
-              const settlementsGiven = settlements
-                .filter(s => s.from_user === member.user_id && s.group_id === groupId)
-                .reduce((sum, s) => sum + s.amount, 0);
+            const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
 
-              const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
-
-              return (
-                <Card
-                  key={member.id}
-                  style={styles.memberCard}
-                >
-                  <Card.Content style={styles.memberContent}>
-                    <TouchableOpacity
-                      style={styles.memberLeft}
-                      onPress={() => navigation.navigate('GroupMemberDetails', {
-                        groupId: groupId,
-                        userId: member.user_id,
-                        userName: member.user?.full_name
-                      })}
-                    >
-                      <Avatar.Text
-                        size={40}
-                        label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                      />
-                      <View style={styles.memberInfo}>
-                        <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
-                          {member.user?.full_name || 'Unknown'}
-                          {isCurrentUser && ' (You)'}
-                        </Text>
-                        <Text style={[styles.memberEmail, { color: theme.colors.onSurfaceVariant }]}>{member.user?.email}</Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <View style={styles.memberRight}>
-                      {memberBalance && (
-                        <Text
-                          style={[
-                            styles.memberBalance,
-                            adjustedBalance > 0
-                              ? styles.positiveBalance
-                              : adjustedBalance < 0
-                                ? styles.negativeBalance
-                                : styles.neutralBalance,
-                          ]}
-                        >
-                          ₹{adjustedBalance.toFixed(2)}
-                        </Text>
-                      )}
-                      {isAdmin && !isCurrentUser && (
-                        <IconButton
-                          icon="close"
-                          size={20}
-                          onPress={() => handleRemoveMember(member.user_id, member.user?.full_name || 'User')}
-                        />
-                      )}
+            return (
+              <Card
+                key={member.id}
+                style={styles.memberCard}
+                onPress={() => navigation.navigate('GroupMemberDetails', {
+                  groupId: groupId,
+                  userId: member.user_id,
+                  userName: member.user?.full_name
+                })}
+              >
+                <Card.Content style={styles.memberContent}>
+                  <View style={styles.memberLeft}>
+                    <Avatar.Text
+                      size={40}
+                      label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
+                    />
+                    <View style={styles.memberInfo}>
+                      <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
+                        {member.user?.full_name || 'Unknown'}
+                        {isCurrentUser && ' (You)'}
+                      </Text>
+                      <Text style={[styles.memberEmail, { color: theme.colors.onSurfaceVariant }]}>{member.user?.email}</Text>
                     </View>
-                  </Card.Content>
-                </Card>
-              );
-            })
-          ) : (
-            // My Transactions Tab
-            selectedGroup.members
-              ?.filter(member => member.user_id !== profile?.id) // Exclude current user
-              .map((member) => {
-                // Calculate pairwise balance between current user and this member
-                let pairwiseBalance = 0;
+                  </View>
 
-                // Calculate from expenses - include ALL expenses where both are involved
-                expenses.forEach(expense => {
-                  const iPaid = expense.paid_by === profile?.id;
-                  const theyPaid = expense.paid_by === member.user_id;
-
-                  if (iPaid) {
-                    // I paid - check if they have an unsettled split
-                    const theirSplit = expense.splits?.find((s: any) => s.user_id === member.user_id);
-                    if (theirSplit && !theirSplit.is_settled) {
-                      pairwiseBalance += theirSplit.amount; // Positive = they owe me
-                    }
-                  } else if (theyPaid) {
-                    // They paid - check if I have an unsettled split
-                    const mySplit = expense.splits?.find((s: any) => s.user_id === profile?.id);
-                    if (mySplit && !mySplit.is_settled) {
-                      pairwiseBalance -= mySplit.amount; // Negative = I owe them
-                    }
-                  }
-                });
-
-                // Adjust for settlements between us two
-                const settlementsReceived = settlements
-                  .filter(s => s.from_user === member.user_id && s.to_user === profile?.id)
-                  .reduce((sum, s) => sum + s.amount, 0);
-
-                const settlementsPaid = settlements
-                  .filter(s => s.from_user === profile?.id && s.to_user === member.user_id)
-                  .reduce((sum, s) => sum + s.amount, 0);
-
-                pairwiseBalance = pairwiseBalance + settlementsReceived - settlementsPaid;
-
-                return (
-                  <Card
-                    key={member.id}
-                    style={styles.memberCard}
-                    onPress={() => navigation.navigate('GroupMemberDetails', {
-                      groupId: groupId,
-                      userId: member.user_id,
-                      userName: member.user?.full_name
-                    })}
-                  >
-                    <Card.Content style={styles.memberContent}>
-                      <View style={styles.memberLeft}>
-                        <Avatar.Text
-                          size={40}
-                          label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                        />
-                        <View style={styles.memberInfo}>
-                          <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
-                            {member.user?.full_name || 'Unknown'}
-                          </Text>
-                          <Text style={[styles.memberEmail, { color: theme.colors.onSurfaceVariant }]}>
-                            {pairwiseBalance > 0 
-                              ? `Owes you ₹${pairwiseBalance.toFixed(2)}` 
-                              : pairwiseBalance < 0 
-                                ? `You owe ₹${Math.abs(pairwiseBalance).toFixed(2)}`
-                                : 'Settled up'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.memberRight}>
-                        <Text
-                          style={[
-                            styles.memberBalance,
-                            pairwiseBalance > 0
-                              ? styles.positiveBalance
-                              : pairwiseBalance < 0
-                                ? styles.negativeBalance
-                                : styles.neutralBalance,
-                          ]}
-                        >
-                          ₹{pairwiseBalance.toFixed(2)}
-                        </Text>
-                      </View>
-                    </Card.Content>
-                  </Card>
-                );
-              })
-          )}
-
+                  <View style={styles.memberRight}>
+                    {memberBalance && (
+                      <Text
+                        style={[
+                          styles.memberBalance,
+                          adjustedBalance > 0
+                            ? styles.positiveBalance
+                            : adjustedBalance < 0
+                              ? styles.negativeBalance
+                              : styles.neutralBalance,
+                        ]}
+                      >
+                        ₹{adjustedBalance.toFixed(2)}
+                      </Text>
+                    )}
+                    {isAdmin && !isCurrentUser && (
+                      <IconButton
+                        icon="close"
+                        size={20}
+                        onPress={() =>
+                          handleRemoveMember(member.user_id, member.user?.full_name || 'User')
+                        }
+                      />
+                    )}
+                  </View>
+                </Card.Content>
+              </Card>
+            );
+          })}
         </View>
 
         {/* Bulk Payment Features */}
@@ -955,14 +971,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  tabContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  tabButton: {
-    flex: 1,
-  },
   memberCard: {
     marginBottom: 8,
     elevation: 2,
@@ -1082,7 +1090,7 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: 'absolute',
     right: 16,
-    bottom: 16,
+    bottom: 80,
     alignItems: 'flex-end',
   },
   fab: {
@@ -1115,5 +1123,43 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     minWidth: 100,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorContent: {
+    alignItems: 'center',
+    maxWidth: 400,
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryButton: {
+    marginBottom: 12,
+    minWidth: 200,
+  },
+  backButton: {
+    minWidth: 200,
   },
 });
