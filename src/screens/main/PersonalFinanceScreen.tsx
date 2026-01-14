@@ -6,7 +6,9 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Text,
   Card,
@@ -51,6 +53,7 @@ export default function PersonalFinanceScreen({ navigation }: any) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isBalanceHidden, setIsBalanceHidden] = useState(true);
 
   useEffect(() => {
     loadData();
@@ -188,6 +191,25 @@ export default function PersonalFinanceScreen({ navigation }: any) {
     return category?.icon || '💰';
   };
 
+  const toggleBalanceVisibility = () => {
+    setIsBalanceHidden(!isBalanceHidden);
+  };
+
+  const showBalanceInfo = () => {
+    Alert.alert(
+      'Balance Breakdown',
+      `Personal Finance:\n` +
+      `• Total Income: ₹${totalIncome.toFixed(2)}\n` +
+      `• Total Expenses: ₹${totalExpenses.toFixed(2)}\n` +
+      `• Total Savings: ₹${totalSavings.toFixed(2)}\n\n` +
+      `Current Month (${format(currentMonth, 'MMMM yyyy')}):\n` +
+      `• Income: ₹${monthlyIncome.toFixed(2)}\n` +
+      `• Expenses: ₹${monthlyExpenses.toFixed(2)}\n` +
+      `• Savings: ₹${monthlySavings.toFixed(2)}`,
+      [{ text: 'OK' }]
+    );
+  };
+
   // Show error state if there's an error and no data
   if (error && transactions.length === 0 && !loading) {
     return (
@@ -211,50 +233,78 @@ export default function PersonalFinanceScreen({ navigation }: any) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Overall Summary */}
-        <Card style={styles.summaryCard}>
-          <Card.Content>
-            <Text style={styles.summaryTitle}>Overall Balance</Text>
-            <Text
-              style={[
-                styles.overallBalance,
-                totalSavings > 0
-                  ? styles.positiveBalance
-                  : totalSavings < 0
-                    ? styles.negativeBalance
-                    : styles.neutralBalance,
-              ]}
-            >
-              ₹{totalSavings.toFixed(2)}
-            </Text>
+        {/* Overall Balance Card - Master Card Style */}
+        <View style={styles.cardContainer}>
+          <LinearGradient
+            colors={['#5b247a', '#1bcedf']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.creditCard}
+          >
+            {/* Top Row: Chip and Contactless */}
+            <View style={styles.cardTopRow}>
+              <View style={styles.cardChip} />
+              <IconButton
+                icon="wifi"
+                size={24}
+                iconColor="rgba(10, 132, 53, 0.6)"
+                style={{ transform: [{ rotate: '90deg' }], margin: 0 }}
+              />
+            </View>
 
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel} numberOfLines={1}>Total Income</Text>
-                <Text 
-                  style={[styles.summaryValue, styles.incomeText]} 
-                  numberOfLines={1} 
-                  adjustsFontSizeToFit
-                >
-                  ₹{totalIncome.toFixed(0)}
+            {/* Middle: Label, Eye, and Balance */}
+            <View style={styles.cardMiddle}>
+              <View style={styles.balanceHeader}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.cardLabel}>Total Balance</Text>
+                  <IconButton
+                    icon={isBalanceHidden ? "eye-off" : "eye"}
+                    size={20}
+                    iconColor="rgba(255,255,255,0.8)"
+                    onPress={toggleBalanceVisibility}
+                    style={styles.eyeIcon}
+                    rippleColor="rgba(255,255,255,0.3)"
+                  />
+                </View>
+
+                <IconButton
+                  icon="information-outline"
+                  size={18}
+                  iconColor="rgba(255,255,255,0.5)"
+                  onPress={showBalanceInfo}
+                  style={styles.infoIcon}
+                />
+              </View>
+
+              {/* THE BALANCE / MASKED TEXT */}
+              <Text style={styles.cardNumber}>
+                {isBalanceHidden
+                  ? "PKR ******"
+                  : `PKR ${totalSavings.toFixed(2)}`}
+              </Text>
+            </View>
+
+            {/* Bottom Row: Details and Logo */}
+            <View style={styles.cardBottom}>
+              <View style={styles.cardHolderInfo}>
+                <Text style={styles.cardLabelSmall}>CARD HOLDER</Text>
+                <Text style={styles.cardName} numberOfLines={1}>
+                  {profile?.full_name?.toUpperCase() || "USER"}
+                </Text>
+                <Text style={styles.cardStatusText}>
+                  {isBalanceHidden
+                    ? "Status: Hidden"
+                    : totalSavings >= 0 ? "Status: Active" : "Status: Attention"}
                 </Text>
               </View>
 
-              <Divider style={styles.verticalDivider} />
-
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel} numberOfLines={1}>Total Expenses</Text>
-                <Text 
-                  style={[styles.summaryValue, styles.expenseText]} 
-                  numberOfLines={1} 
-                  adjustsFontSizeToFit
-                >
-                  ₹{totalExpenses.toFixed(0)}
-                </Text>
+              <View style={styles.mcLogoContainer}>
+                <View style={[styles.mcCircle, { backgroundColor: 'rgba(235, 0, 27, 0.8)' }]} />
+                <View style={[styles.mcCircle, { backgroundColor: 'rgba(247, 158, 27, 0.8)', marginLeft: -12 }]} />
               </View>
             </View>
-          </Card.Content>
-        </Card>
+          </LinearGradient>
+        </View>
 
         {/* Month Selector */}
         <Card style={styles.monthCard}>
@@ -449,50 +499,115 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 16,
     paddingBottom: 80,
   },
-  summaryCard: {
-    marginBottom: 16,
-    backgroundColor: theme.colors.primary,
-    elevation: 4,
+  cardContainer: {
+    marginBottom: 24,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
-  summaryTitle: {
-    fontSize: 14,
-    color: theme.colors.onPrimary,
-    opacity: 0.8,
+  creditCard: {
+    borderRadius: 20,
+    padding: 24,
+    height: 220,
+    justifyContent: "space-between",
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  cardChip: {
+    width: 50,
+    height: 35,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.1)",
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardMiddle: {
+    justifyContent: "center",
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  overallBalance: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: theme.colors.onPrimary,
-  },
-  positiveBalance: {
-    color: '#A5D6A7', // Light green for visibility on primary dark
-  },
-  negativeBalance: {
-    color: '#EF9A9A', // Light red for visibility on primary dark
-  },
-  neutralBalance: {
-    color: theme.colors.onPrimary,
-  },
-  summaryRow: {
+  labelRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
   },
-  summaryItem: {
+  cardLabel: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    letterSpacing: 1.5,
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  eyeIcon: {
+    margin: 0,
+    marginLeft: 10,
+    height: 24,
+    width: 24,
+  },
+  infoIcon: {
+    margin: 0,
+    padding: 0,
+    height: 20,
+    width: 20,
+  },
+  cardNumber: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "bold",
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  cardBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+  },
+  cardHolderInfo: {
     flex: 1,
-    alignItems: 'center',
   },
-  summaryLabel: {
-    fontSize: 11,
-    color: theme.colors.onPrimary,
-    opacity: 0.8,
+  cardLabelSmall: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 1,
   },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 4,
+  cardName: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    letterSpacing: 1,
+    marginTop: 2,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  cardStatusText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  mcLogoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  mcCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   incomeText: {
     color: '#4CAF50', // Keep distinct green
@@ -502,12 +617,6 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   neutralText: {
     color: theme.colors.onSurfaceVariant,
-  },
-  verticalDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: theme.colors.onPrimary,
-    opacity: 0.3,
   },
   monthCard: {
     marginBottom: 16,

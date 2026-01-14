@@ -19,5 +19,6 @@ export default ({ config }: { config: any }) => ({
     SMTP_PASSWORD: process.env.SMTP_PASSWORD,
     SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL,
     SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'Flatmates Expense Tracker',
+    WHATSAPP_API_URL: process.env.WHATSAPP_API_URL || 'http://109.123.251.103:30010',
   },
 });
