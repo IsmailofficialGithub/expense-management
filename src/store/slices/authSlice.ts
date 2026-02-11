@@ -48,48 +48,53 @@ export const signIn = createAsyncThunk(
       const result = await authService.signIn(data.email, data.password);
       if (result.user) {
         // Save user to local storage for offline access
-        // We need to add setUser/getUser to storageService first (I'll add it in next step, but let's assume it exists or use generic set)
-        // actually I will use storageService.storage.set('user', result.user) directly or similar if I can't change storageService here.
-        // But better to update storageService first.
-        // I will assume I will update storageService in the next step.
-        // For now, let's keep the flow.
-
-        let profile = null;
-        try {
-          profile = await profileService.getProfile(result.user.id);
-        } catch (e) {
-          console.warn("Profile fetch failed during login", e);
-        }
-
-        if (!profile) {
-          // Try to load from cache if network failed
-          const cachedProfile = await storageService.getProfile();
-          if (cachedProfile && cachedProfile.id === result.user.id) {
-            profile = cachedProfile;
-          }
-        }
-
-        // If still no profile, we can't strictly validate, but if we are ONLINE and it's missing, that's bad.
-        // But if we are offline (which signIn usually isn't, but maybe flaky), we might want to proceed?
-        // Actually signIn requires online.
-        // So if profile is missing after online sign in, it's a database issue. 
-        // BUT, we should try to not block the user if possible? 
-        // No, strict requirement: "User profile not found" IS an error for new users.
-        if (!profile) {
-          // Retry one more time? Or just fail.
-          // If this is a new user, profile SHOULD exist. 
-          // Error out.
-          if (!profile) {
-            // Check if it's a network error vs 404
-            // We will throw, but user said "stuck on loading".
-            // Throwing stops the loading spinner in LoginScreen (catch block).
-            throw new Error('User profile could not be loaded. Please check your connection.');
-          }
-        }
-
-        await storageService.setProfile(profile);
-        // We'll also store the user token/session implicitly via supabase, but let's store the user object explicitly for our offline fallback
         await storageService.storage.set('user', result.user);
+
+        // Fetch profile with timeout to prevent hanging
+        let profile = null;
+        const PROFILE_FETCH_TIMEOUT = 3000; // 3 seconds max
+        
+        try {
+          // Wrap profile fetch in a timeout to prevent hanging
+          const profilePromise = profileService.getProfile(result.user.id);
+          const timeoutPromise = new Promise<null>((resolve) => {
+            setTimeout(() => {
+              console.warn('[Auth] Profile fetch timeout - network call may be hanging');
+              resolve(null);
+            }, PROFILE_FETCH_TIMEOUT);
+          });
+
+          profile = await Promise.race([profilePromise, timeoutPromise]);
+          
+          if (profile) {
+            console.log('[Auth] Profile fetched successfully');
+          } else {
+            console.warn('[Auth] Profile fetch timed out or returned null');
+          }
+        } catch (e) {
+          console.warn("[Auth] Profile fetch failed during login:", e);
+        }
+
+        // Try to load from cache if network fetch failed or timed out
+        if (!profile) {
+          try {
+            const cachedProfile = await storageService.getProfile();
+            if (cachedProfile && cachedProfile.id === result.user.id) {
+              profile = cachedProfile;
+              console.log('[Auth] Using cached profile');
+            }
+          } catch (cacheError) {
+            console.warn('[Auth] Failed to load cached profile:', cacheError);
+          }
+        }
+
+        // Allow login to proceed even if profile is null
+        // Profile can be fetched later or created if missing
+        if (profile) {
+          await storageService.setProfile(profile);
+        } else {
+          console.warn('[Auth] No profile found (neither from API nor cache). Login will proceed with null profile.');
+        }
 
         return { user: result.user, profile };
       }
@@ -115,67 +120,87 @@ export const signOut = createAsyncThunk(
 export const initializeAuth = createAsyncThunk(
   'auth/initialize',
   async (_, { rejectWithValue }) => {
-    try {
-      console.log('Initializing auth...');
+    // Wrap entire initialization in a timeout to ensure it always completes
+    const INIT_TIMEOUT = 5000; // 5 seconds max for entire initialization
+    
+    const initPromise = (async () => {
+      try {
+        console.log('Initializing auth...');
 
-      // Retry mechanism to handle async session loading from AsyncStorage
-      // Supabase needs time to load the session from storage
-      let user = null;
-      const maxRetries = 3;
-      const retryDelay = 200; // ms
+        // Retry mechanism to handle async session loading from AsyncStorage
+        // Supabase needs time to load the session from storage
+        let user = null;
+        const maxRetries = 2; // Reduced retries since getCurrentUser already has timeout
+        const retryDelay = 200; // ms
 
-      for (let i = 0; i < maxRetries; i++) {
-        user = await authService.getCurrentUser();
+        for (let i = 0; i < maxRetries; i++) {
+          user = await authService.getCurrentUser();
 
-        if (user) {
-          console.log('User session found on attempt', i + 1);
-          break;
-        }
-
-        // If no user found and not the last retry, wait a bit
-        if (i < maxRetries - 1) {
-          console.log('No session yet, retrying in', retryDelay, 'ms...');
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-        }
-      }
-
-      // FALLBACK: If Supabase returns null (offline), try our local backup
-      if (!user) {
-        try {
-          const cachedUser = await storageService.storage.get<User>('user');
-          if (cachedUser) {
-            console.log('Restored user from local backup (Offline Mode)');
-            user = cachedUser;
+          if (user) {
+            console.log('User session found on attempt', i + 1);
+            break;
           }
-        } catch (e) {
-          console.warn('Failed to restore user backup', e);
+
+          // If no user found and not the last retry, wait a bit
+          if (i < maxRetries - 1) {
+            console.log('No session yet, retrying in', retryDelay, 'ms...');
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          }
         }
-      }
+
+        // FALLBACK: If Supabase returns null (offline), try our local backup
+        if (!user) {
+          try {
+            const cachedUser = await storageService.storage.get<User>('user');
+            if (cachedUser) {
+              console.log('Restored user from local backup (Offline Mode)');
+              user = cachedUser;
+            }
+          } catch (e) {
+            console.warn('Failed to restore user backup', e);
+          }
+        }
 
       if (user) {
         console.log('User authenticated:', user.id);
         let profile = null;
+        
+        // Fetch profile with timeout to prevent hanging
+        const PROFILE_FETCH_TIMEOUT = 2000; // 2 seconds max
         try {
-          profile = await profileService.getProfile(user.id);
+          const profilePromise = profileService.getProfile(user.id);
+          const timeoutPromise = new Promise<null>((resolve) => {
+            setTimeout(() => {
+              console.warn('[initializeAuth] Profile fetch timeout');
+              resolve(null);
+            }, PROFILE_FETCH_TIMEOUT);
+          });
+          
+          profile = await Promise.race([profilePromise, timeoutPromise]);
         } catch (profileError) {
           console.warn('Failed to fetch profile from Supabase, trying cache:', profileError);
         }
 
         if (!profile) {
           // Fallback to cache
-          const cachedProfile = await storageService.getProfile();
-          if (cachedProfile && cachedProfile.id === user.id) {
-            profile = cachedProfile;
-            console.log('Restored profile from cache');
+          try {
+            const cachedProfile = await storageService.getProfile();
+            if (cachedProfile && cachedProfile.id === user.id) {
+              profile = cachedProfile;
+              console.log('Restored profile from cache');
+            }
+          } catch (cacheError) {
+            console.warn('Failed to load cached profile:', cacheError);
           }
         }
 
-        if (!profile) {
+        // Always return, even if profile is null
+        if (profile) {
+          await storageService.setProfile(profile);
+        } else {
           console.warn('Session found but profile missing (and no cache). Likely offline or first login issue.');
-          return { user, profile: null };
         }
-
-        await storageService.setProfile(profile);
+        
         return { user, profile };
       }
 
@@ -183,8 +208,20 @@ export const initializeAuth = createAsyncThunk(
       return { user: null, profile: null };
     } catch (error: any) {
       console.error('initializeAuth error:', error);
-      return rejectWithValue(error.message || 'Failed to initialize auth');
+      // Return null user instead of rejecting to ensure initialized is set
+      return { user: null, profile: null };
     }
+  })();
+
+    // Race with timeout to ensure thunk always completes
+    const timeoutPromise = new Promise<{ user: null; profile: null }>((resolve) => {
+      setTimeout(() => {
+        console.warn('[initializeAuth] Overall timeout - initialization taking too long, proceeding with no user');
+        resolve({ user: null, profile: null });
+      }, INIT_TIMEOUT);
+    });
+
+    return await Promise.race([initPromise, timeoutPromise]);
   }
 );
 

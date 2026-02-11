@@ -119,9 +119,41 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
         if (session?.user) {
           try {
             const { profileService } = await import('../services/supabase.service');
-            const profile = await profileService.getProfile(session.user.id);
+            
+            // Fetch profile with timeout to prevent hanging
+            const PROFILE_FETCH_TIMEOUT = 2000; // 2 seconds max
+            let profile = null;
+            
+            try {
+              const profilePromise = profileService.getProfile(session.user.id);
+              const timeoutPromise = new Promise<null>((resolve) => {
+                setTimeout(() => {
+                  console.warn('[Provider] Profile fetch timeout in onAuthStateChange');
+                  resolve(null);
+                }, PROFILE_FETCH_TIMEOUT);
+              });
+              
+              profile = await Promise.race([profilePromise, timeoutPromise]);
+            } catch (profileError) {
+              console.warn('[Provider] Profile fetch failed:', profileError);
+            }
+            
+            // If profile fetch failed, try cache
+            if (!profile) {
+              try {
+                const cachedProfile = await storageService.getProfile();
+                if (cachedProfile && cachedProfile.id === session.user.id) {
+                  profile = cachedProfile;
+                  console.log('[Provider] Using cached profile');
+                }
+              } catch (cacheError) {
+                console.warn('[Provider] Failed to load cached profile:', cacheError);
+              }
+            }
+            
+            // Dispatch user with profile (or null if not available)
             store.dispatch(setUser({ user: session.user, profile }));
-
+            
             // Load user-specific cached data after login
             const cachedPaymentMethods = await storageService.getPaymentMethods();
             if (cachedPaymentMethods && cachedPaymentMethods.length > 0) {

@@ -14,7 +14,10 @@
     "scheme": "flatmates",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.flatmates"
+      "bundleIdentifier": "com.yourname.flatmates",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.yourname.flatmates",

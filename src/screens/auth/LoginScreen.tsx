@@ -1,5 +1,5 @@
 // src/screens/auth/LoginScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Dimensions, TouchableOpacity } from 'react-native';
 import { TextInput, Text, Headline, HelperText, useTheme } from 'react-native-paper';
 import { useAppDispatch } from '../../store';
@@ -34,12 +34,34 @@ export default function LoginScreen({ navigation }: Props) {
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
   const dispatch = useAppDispatch();
-  const { error } = useAuth();
+  const { error, isAuthenticated } = useAuth();
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
+
+  // Dismiss loading overlay and navigate when authentication succeeds
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('[LoginScreen] User authenticated, dismissing loading overlay');
+      // Dismiss loading overlay immediately
+      setShowLoadingOverlay(false);
+      
+      // Small delay to ensure state is fully updated before navigation
+      const timer = setTimeout(() => {
+        console.log('[LoginScreen] Navigating to Main...');
+        // Navigation is handled by AppNavigator based on isAuthenticated
+        // But we can also manually navigate as fallback
+        try {
+          (navigation as any).replace('Main');
+        } catch (navError) {
+          console.warn('[LoginScreen] Manual navigation failed, AppNavigator should handle it:', navError);
+        }
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, navigation]);
 
   const handleLogin = async () => {
     setErrors({ email: '', password: '' });

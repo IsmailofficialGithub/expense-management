@@ -132,9 +132,38 @@ export const authService = {
 
   getCurrentUser: async () => {
     try {
-      // ALWAYS use getSession() first - it reads from local storage and is offline-friendly
-      // This prevents mixing online/offline tokens
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // Wrap getSession() in a timeout to prevent hanging on network calls
+      // When autoRefreshToken is true, getSession() may try to refresh the token
+      // which makes a network call to /auth/v1/user or /auth/v1/token
+      // If that call fails or hangs, the promise never resolves
+      const SESSION_TIMEOUT = 2000; // 2 seconds max wait
+      
+      let timeoutId: NodeJS.Timeout;
+      const timeoutPromise = new Promise<{ data: { session: null }, error: { message: 'Session check timeout' } }>((resolve) => {
+        timeoutId = setTimeout(() => {
+          console.warn('[AuthService] ⚠️ getSession timeout - network call to /auth/v1/user is hanging');
+          console.warn('[AuthService] This usually happens when autoRefreshToken tries to refresh but network fails');
+          resolve({ data: { session: null }, error: { message: 'Session check timeout' } });
+        }, SESSION_TIMEOUT);
+      });
+
+      const sessionPromise = supabase.auth.getSession().then((result) => {
+        clearTimeout(timeoutId);
+        return result;
+      }).catch((error) => {
+        clearTimeout(timeoutId);
+        throw error;
+      });
+
+      const sessionResult = await Promise.race([sessionPromise, timeoutPromise]);
+      
+      // If timeout occurred, return null
+      if (sessionResult.error?.message === 'Session check timeout') {
+        console.warn('[AuthService] Returning null to allow navigation to proceed');
+        return null;
+      }
+
+      const { data: { session }, error: sessionError } = sessionResult;
 
       console.log('[AuthService] getSession result:', {
         hasSession: !!session,
