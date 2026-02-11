@@ -267,19 +267,6 @@ export const initializeAuth = createAsyncThunk(
     return await Promise.race([initPromise, timeoutPromise]);
   }
 );
-  })();
-
-    // Race with timeout to ensure thunk always completes
-    const timeoutPromise = new Promise<{ user: null; profile: null }>((resolve) => {
-      setTimeout(() => {
-        console.warn('[initializeAuth] Overall timeout - initialization taking too long, proceeding with no user');
-        resolve({ user: null, profile: null });
-      }, INIT_TIMEOUT);
-    });
-
-    return await Promise.race([initPromise, timeoutPromise]);
-  }
-);
 
 export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
