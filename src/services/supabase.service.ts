@@ -711,6 +711,25 @@ export const invitationService = {
                       </ol>
                     </div>
                     
+                    <!-- Download App Section -->
+                    <div style="background-color: #fff3e0; border-left: 4px solid #FF9800; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                      <p style="color: #E65100; font-size: 14px; margin: 0 0 10px 0; line-height: 1.6; font-weight: bold;">
+                        📥 Don't have the app yet?
+                      </p>
+                      <p style="color: #E65100; font-size: 13px; margin: 0 0 12px 0; line-height: 1.6;">
+                        Download the Flatmates Expense Tracker app from our GitHub releases:
+                      </p>
+                      <table role="presentation" style="width: 100%;">
+                        <tr>
+                          <td style="text-align: center; padding: 0;">
+                            <a href="https://github.com/IsmailofficialGithub/expense-management/releases/download/1.0/expense-management.apk" style="display: inline-block; background-color: #FF9800; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; font-size: 14px; text-align: center;">
+                              Download App
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                    
                     <!-- Manual Sign Up Option -->
                     <div style="background-color: #f5f5f5; border: 1px solid #e0e0e0; padding: 15px; margin: 20px 0; border-radius: 4px;">
                       <p style="color: #666666; font-size: 13px; margin: 0 0 8px 0; font-weight: bold;">

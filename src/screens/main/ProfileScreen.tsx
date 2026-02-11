@@ -30,6 +30,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from 'react-native-paper';
 import { updatesService } from '../../services/updates.service';
+import { CommonActions } from '@react-navigation/native';
 
 export default function ProfileScreen({ navigation }: any) {
   const { profile, user, loading } = useAuth();
@@ -373,6 +374,14 @@ export default function ProfileScreen({ navigation }: any) {
           try {
             await dispatch(signOut()).unwrap();
             showToast('Signed out successfully', 'info');
+            
+            // Reset navigation to Auth screen
+            navigation.dispatch(
+              CommonActions.reset({
+                index: 0,
+                routes: [{ name: 'Auth' }],
+              })
+            );
           } catch (error) {
             ErrorHandler.handleError(error, showToast, 'Sign Out');
           } finally {

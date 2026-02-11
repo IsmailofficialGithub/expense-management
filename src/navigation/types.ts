@@ -46,7 +46,10 @@ export type MainTabParamList = {
 };
 
 export type AuthStackParamList = {
-    Login: undefined;
+    Login: {
+        verificationEmail?: string;
+        showVerificationMessage?: boolean;
+    } | undefined;
     Signup: undefined;
     ForgotPassword: undefined;
     VerifyOtp: { email: string };

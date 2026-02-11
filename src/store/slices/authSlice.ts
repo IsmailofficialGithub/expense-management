@@ -125,7 +125,8 @@ export const initializeAuth = createAsyncThunk(
     
     const initPromise = (async () => {
       try {
-        console.log('Initializing auth...');
+        console.log('🔵 [AUTH INIT] Starting auth initialization...');
+        console.log('🔵 [AUTH INIT] Timestamp:', new Date().toISOString());
 
         // Retry mechanism to handle async session loading from AsyncStorage
         // Supabase needs time to load the session from storage
@@ -134,83 +135,138 @@ export const initializeAuth = createAsyncThunk(
         const retryDelay = 200; // ms
 
         for (let i = 0; i < maxRetries; i++) {
-          user = await authService.getCurrentUser();
+          console.log(`🔵 [AUTH INIT] Attempt ${i + 1}/${maxRetries} - Getting current user...`);
+          const startTime = Date.now();
 
-          if (user) {
-            console.log('User session found on attempt', i + 1);
+          try {
+            user = await authService.getCurrentUser();
+
+            const duration = Date.now() - startTime;
+            console.log(`🔵 [AUTH INIT] Attempt ${i + 1} completed in ${duration}ms`);
+
+            if (user) {
+              console.log('✅ [AUTH INIT] User session found on attempt', i + 1);
+              console.log('✅ [AUTH INIT] User ID:', user.id);
+              console.log('✅ [AUTH INIT] User email:', user.email);
+              break;
+            }
+          } catch (error: any) {
+            const duration = Date.now() - startTime;
+            console.error(`❌ [AUTH INIT] Attempt ${i + 1} failed after ${duration}ms:`, error.message);
+
+            // If it's a timeout and not the last retry, continue to next attempt
+            if (i < maxRetries - 1) {
+              console.log(`⏳ [AUTH INIT] Retrying after error...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              continue;
+            }
+
+            // On last retry, break and try cache
+            console.warn('⚠️ [AUTH INIT] All getCurrentUser attempts failed, will try cache');
             break;
           }
 
           // If no user found and not the last retry, wait a bit
-          if (i < maxRetries - 1) {
-            console.log('No session yet, retrying in', retryDelay, 'ms...');
+          if (!user && i < maxRetries - 1) {
+            console.log(`⏳ [AUTH INIT] No session yet, retrying in ${retryDelay}ms...`);
             await new Promise(resolve => setTimeout(resolve, retryDelay));
           }
         }
 
         // FALLBACK: If Supabase returns null (offline), try our local backup
         if (!user) {
+          console.log('🔶 [AUTH INIT] No user from Supabase, checking local backup...');
           try {
             const cachedUser = await storageService.storage.get<User>('user');
             if (cachedUser) {
-              console.log('Restored user from local backup (Offline Mode)');
+              console.log('✅ [AUTH INIT] Restored user from local backup (Offline Mode)');
+              console.log('✅ [AUTH INIT] Cached user ID:', cachedUser.id);
               user = cachedUser;
+            } else {
+              console.log('⚠️ [AUTH INIT] No cached user found in local storage');
             }
           } catch (e) {
-            console.warn('Failed to restore user backup', e);
+            console.error('❌ [AUTH INIT] Failed to restore user backup:', e);
           }
         }
 
-      if (user) {
-        console.log('User authenticated:', user.id);
-        let profile = null;
-        
-        // Fetch profile with timeout to prevent hanging
-        const PROFILE_FETCH_TIMEOUT = 2000; // 2 seconds max
-        try {
-          const profilePromise = profileService.getProfile(user.id);
-          const timeoutPromise = new Promise<null>((resolve) => {
-            setTimeout(() => {
-              console.warn('[initializeAuth] Profile fetch timeout');
-              resolve(null);
-            }, PROFILE_FETCH_TIMEOUT);
-          });
+        if (user) {
+          console.log('🔵 [AUTH INIT] User authenticated, fetching profile...');
+          let profile = null;
           
-          profile = await Promise.race([profilePromise, timeoutPromise]);
-        } catch (profileError) {
-          console.warn('Failed to fetch profile from Supabase, trying cache:', profileError);
-        }
-
-        if (!profile) {
-          // Fallback to cache
+          // Fetch profile with timeout to prevent hanging
+          const PROFILE_FETCH_TIMEOUT = 2000; // 2 seconds max
           try {
-            const cachedProfile = await storageService.getProfile();
-            if (cachedProfile && cachedProfile.id === user.id) {
-              profile = cachedProfile;
-              console.log('Restored profile from cache');
+            const profileStartTime = Date.now();
+            const profilePromise = profileService.getProfile(user.id);
+            const timeoutPromise = new Promise<null>((resolve) => {
+              setTimeout(() => {
+                console.warn('⚠️ [AUTH INIT] Profile fetch timeout');
+                resolve(null);
+              }, PROFILE_FETCH_TIMEOUT);
+            });
+            
+            profile = await Promise.race([profilePromise, timeoutPromise]);
+            
+            if (profile) {
+              const profileDuration = Date.now() - profileStartTime;
+              console.log(`✅ [AUTH INIT] Profile fetched in ${profileDuration}ms`);
+              console.log('✅ [AUTH INIT] Profile name:', profile?.full_name);
             }
-          } catch (cacheError) {
-            console.warn('Failed to load cached profile:', cacheError);
+          } catch (profileError) {
+            console.error('❌ [AUTH INIT] Failed to fetch profile from Supabase:', profileError);
+            console.log('🔶 [AUTH INIT] Trying to load profile from cache...');
           }
-        }
 
-        // Always return, even if profile is null
-        if (profile) {
+          if (!profile) {
+            // Fallback to cache
+            try {
+              const cachedProfile = await storageService.getProfile();
+              if (cachedProfile && cachedProfile.id === user.id) {
+                profile = cachedProfile;
+                console.log('✅ [AUTH INIT] Restored profile from cache');
+                console.log('✅ [AUTH INIT] Cached profile name:', profile?.full_name);
+              } else {
+                console.log('⚠️ [AUTH INIT] No matching cached profile found');
+              }
+            } catch (cacheError) {
+              console.warn('⚠️ [AUTH INIT] Failed to load cached profile:', cacheError);
+            }
+          }
+
+          if (!profile) {
+            console.warn('⚠️ [AUTH INIT] Session found but profile missing (and no cache). Likely offline or first login issue.');
+            return { user, profile: null };
+          }
+
           await storageService.setProfile(profile);
-        } else {
-          console.warn('Session found but profile missing (and no cache). Likely offline or first login issue.');
+          console.log('✅ [AUTH INIT] Auth initialization completed successfully');
+          console.log('✅ [AUTH INIT] Returning user:', user.id, 'profile:', profile.full_name);
+          return { user, profile };
         }
-        
-        return { user, profile };
-      }
 
-      console.log('No user session found, user is logged out');
-      return { user: null, profile: null };
-    } catch (error: any) {
-      console.error('initializeAuth error:', error);
-      // Return null user instead of rejecting to ensure initialized is set
-      return { user: null, profile: null };
-    }
+        console.log('ℹ️ [AUTH INIT] No user session found, user is logged out');
+        return { user: null, profile: null };
+      } catch (error: any) {
+        console.error('❌ [AUTH INIT] Critical error during initialization:', error);
+        console.error('❌ [AUTH INIT] Error message:', error.message);
+        console.error('❌ [AUTH INIT] Error stack:', error.stack);
+        // Return null user instead of rejecting to ensure initialized is set
+        return { user: null, profile: null };
+      }
+    })();
+
+    // Race with timeout to ensure thunk always completes
+    const timeoutPromise = new Promise<{ user: null; profile: null }>((resolve) => {
+      setTimeout(() => {
+        console.warn('⚠️ [AUTH INIT] Overall timeout - initialization taking too long, proceeding with no user');
+        resolve({ user: null, profile: null });
+      }, INIT_TIMEOUT);
+    });
+
+    return await Promise.race([initPromise, timeoutPromise]);
+  }
+);
   })();
 
     // Race with timeout to ensure thunk always completes
@@ -315,12 +371,24 @@ const authSlice = createSlice({
     });
 
     // Sign Out
+    builder.addCase(signOut.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
     builder.addCase(signOut.fulfilled, (state) => {
       state.user = null;
       state.profile = null;
       state.isAuthenticated = false;
       state.loading = false;
       state.error = null;
+    });
+    builder.addCase(signOut.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+      // Even if sign out fails, clear the auth state
+      state.user = null;
+      state.profile = null;
+      state.isAuthenticated = false;
     });
 
     // Initialize

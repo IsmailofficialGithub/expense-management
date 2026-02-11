@@ -21,91 +21,118 @@ interface ReduxProviderProps {
 
 export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
   useEffect(() => {
+    console.log('🟣 [PROVIDER] Redux Provider mounted, starting initialization...');
+    console.log('🟣 [PROVIDER] Timestamp:', new Date().toISOString());
+    
     // Initialize auth state
+    console.log('🟣 [PROVIDER] Dispatching initializeAuth...');
     store.dispatch(initializeAuth());
 
     // Load cached data on startup - load immediately into Redux
     const loadCachedData = async () => {
       try {
+        console.log('🟣 [PROVIDER] Starting to load cached data...');
+        
         // Load expenses and set directly in Redux (no API call)
         const cachedProfile = await storageService.getProfile();
         if (cachedProfile) {
+          console.log('✅ [PROVIDER] Loaded cached profile:', cachedProfile.full_name);
           store.dispatch(setProfileFromCache(cachedProfile));
+        } else {
+          console.log('ℹ️ [PROVIDER] No cached profile found');
         }
 
         const cachedExpenses = await storageService.getExpenses();
         if (cachedExpenses && cachedExpenses.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedExpenses.length, 'cached expenses');
           store.dispatch(setExpensesFromCache(cachedExpenses));
         }
 
         // Load categories
         const cachedCategories = await storageService.getCategories();
         if (cachedCategories && cachedCategories.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedCategories.length, 'cached categories');
           store.dispatch(setCategoriesFromCache(cachedCategories));
         }
 
         // Load settlements
         const cachedSettlements = await storageService.getSettlements();
         if (cachedSettlements && cachedSettlements.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedSettlements.length, 'cached settlements');
           store.dispatch(setSettlementsFromCache(cachedSettlements));
         }
 
         // Load groups
         const cachedGroups = await storageService.getGroups();
         if (cachedGroups && cachedGroups.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedGroups.length, 'cached groups');
           store.dispatch(setGroupsFromCache(cachedGroups));
         }
 
         // Load personal transactions
         const cachedTransactions = await storageService.getPersonalTransactions();
         if (cachedTransactions && cachedTransactions.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedTransactions.length, 'cached personal transactions');
           store.dispatch(setTransactionsFromCache(cachedTransactions));
         }
 
         // Load personal categories
         const cachedPersonalCategories = await storageService.getPersonalCategories();
         if (cachedPersonalCategories && cachedPersonalCategories.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedPersonalCategories.length, 'cached personal categories');
           store.dispatch(setPersonalCategoriesFromCache(cachedPersonalCategories));
         }
 
         // Load complete balance
         const cachedCompleteBalance = await storageService.getCompleteBalance();
         if (cachedCompleteBalance) {
+          console.log('✅ [PROVIDER] Loaded cached complete balance');
           store.dispatch(setCompleteBalanceFromCache(cachedCompleteBalance));
         }
 
         // Load hotels
         const cachedHotels = await storageService.getHotels();
         if (cachedHotels && cachedHotels.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedHotels.length, 'cached hotels');
           store.dispatch(setHotelsFromCache(cachedHotels));
         }
 
         // Load notifications
         const cachedNotifications = await storageService.getNotifications();
         if (cachedNotifications && cachedNotifications.length > 0) {
+          console.log('✅ [PROVIDER] Loaded', cachedNotifications.length, 'cached notifications');
           store.dispatch(setNotificationsFromCache(cachedNotifications));
         }
+
+        console.log('✅ [PROVIDER] Finished loading all cached data');
 
         // After loading cache, sync in background if online (non-blocking)
         const state = store.getState() as any;
         if (state.ui.isOnline) {
+          console.log('🟣 [PROVIDER] Online - scheduling background sync in 1s...');
           // Trigger background sync (don't block UI)
           setTimeout(async () => {
             try {
+              console.log('🟣 [PROVIDER] Starting background sync...');
               const queue = await syncService.getSyncQueue();
               if (queue.length > 0) {
+                console.log('🟣 [PROVIDER] Sync queue has', queue.length, 'items');
                 await syncService.fullSync();
               } else {
+                console.log('🟣 [PROVIDER] No sync queue, syncing from server...');
                 // Even if no queue, sync from server to get latest data
                 await syncService.syncFromServer();
               }
+              console.log('✅ [PROVIDER] Background sync completed');
             } catch (error) {
-              console.error('Background sync failed:', error);
+              console.error('❌ [PROVIDER] Background sync failed:', error);
             }
           }, 1000);
+        } else {
+          console.log('⚠️ [PROVIDER] Offline - skipping background sync');
         }
       } catch (error) {
-        console.error('Error loading cached data:', error);
+        console.error('❌ [PROVIDER] Error loading cached data:', error);
       }
     };
 

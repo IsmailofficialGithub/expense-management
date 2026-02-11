@@ -227,22 +227,6 @@ export default function DashboardScreen({ navigation }: any) {
             </Text>
           </View>
           <View style={styles.headerRight}>
-            {pendingInvitationsCount > 0 && (
-              <IconButton
-                icon="bell"
-                size={24}
-                iconColor={theme.colors.primary}
-                onPress={() => navigation.navigate("Invitations")}
-                style={styles.notificationButton}
-              />
-            )}
-            {pendingInvitationsCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {pendingInvitationsCount > 9 ? '9+' : pendingInvitationsCount}
-                </Text>
-              </View>
-            )}
             {profile?.avatar_url ? (
               <Avatar.Image
                 size={48}
@@ -629,7 +613,7 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
       )}
       {/* Recent Group Expenses */}
-      {recentExpenses.length > 0 && (
+      {groups.length > 0 && recentExpenses.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
@@ -763,28 +747,6 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    position: "relative",
-  },
-  notificationButton: {
-    marginRight: 8,
-  },
-  badge: {
-    position: "absolute",
-    top: 4,
-    right: 40,
-    backgroundColor: "#F44336",
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 4,
-    zIndex: 1,
-  },
-  badgeText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "bold",
   },
   greeting: {
     fontSize: 16,
