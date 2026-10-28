@@ -12,6 +12,7 @@ import { settleUp } from '../../store/slices/expensesSlice';
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface Props {
     navigation: any;
@@ -201,7 +202,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                     <Card style={[styles.infoCard, { backgroundColor: theme.colors.surface }]}>
                         <Card.Content>
                             <View style={styles.infoHeader}>
-                                <Text style={styles.infoIcon}>💸</Text>
+                                <MaterialCommunityIcons name="cash-fast" style={styles.infoIcon} color={theme.colors.primary} />
                                 <View style={styles.infoText}>
                                     <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>Settle Up</Text>
                                     <Text style={[styles.infoDescription, { color: theme.colors.onSurfaceVariant }]}>
@@ -266,7 +267,7 @@ export default function SettleUpScreen({ navigation, route }: Props) {
                                             You don't owe anyone in this group
                                         </Text>
                                         <Text style={[styles.emptySubtext, { color: theme.colors.onSurfaceVariant }]}>
-                                            You're all settled up! 🎉
+                                            You're all settled up!
                                         </Text>
                                     </Card.Content>
                                 </Card>

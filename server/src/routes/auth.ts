@@ -11,6 +11,9 @@ const email = z.string().trim().toLowerCase().email();
 const password = z.string().min(6).max(200);
 const strict = { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } };
 
+// Generated default picture (PNG works on Android, iOS and web), seeded by the user id so it is stable and unique.
+export const defaultAvatar = (userId: string) => `https://api.dicebear.com/9.x/adventurer-neutral/png?seed=${userId}&size=256`;
+
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 // Same as the old processPendingInvitations: join every group the email was invited to.
@@ -44,7 +47,8 @@ export async function authRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: 'User already registered' });
       }
       userId = rows[0].id;
-      await client.query('insert into profiles (id, email, full_name) values ($1, $2, $3)', [userId, body.email, body.full_name]);
+      await client.query('insert into profiles (id, email, full_name, avatar_url) values ($1, $2, $3, $4)',
+        [userId, body.email, body.full_name, defaultAvatar(userId)]);
       await client.query('commit');
     } catch (e) {
       await client.query('rollback');

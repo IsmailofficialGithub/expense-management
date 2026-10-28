@@ -18,6 +18,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
+import CategoryIcon from '../../components/CategoryIcon';
 
 interface Props {
     navigation: any;
@@ -135,20 +136,21 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
 
     // Get category breakdown
     const categoryBreakdown = summary
-        ? Object.fromEntries(summary.by_category.map(c => [c.name, { total: c.total, count: c.count, icon: c.icon || '💰' }]))
+        ? Object.fromEntries(summary.by_category.map(c => [c.name, { total: c.total, count: c.count, icon: c.icon || 'cash', color: c.color }]))
         : groupExpenses.reduce((acc, expense) => {
         const categoryName = expense.category?.name || 'Other';
         if (!acc[categoryName]) {
             acc[categoryName] = {
                 total: 0,
                 count: 0,
-                icon: expense.category?.icon || '💰',
+                icon: expense.category?.icon || 'cash',
+                color: expense.category?.color,
             };
         }
         acc[categoryName].total += Number(expense.amount);
         acc[categoryName].count += 1;
         return acc;
-    }, {} as Record<string, { total: number; count: number; icon: string }>);
+    }, {} as Record<string, { total: number; count: number; icon: string; color?: string | null }>);
 
     const navigateToExpenseDetails = (expenseId: string) => {
         navigation.navigate('ExpenseDetails', { expenseId });
@@ -267,7 +269,7 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
                                     return (
                                         <View key={category} style={styles.categoryItem}>
                                             <View style={styles.categoryLeft}>
-                                                <Text style={styles.categoryIcon}>{data.icon}</Text>
+                                                <CategoryIcon icon={data.icon} color={data.color} style={styles.categoryIcon} />
                                                 <View style={styles.categoryInfo}>
                                                     <Text style={[styles.categoryName, { color: theme.colors.onSurface }]}>
                                                         {category}
@@ -363,9 +365,7 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
                             >
                                 <Card.Content style={styles.expenseContent}>
                                     <View style={styles.expenseLeft}>
-                                        <Text style={styles.categoryIcon}>
-                                            {expense.category?.icon || '💰'}
-                                        </Text>
+                                        <CategoryIcon icon={expense.category?.icon} color={expense.category?.color} style={styles.categoryIcon} />
                                         <View style={styles.expenseInfo}>
                                             <Text style={[styles.expenseDescription, { color: theme.colors.onSurface }]}>
                                                 {expense.description}

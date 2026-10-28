@@ -18,6 +18,7 @@ import SafeScrollView from '../../components/SafeScrollView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { expenseService } from '../../services/supabase.service';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import CategoryIcon from '../../components/CategoryIcon';
 
 interface Props {
   navigation: any;
@@ -459,7 +460,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                 selected={selectedCategoryId === category.id}
                 onPress={() => setSelectedCategoryId(category.id)}
                 style={styles.chip}
-                icon={() => <Text>{category.icon}</Text>}
+                icon={() => <CategoryIcon icon={category.icon} color={category.color} size={16} />}
               >
                 {category.name}
               </Chip>
@@ -693,7 +694,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
               </TouchableOpacity>
               {/* Info text */}
               <Text style={[styles.receiptInfoText, { color: theme.colors.onSurfaceVariant }]}>
-                {receiptUri ? '📸 New receipt selected' : '📎 Current receipt'}
+                {receiptUri ? 'New receipt selected' : 'Current receipt'}
               </Text>
             </View>
           ) : (

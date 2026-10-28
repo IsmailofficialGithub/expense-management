@@ -34,6 +34,7 @@ import { useTheme } from "react-native-paper";
 import { expenseService, invitationService } from "../../services/supabase.service";
 import type { MyExpenseSummary } from "../../types/database.types";
 import { LinearGradient } from "expo-linear-gradient";
+import CategoryIcon from '../../components/CategoryIcon';
 
 export default function DashboardScreen({ navigation }: any) {
   const theme = useTheme();
@@ -186,7 +187,7 @@ export default function DashboardScreen({ navigation }: any) {
     if (!acc[categoryName]) {
       acc[categoryName] = {
         name: categoryName,
-        icon: exp.category?.icon || '💰',
+        icon: exp.category?.icon || 'cash',
         amount: 0,
         color: exp.category?.color || theme.colors.primary,
       };
@@ -197,7 +198,7 @@ export default function DashboardScreen({ navigation }: any) {
 
   // Get top 4 expense categories
   const topExpenseCategories = (summary
-    ? summary.by_category.map((c) => ({ name: c.name, icon: c.icon || '💰', amount: c.amount, color: c.color || theme.colors.primary }))
+    ? summary.by_category.map((c) => ({ name: c.name, icon: c.icon || 'cash', amount: c.amount, color: c.color || theme.colors.primary }))
     : Object.values(expensesByCategory))
     .sort((a: any, b: any) => b.amount - a.amount)
     .slice(0, 4) as any[];
@@ -461,7 +462,7 @@ export default function DashboardScreen({ navigation }: any) {
                   ]}
                 >
                   <View style={styles.expenseCardContent}>
-                    <Text style={styles.expenseCardIcon}>{category.icon}</Text>
+                    <CategoryIcon icon={category.icon} style={styles.expenseCardIcon} />
                     <Text style={styles.expenseCardName} numberOfLines={1}>
                       {category.name}
                     </Text>
@@ -650,11 +651,9 @@ export default function DashboardScreen({ navigation }: any) {
             >
               <Card.Content style={styles.expenseContent}>
                 <View style={styles.expenseLeft}>
-                  {/* Category Emoji inside a 40px Circle (Matches Avatar size) */}
+                  {/* Category icon inside a 40px Circle (Matches Avatar size) */}
                   <View style={styles.categoryAvatar}>
-                    <Text style={{ fontSize: 20 }}>
-                      {expense.category?.icon || "🧾"}
-                    </Text>
+                    <CategoryIcon icon={expense.category?.icon} color={expense.category?.color} size={20} />
                   </View>
 
                   <View style={styles.expenseInfo}>

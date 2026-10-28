@@ -278,7 +278,7 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
         <Card style={[styles.infoCard, { backgroundColor: theme.colors.primaryContainer }]}>
           <Card.Content>
             <Text style={[styles.infoText, { color: theme.colors.onSurface }]}>
-              💡 Add your payment methods to track how you pay for expenses. You can choose to share details with group members for easy settlements.
+              Add your payment methods to track how you pay for expenses. You can choose to share details with group members for easy settlements.
             </Text>
           </Card.Content>
         </Card>
@@ -314,7 +314,7 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
           <Card style={[styles.messageCard, { backgroundColor: theme.colors.surfaceVariant }]}>
             <Card.Content>
               <Text style={[styles.messageText, { color: theme.colors.onSurface }]}>
-                💵 Cash payments don't require additional details. Just mark this as your payment method when creating expenses.
+                Cash payments don't require additional details. Just mark this as your payment method when creating expenses.
               </Text>
             </Card.Content>
           </Card>
@@ -380,7 +380,7 @@ export default function AddPaymentMethodScreen({ navigation }: any) {
           <Card style={[styles.warningCard, { backgroundColor: theme.colors.errorContainer }]}>
             <Card.Content>
               <Text style={[styles.warningText, { color: theme.colors.onErrorContainer }]}>
-                ⚠️ When visible to groups, members will see your {
+                When visible to groups, members will see your {
                   methodType === 'bank' ? 'bank account details' :
                     methodType === 'jazzcash' || methodType === 'easypaisa' ? 'phone number' :
                       methodType === 'card' ? 'card last 4 digits' :

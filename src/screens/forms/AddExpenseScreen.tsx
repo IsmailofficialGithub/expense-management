@@ -45,6 +45,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import SafeScrollView from "../../components/SafeScrollView";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CategoryIcon from '../../components/CategoryIcon';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddExpense'>;
 
@@ -497,7 +498,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
                             color: theme.colors.onPrimary,
                           },
                         ]}
-                        icon={() => <Text>{category.icon}</Text>}
+                        icon={() => <CategoryIcon icon={category.icon} color={category.color} size={16} />}
                       >
                         {category.name}
                       </Chip>
@@ -738,7 +739,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
                       <Card.Cover source={{ uri: receiptUri }} style={styles.receiptImage} />
                       <Card.Actions style={styles.receiptActions}>
                         <Text style={[styles.receiptText, { color: theme.colors.onSurfaceVariant }]}>
-                          {sharedImageUri ? '📤 Shared image attached' : '✓ Receipt attached'}
+                          {sharedImageUri ? 'Shared image attached' : 'Receipt attached'}
                         </Text>
                         <IconButton
                           icon="close-circle"

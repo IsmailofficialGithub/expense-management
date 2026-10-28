@@ -13,6 +13,8 @@ import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 import { useTheme } from 'react-native-paper';
+import CategoryIcon from '../../components/CategoryIcon';
+import UserAvatar from '../../components/UserAvatar';
 
 const { width } = Dimensions.get('window');
 
@@ -143,7 +145,8 @@ export default function SingleGroupExpenseDetailsScreen({ navigation, route }: P
         }
     };
 
-    if (!selectedExpense) {
+    // selectedExpense can still hold the previously opened expense; wait for the one with this id
+    if (!selectedExpense || selectedExpense.id !== expenseId) {
         return (
             <View style={styles.loadingContainer}>
                 <LoadingOverlay visible={true} message="Loading expense..." />
@@ -194,7 +197,7 @@ export default function SingleGroupExpenseDetailsScreen({ navigation, route }: P
                     <Card.Content>
                         <View style={styles.header}>
                             <Text style={styles.categoryIcon}>
-                                {selectedExpense.category?.icon || '💰'}
+                                <CategoryIcon icon={selectedExpense.category?.icon} color={selectedExpense.category?.color} size={32} />
                             </Text>
                             <View style={styles.headerText}>
                                 <Text style={[styles.description, { color: theme.colors.onSurface }]}>
@@ -339,11 +342,10 @@ export default function SingleGroupExpenseDetailsScreen({ navigation, route }: P
                                     {index > 0 && <Divider />}
                                     <View style={styles.splitItem}>
                                         <View style={styles.splitLeft}>
-                                            <Avatar.Text
+                                            <UserAvatar user={user}
                                                 size={40}
-                                                label={user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                                                style={[styles.splitAvatar, { backgroundColor: theme.colors.primary }]}
-                                            />
+                                                
+                                                style={[styles.splitAvatar, { backgroundColor: theme.colors.primary }]} />
                                             <View style={styles.splitInfo}>
                                                 <Text style={[styles.splitName, { color: theme.colors.onSurface }]}>
                                                     {user?.full_name || 'Unknown'}

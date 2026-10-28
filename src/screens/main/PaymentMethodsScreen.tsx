@@ -337,7 +337,7 @@ export default function PaymentMethodsScreen({ navigation }: any) {
         <Card style={styles.infoCard}>
           <Card.Content>
             <Text style={styles.infoText}>
-              💡 Add your preferred payment methods and choose which ones to share with group members for easy settlements.
+              Add your preferred payment methods and choose which ones to share with group members for easy settlements.
             </Text>
           </Card.Content>
         </Card>

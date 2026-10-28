@@ -13,6 +13,7 @@ import { ErrorHandler } from '../../utils/errorHandler';
 import { format, startOfWeek, endOfWeek, isToday, isYesterday } from 'date-fns';
 import { useTheme } from 'react-native-paper';
 import { CsvService } from '../../services/csv.service';
+import UserAvatar from '../../components/UserAvatar';
 
 interface Props {
     navigation: any;
@@ -342,11 +343,10 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
                         style={styles.avatar}
                     />
                 ) : (
-                    <Avatar.Text
+                    <UserAvatar user={otherUser}
                         size={80}
-                        label={otherUser?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                        style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
-                    />
+                        
+                        style={[styles.avatar, { backgroundColor: theme.colors.primary }]} />
                 )}
                 <Text style={[styles.userName, { color: theme.colors.onSurface }]}>{otherUser?.full_name || 'User'}</Text>
                 <Text style={[styles.userEmail, { color: theme.colors.onSurfaceVariant }]}>{otherUser?.email}</Text>

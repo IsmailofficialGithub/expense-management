@@ -30,6 +30,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image, TouchableOpacity } from 'react-native';
 import { uploadImage } from '../../services/api';
 import { format } from 'date-fns';
+import CategoryIcon from '../../components/CategoryIcon';
 
 interface Props {
   navigation: any;
@@ -422,7 +423,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
                   ? { backgroundColor: theme.colors.primaryContainer }
                   : { backgroundColor: theme.colors.errorContainer }),
               ]}
-              icon={() => <Text style={[styles.categoryIcon, { color: theme.colors.onSurface }]}>{category.icon}</Text>}
+              icon={() => <CategoryIcon icon={category.icon} size={16} style={{ color: theme.colors.onSurface }} />}
               textStyle={[styles.categoryText, { color: theme.colors.onSurface }]}
             >
               {category.name}
@@ -490,7 +491,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
           </TouchableOpacity>
           {/* Info text */}
           <Text style={[styles.receiptInfoText, { color: theme.colors.onSurfaceVariant }]}>
-            {receiptUri ? '📸 New receipt selected' : '📎 Current receipt'}
+            {receiptUri ? 'New receipt selected' : 'Current receipt'}
           </Text>
         </View>
       ) : (
@@ -538,7 +539,7 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Type:</Text>
             <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-              {type === 'income' ? '💰 Income' : '💸 Expense'}
+              {type === 'income' ? 'Income' : 'Expense'}
             </Text>
           </View>
           <View style={styles.summaryRow}>

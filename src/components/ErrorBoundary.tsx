@@ -3,6 +3,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { ErrorHandler } from '../utils/errorHandler';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface Props {
   children: ReactNode;
@@ -50,7 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <View style={styles.container}>
-          <Text style={styles.emoji}>😕</Text>
+          <MaterialCommunityIcons name="emoticon-sad-outline" style={styles.emoji} color="#888" />
           <Text style={styles.title}>Oops! Something went wrong</Text>
           <Text style={styles.message}>
             We're sorry for the inconvenience. The app encountered an unexpected error.

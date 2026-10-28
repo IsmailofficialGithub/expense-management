@@ -355,7 +355,7 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
           <Card style={[styles.messageCard, { backgroundColor: theme.colors.surfaceVariant }]}>
             <Card.Content>
               <Text style={[styles.messageText, { color: theme.colors.onSurface }]}>
-                💵 Cash payments don't require additional details.
+                Cash payments don't require additional details.
               </Text>
             </Card.Content>
           </Card>
@@ -421,7 +421,7 @@ export default function EditPaymentMethodScreen({ navigation, route }: Props) {
           <Card style={styles.warningCard}>
             <Card.Content>
               <Text style={styles.warningText}>
-                ⚠️ When visible to groups, members will see your {
+                When visible to groups, members will see your {
                   paymentMethod.method_type === 'bank' ? 'bank account details' :
                     paymentMethod.method_type === 'jazzcash' || paymentMethod.method_type === 'easypaisa' ? 'phone number' :
                       paymentMethod.method_type === 'card' ? 'card last 4 digits' :

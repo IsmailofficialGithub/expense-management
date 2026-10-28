@@ -44,6 +44,7 @@ import { profileService } from '../../services/supabase.service';
 import { uploadImage } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
+import CategoryIcon from '../../components/CategoryIcon';
 
 interface Props {
   navigation: any;
@@ -314,7 +315,7 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
                   ? { backgroundColor: theme.colors.primaryContainer }
                   : { backgroundColor: theme.colors.errorContainer }),
               ]}
-              icon={() => <Text style={[styles.categoryIcon, { color: theme.colors.onSurface }]}>{category.icon}</Text>}
+              icon={() => <CategoryIcon icon={category.icon} size={16} style={{ color: theme.colors.onSurface }} />}
               textStyle={[styles.categoryText, { color: theme.colors.onSurface }]}
             >
               {category.name}
@@ -360,7 +361,7 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
           <Card.Cover source={{ uri: receiptUri }} style={styles.receiptImage} />
           <Card.Actions style={styles.receiptActions}>
             <Text style={[styles.receiptText, { color: theme.colors.onSurfaceVariant }]}>
-              {sharedImageUri ? '📤 Shared image attached' : '✓ Receipt attached'}
+              {sharedImageUri ? 'Shared image attached' : 'Receipt attached'}
             </Text>
             <IconButton
               icon="close-circle"
@@ -405,7 +406,7 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>Type:</Text>
             <Text style={[styles.summaryValue, { color: theme.colors.onSurface }]}>
-              {type === 'income' ? '💰 Income' : '💸 Expense'}
+              {type === 'income' ? 'Income' : 'Expense'}
             </Text>
           </View>
           <View style={styles.summaryRow}>

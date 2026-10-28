@@ -21,6 +21,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { chatService } from '../../services/chat.service';
 import { CsvService } from '../../services/csv.service';
+import CategoryIcon from '../../components/CategoryIcon';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import UserAvatar from '../../components/UserAvatar';
 
 interface Props {
   navigation: any;
@@ -316,7 +319,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
       <View style={[styles.container, styles.errorContainer, { backgroundColor: theme.colors.background }]}>
         <StatusBar barStyle="light-content" backgroundColor="#6200EE" translucent={false} />
         <View style={styles.errorContent}>
-          <Text style={[styles.errorIcon, { color: theme.colors.error }]}>⚠️</Text>
+          <MaterialCommunityIcons name="alert-circle-outline" style={[styles.errorIcon, { color: theme.colors.error }]} />
           <Text style={[styles.errorTitle, { color: theme.colors.onSurface }]}>Unable to Load Group</Text>
           <Text style={[styles.errorMessage, { color: theme.colors.onSurfaceVariant }]}>
             {loadError}
@@ -599,10 +602,8 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               >
                 <Card.Content style={styles.memberContent}>
                   <View style={styles.memberLeft}>
-                    <Avatar.Text
-                      size={40}
-                      label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                    />
+                    <UserAvatar user={member.user}
+                      size={40} />
                     <View style={styles.memberInfo}>
                       <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
                         {member.user?.full_name || 'Unknown'}
@@ -654,7 +655,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               onPress={() => navigation.navigate('AdvanceCollection', { groupId })}
             >
               <Card.Content style={styles.bulkPaymentContent}>
-                <Text style={[styles.bulkPaymentIcon, { color: theme.colors.primary }]}>💰</Text>
+                <MaterialCommunityIcons name="cash-multiple" style={[styles.bulkPaymentIcon, { color: theme.colors.primary }]} />
                 <Text style={[styles.bulkPaymentTitle, { color: theme.colors.onSurface }]}>
                   Advance Collection
                 </Text>
@@ -668,7 +669,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               onPress={() => navigation.navigate('BulkSettlement', { groupId })}
             >
               <Card.Content style={styles.bulkPaymentContent}>
-                <Text style={[styles.bulkPaymentIcon, { color: theme.colors.primary }]}>⚡</Text>
+                <MaterialCommunityIcons name="lightning-bolt" style={[styles.bulkPaymentIcon, { color: theme.colors.primary }]} />
                 <Text style={[styles.bulkPaymentTitle, { color: theme.colors.onSurface }]}>
                   Bulk Settlement
                 </Text>
@@ -712,7 +713,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               >
                 <Card.Content style={styles.expenseContent}>
                   <View style={styles.expenseLeft}>
-                    <Text style={styles.categoryIcon}>{expense.category?.icon || '💰'}</Text>
+                    <CategoryIcon icon={expense.category?.icon} color={expense.category?.color} style={styles.categoryIcon} />
                     <View style={styles.expenseInfo}>
                       <Text style={[styles.expenseDescription, { color: theme.colors.onSurface }]}>
                         {expense.description}

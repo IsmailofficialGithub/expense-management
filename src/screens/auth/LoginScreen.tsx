@@ -13,6 +13,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -131,7 +132,7 @@ export default function LoginScreen({ navigation, route }: Props) {
           {showVerificationBanner && verificationEmail && (
             <View style={styles.verificationBanner}>
               <View style={styles.verificationContent}>
-                <Text style={styles.verificationIcon}>✉️</Text>
+                <MaterialCommunityIcons name="email-check-outline" style={styles.verificationIcon} color="#0072ff" />
                 <View style={styles.verificationTextContainer}>
                   <Text style={styles.verificationTitle}>Verification Email Sent!</Text>
                   <Text style={styles.verificationMessage}>

@@ -28,6 +28,7 @@ import { subscribe } from '../../services/realtime';
 import { notificationsService } from '../../services/notifications.service';
 import { AppState } from 'react-native';
 import ErrorState from '../../components/ErrorState';
+import UserAvatar from '../../components/UserAvatar';
 
 type FilterType = 'all' | 'groups' | 'users';
 
@@ -118,12 +119,11 @@ export default function MessagesScreen({ navigation }: any) {
         return <Avatar.Image size={48} source={{ uri: user.avatar_url }} style={{ marginRight: 8 }} />;
       } else {
         return (
-          <Avatar.Text
+          <UserAvatar user={user}
             size={48}
-            label={user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
+            
             style={{ backgroundColor: theme.colors.secondaryContainer, marginRight: 8 }}
-            color={theme.colors.onSecondaryContainer}
-          />
+            color={theme.colors.onSecondaryContainer} />
         );
       }
     }

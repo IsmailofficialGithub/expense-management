@@ -13,6 +13,7 @@ import { ErrorHandler } from '../../utils/errorHandler';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from 'react-native-paper';
 import ErrorState from '../../components/ErrorState';
+import CategoryIcon from '../../components/CategoryIcon';
 
 const PAGE_SIZE = 50;
 
@@ -145,7 +146,7 @@ export default function ExpensesScreen({ navigation }: any) {
           <View style={styles.cardRow}>
             {/* 1. Category Icon (Circular Avatar) */}
             <View style={[styles.iconContainer, { backgroundColor: theme.colors.elevation.level2 }]}>
-              <Text style={styles.emojiIcon}>{expense.category?.icon || '🧾'}</Text>
+              <CategoryIcon icon={expense.category?.icon} color={expense.category?.color} style={styles.emojiIcon} />
             </View>
 
             {/* 2. Main Details (Description & Group/Payer) */}

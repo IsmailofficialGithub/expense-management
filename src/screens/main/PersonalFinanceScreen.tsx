@@ -35,6 +35,7 @@ import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import SafeScrollView from '../../components/SafeScrollView';
 import ErrorState from '../../components/ErrorState';
+import CategoryIcon from '../../components/CategoryIcon';
 
 export default function PersonalFinanceScreen({ navigation }: any) {
   const { transactions, categories, loading } = usePersonalFinance();
@@ -188,7 +189,7 @@ export default function PersonalFinanceScreen({ navigation }: any) {
 
   const getCategoryIcon = (categoryName: string) => {
     const category = categories.find(c => c.name === categoryName);
-    return category?.icon || '💰';
+    return category?.icon || 'cash';
   };
 
   const toggleBalanceVisibility = () => {
@@ -422,9 +423,7 @@ export default function PersonalFinanceScreen({ navigation }: any) {
                   >
                     <Card.Content style={styles.transactionContent}>
                       <View style={styles.transactionLeft}>
-                        <Text style={styles.categoryIcon}>
-                          {getCategoryIcon(transaction.category)}
-                        </Text>
+                        <CategoryIcon icon={getCategoryIcon(transaction.category)} style={styles.categoryIcon} />
                         <View style={styles.transactionInfo}>
                           <Text style={styles.transactionDescription}>
                             {transaction.description}

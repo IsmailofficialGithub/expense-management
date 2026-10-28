@@ -40,6 +40,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
+import UserAvatar from '../../components/UserAvatar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdvanceCollection'>;
 
@@ -339,10 +340,8 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                   onPress={() => setSelectedRecipient(member.user_id)}
                   style={styles.memberChip}
                   avatar={
-                    <Avatar.Text
-                      size={24}
-                      label={member.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                    />
+                    <UserAvatar user={member.user}
+                      size={24} />
                   }
                 >
                   {member.user?.full_name || 'Unknown'}
@@ -497,7 +496,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
 
                   <View style={styles.recipientRow}>
                     <Text style={[styles.recipientLabel, { color: theme.colors.onSurfaceVariant }]}>Recipient: </Text>
-                    <Avatar.Text size={24} label={collection.recipient?.full_name?.substring(0, 2).toUpperCase() || 'U'} />
+                    <UserAvatar user={collection.recipient} size={24} />
                     <Text style={[styles.recipientName, { color: theme.colors.onSurface }]}>
                       {collection.recipient?.full_name || 'Unknown'}
                     </Text>
@@ -516,7 +515,7 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                   {myContribution?.status === 'pending_approval' && (
                     <View style={styles.pendingApprovalNotice}>
                       <Text style={[styles.pendingApprovalText, { color: '#FF9800' }]}>
-                        ⏳ Waiting for approval
+                        Waiting for approval
                       </Text>
                     </View>
                   )}
@@ -538,10 +537,8 @@ export default function AdvanceCollectionScreen({ navigation, route }: Props) {
                       {collection.contributions?.map(contribution => (
                         <View key={contribution.id} style={styles.contributorContainer}>
                           <View style={styles.contributorRow}>
-                            <Avatar.Text
-                              size={32}
-                              label={contribution.user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-                            />
+                            <UserAvatar user={contribution.user}
+                              size={32} />
                             <View style={styles.contributorInfo}>
                               <Text style={[styles.contributorName, { color: theme.colors.onSurface }]}>
                                 {contribution.user?.full_name || 'Unknown'}

@@ -13,6 +13,8 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
+import CategoryIcon from '../../components/CategoryIcon';
+import UserAvatar from '../../components/UserAvatar';
 
 const { width } = Dimensions.get('window');
 
@@ -28,7 +30,7 @@ interface Props {
 export default function ExpenseDetailsScreen({ navigation, route }: Props) {
   const { expenseId } = route.params;
   const theme = useTheme();
-  const { selectedExpense, loading } = useExpenses();
+  const { selectedExpense } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
@@ -37,8 +39,11 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  // "Not found" only after a load actually failed; before that the screen shows the loader
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
+    setLoadFailed(false);
     loadExpenseData();
   }, [expenseId]);
 
@@ -48,6 +53,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
 
       if (!isOnline) {
         showToast('Unable to load expense. No internet connection.', 'error');
+        setLoadFailed(true);
         return;
       }
 
@@ -55,6 +61,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
       console.log('✅ Expense loaded successfully');
     } catch (error: any) {
       console.error('❌ Error loading expense:', error);
+      setLoadFailed(true);
 
       // Check if expense doesn't exist
       if (error.message?.includes('not found') || error.message?.includes('No data')) {
@@ -163,8 +170,8 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
     );
   };
 
-  // Show loading state while fetching
-  if (loading && !selectedExpense) {
+  // selectedExpense can still hold the previously opened expense, so only accept the one for this id
+  if (selectedExpense?.id !== expenseId && !loadFailed) {
     return (
       <View style={styles.loadingContainer}>
         <LoadingOverlay visible={true} message="Loading expense..." />
@@ -173,7 +180,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
   }
 
   // Handle case where expense doesn't exist or failed to load
-  if (!selectedExpense) {
+  if (!selectedExpense || selectedExpense.id !== expenseId) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
         <Text style={{ color: theme.colors.onSurface, fontSize: 16, textAlign: 'center', padding: 20 }}>
@@ -201,7 +208,7 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
           <Card.Content>
             <View style={styles.header}>
               <Text style={styles.categoryIcon}>
-                {selectedExpense.category?.icon || '💰'}
+                <CategoryIcon icon={selectedExpense.category?.icon} color={selectedExpense.category?.color} size={32} />
               </Text>
               <View style={styles.headerText}>
                 <Text style={[styles.description, { color: theme.colors.onSurface }]}>{selectedExpense.description}</Text>
@@ -328,12 +335,11 @@ export default function ExpenseDetailsScreen({ navigation, route }: Props) {
                   {index > 0 && <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />}
                   <View style={styles.splitItem}>
                     <View style={styles.splitLeft}>
-                      <Avatar.Text
+                      <UserAvatar user={user}
                         size={40}
-                        label={user?.full_name?.substring(0, 2).toUpperCase() || 'U'}
+                        
                         style={[styles.splitAvatar, { backgroundColor: theme.colors.primary }]}
-                        color={theme.colors.onPrimary}
-                      />
+                        color={theme.colors.onPrimary} />
                       <View style={styles.splitInfo}>
                         <Text style={[styles.splitName, { color: theme.colors.onSurface }]}>
                           {user?.full_name || 'Unknown'}

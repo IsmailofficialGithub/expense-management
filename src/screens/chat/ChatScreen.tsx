@@ -29,6 +29,7 @@ import { useUI } from '../../hooks/useUI';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { format } from 'date-fns';
 import ErrorState from '../../components/ErrorState';
+import UserAvatar from '../../components/UserAvatar';
 
 interface Props {
   route: {
@@ -581,11 +582,10 @@ export default function ChatScreen({ route, navigation }: Props) {
             />
           )}
           {showAvatar && !isSelectionMode && (
-            <Avatar.Text
+            <UserAvatar user={sender}
               size={32}
-              label={sender?.full_name?.substring(0, 2).toUpperCase() || 'U'}
-              style={styles.messageAvatar}
-            />
+              
+              style={styles.messageAvatar} />
           )}
           <View
             style={[
