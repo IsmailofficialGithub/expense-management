@@ -344,6 +344,50 @@ export default function ProfileScreen({ navigation }: any) {
     dispatch(setTheme(newTheme));
   };
 
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteCodeSent, setDeleteCodeSent] = useState(false);
+  const [deleteCode, setDeleteCode] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+
+  const closeDeleteModal = () => {
+    setDeleteModalVisible(false);
+    setDeleteCodeSent(false);
+    setDeleteCode('');
+    setDeleteError('');
+  };
+
+  const handleSendDeleteCode = async () => {
+    if (!isOnline) return showToast('No internet connection.', 'error');
+    setIsProcessing(true);
+    try {
+      const { authService } = await import('../../services/supabase.service');
+      await authService.requestDeleteAccountCode();
+      setDeleteCodeSent(true);
+      showToast(`Code sent to ${user?.email}`, 'success');
+    } catch (error) {
+      ErrorHandler.handleError(error, showToast, 'Delete Account');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!/^\d{6}$/.test(deleteCode.trim())) return setDeleteError('Enter the 6-digit code from the email');
+    setIsProcessing(true);
+    try {
+      const { authService } = await import('../../services/supabase.service');
+      await authService.deleteAccount(deleteCode.trim());
+      closeDeleteModal();
+      await dispatch(signOut()).unwrap().catch(() => {});
+      showToast('Your account has been deleted', 'info');
+      navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Auth' }] }));
+    } catch (error: any) {
+      setDeleteError(error?.message || 'Could not delete account');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Handle sign out
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -577,6 +621,16 @@ export default function ProfileScreen({ navigation }: any) {
         Sign Out
       </Button>
 
+      <Button
+        mode="text"
+        onPress={() => setDeleteModalVisible(true)}
+        style={styles.signOutButton}
+        textColor="#F44336"
+        icon="account-remove"
+      >
+        Delete Account
+      </Button>
+
       {/* Edit Profile Modal */}
       <Portal>
         <Modal
@@ -797,6 +851,58 @@ export default function ProfileScreen({ navigation }: any) {
               Change
             </Button>
           </View>
+        </Modal>
+      </Portal>
+
+      {/* Delete Account Modal */}
+      <Portal>
+        <Modal
+          visible={deleteModalVisible}
+          onDismiss={closeDeleteModal}
+          contentContainerStyle={[styles.modalContent, { backgroundColor: theme.colors.surface }]}
+        >
+          <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>Delete Account</Text>
+          <Text style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+            This permanently deletes your profile, personal finance, payment methods and notifications.
+            Expenses and chat messages in shared groups stay for the other members, shown as "Deleted user".
+            Groups you created are handed to another member. This cannot be undone.
+          </Text>
+
+          {deleteCodeSent && (
+            <>
+              <TextInput
+                label="6-digit code from email"
+                value={deleteCode}
+                onChangeText={(t) => { setDeleteCode(t); setDeleteError(''); }}
+                mode="outlined"
+                keyboardType="number-pad"
+                maxLength={6}
+                error={!!deleteError}
+                style={styles.input}
+                left={<TextInput.Icon icon="email-lock" />}
+              />
+              {deleteError ? <HelperText type="error" visible>{deleteError}</HelperText> : null}
+            </>
+          )}
+
+          <View style={styles.modalActions}>
+            <Button mode="outlined" onPress={closeDeleteModal} style={styles.modalButton} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              buttonColor="#F44336"
+              onPress={deleteCodeSent ? handleConfirmDelete : handleSendDeleteCode}
+              style={styles.modalButton}
+              loading={isProcessing}
+              disabled={isProcessing}
+            >
+              {deleteCodeSent ? 'Delete' : 'Send Code'}
+            </Button>
+          </View>
+          {deleteCodeSent && (
+            <Button mode="text" onPress={handleSendDeleteCode} disabled={isProcessing}>Resend code</Button>
+          )}
         </Modal>
       </Portal>
 

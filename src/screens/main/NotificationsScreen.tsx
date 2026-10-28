@@ -89,6 +89,8 @@ export default function NotificationsScreen({ navigation }: Props) {
 
     if (notification.type === 'group_invitation') {
       navigation.navigate('Invitations');
+    } else if (notification.type === 'member_left' && notification.metadata?.group_id) {
+      navigation.navigate('GroupDetails', { groupId: notification.metadata.group_id });
     } else if (notification.related_id && notification.metadata?.expense_id) {
       navigation.navigate('ExpenseDetails', {
         expenseId: notification.metadata.expense_id || notification.related_id,

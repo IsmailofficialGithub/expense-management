@@ -57,6 +57,14 @@ export const authService = {
     await clearSession();
   },
 
+  // Account deletion: email a code, then the code anonymises the account server-side.
+  requestDeleteAccountCode: async () => {
+    await api.post('/auth/delete-account/code');
+  },
+  deleteAccount: async (code: string) => {
+    await api.post('/auth/delete-account', { code });
+  },
+
   // Offline-friendly: reads the stored user, no network call.
   getCurrentUser: async () => getStoredUser(),
 
