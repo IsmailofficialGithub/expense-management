@@ -1,7 +1,7 @@
 // App.tsx
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ReduxProvider } from './src/store/Provider';
 import { NavigationContainer, DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme } from '@react-navigation/native';
@@ -36,7 +36,8 @@ function AppContent() {
   const { theme: userTheme } = useUI();
   const systemTheme = useColorScheme();
   const navigationRef = React.useRef<any>(null);
-  const { hasShareIntent } = useShareIntent();
+  // Share intents are Android/iOS only; Platform.OS never changes at runtime, so the hook order stays stable
+  const { hasShareIntent } = Platform.OS === 'web' ? { hasShareIntent: false } : useShareIntent();
 
   // Determine the actual theme to use
   const actualTheme = userTheme === 'auto'

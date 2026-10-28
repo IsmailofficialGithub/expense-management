@@ -1,0 +1,65 @@
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'App.tsx', 'index.ts', 'app.json', 'app.config.ts', 'package.json', 'package-lock.json', 'assets/**', 'web/**', '.github/workflows/deploy-web.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Export web build
+        run: npx expo export --platform web --output-dir web/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: web/dist
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-release
+          path: dist
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          ssh-keygen -p -P "$SSH_PASSPHRASE" -N "" -f ~/.ssh/deploy >/dev/null
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host server
+            HostName ${{ secrets.SSH_HOST }}
+            Port ${{ secrets.SSH_PORT }}
+            User ${{ secrets.SSH_USER }}
+            IdentityFile ~/.ssh/deploy
+            IdentitiesOnly yes
+          EOF
+      - name: Upload and switch release
+        # Unpack next to the live folder, then swap, so visitors never see a half-uploaded site
+        run: |
+          tar czf - -C dist . | ssh server 'set -e; cd /srv/ismail_data/expense-management
+            rm -rf web.new && mkdir web.new && tar xzf - -C web.new
+            rm -rf web.old; [ -d web ] && mv web web.old; mv web.new web; rm -rf web.old'
+      - name: Check site
+        run: |
+          ssh server 'curl -fs -H "Host: flatmate.ismailabbasi.qzz.io" http://127.0.0.1/ | grep -q "id=\"root\""'

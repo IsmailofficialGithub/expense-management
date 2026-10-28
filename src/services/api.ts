@@ -2,6 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 export const API_URL: string = Constants.expoConfig?.extra?.API_URL ?? 'https://api.flatmate.ismailabbasi.qzz.io';
 
@@ -9,6 +10,13 @@ const REFRESH_KEY = 'auth_refresh_token';
 const USER_KEY = 'auth_user';
 
 export type AuthUser = { id: string; email: string };
+
+// SecureStore has no web implementation; in the browser the refresh token lives in localStorage (via AsyncStorage).
+const tokenStore = Platform.OS === 'web'
+  ? { get: AsyncStorage.getItem, set: AsyncStorage.setItem, del: AsyncStorage.removeItem }
+  : { get: SecureStore.getItemAsync, set: SecureStore.setItemAsync, del: SecureStore.deleteItemAsync };
+
+export const getRefreshToken = () => tokenStore.get(REFRESH_KEY);
 
 let accessToken: string | null = null;
 let currentUser: AuthUser | null = null;
@@ -24,7 +32,7 @@ export class ApiError extends Error {
 export async function setSession(s: { accessToken: string; refreshToken: string; user: AuthUser }) {
   accessToken = s.accessToken;
   currentUser = s.user;
-  await SecureStore.setItemAsync(REFRESH_KEY, s.refreshToken);
+  await tokenStore.set(REFRESH_KEY, s.refreshToken);
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(s.user));
   authListeners.forEach((l) => l(s.user));
 }
@@ -32,7 +40,7 @@ export async function setSession(s: { accessToken: string; refreshToken: string;
 export async function clearSession() {
   accessToken = null;
   currentUser = null;
-  await SecureStore.deleteItemAsync(REFRESH_KEY);
+  await tokenStore.del(REFRESH_KEY);
   await AsyncStorage.removeItem(USER_KEY);
   authListeners.forEach((l) => l(null));
 }
@@ -59,7 +67,7 @@ export function onAuthChange(listener: (user: AuthUser | null) => void) {
 
 async function refresh(): Promise<boolean> {
   refreshing ??= (async () => {
-    const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
+    const refreshToken = await getRefreshToken();
     if (!refreshToken) return false;
     try {
       const res = await fetch(`${API_URL}/auth/refresh`, {

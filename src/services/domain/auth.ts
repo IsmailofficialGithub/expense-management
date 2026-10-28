@@ -1,6 +1,5 @@
 // src/services/domain/auth.ts
-import * as SecureStore from 'expo-secure-store';
-import { api, AuthUser, clearSession, getStoredUser, setSession } from '../api';
+import { api, AuthUser, clearSession, getRefreshToken, getStoredUser, setSession } from '../api';
 import { Platform } from 'react-native';
 import { sendWhatsAppMessageFromHtml } from '../whatsapp.service';
 import {
@@ -53,7 +52,7 @@ export const authService = {
   },
 
   signOut: async () => {
-    const refreshToken = await SecureStore.getItemAsync('auth_refresh_token');
+    const refreshToken = await getRefreshToken();
     await api.post('/auth/logout', { refreshToken: refreshToken ?? undefined }).catch(() => {});
     await clearSession();
   },
