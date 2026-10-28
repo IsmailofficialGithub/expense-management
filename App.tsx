@@ -1,7 +1,7 @@
 // App.tsx
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, useColorScheme } from 'react-native';
+import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ReduxProvider } from './src/store/Provider';
 import { NavigationContainer, DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme } from '@react-navigation/native';
@@ -87,8 +87,17 @@ function AppContent() {
   );
 }
 
+// Web: the app is designed for phones, so on wide screens it renders as a centered phone-width column
+// instead of stretching every input and button across the whole window.
+const webFrame = Platform.OS === 'web'
+  ? StyleSheet.create({
+      outer: { flex: 1, backgroundColor: '#1f2433', alignItems: 'center' },
+      inner: { flex: 1, width: '100%', maxWidth: 480, overflow: 'hidden', boxShadow: '0 0 40px rgba(0,0,0,0.35)' } as any,
+    })
+  : null;
+
 export default function App() {
-  return (
+  const app = (
     <SafeAreaProvider>
       <ErrorBoundary>
         <ReduxProvider>
@@ -96,5 +105,11 @@ export default function App() {
         </ReduxProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
+  );
+  if (!webFrame) return app;
+  return (
+    <View style={webFrame.outer}>
+      <View style={webFrame.inner}>{app}</View>
+    </View>
   );
 }
