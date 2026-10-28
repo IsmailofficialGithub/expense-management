@@ -230,21 +230,7 @@ export default function ProfileScreen({ navigation }: any) {
 
           setIsProcessing(true);
           try {
-            // Delete file from storage first
-            if (displayProfile.avatar_url) {
-              const urlParts = displayProfile.avatar_url.split('/avatars/');
-              if (urlParts.length > 1) {
-                const fileName = urlParts[1];
-
-                // Import supabase
-                const { supabase } = await import('../../services/supabase');
-
-                await supabase.storage
-                  .from('avatars')
-                  .remove([fileName]);
-              }
-            }
-
+            // Server deletes the old avatar file when avatar_url is cleared.
             // Then update profile to remove URL
             await dispatch(
               updateProfile({
@@ -313,7 +299,6 @@ export default function ProfileScreen({ navigation }: any) {
     try {
       // Verify current password by attempting to sign in
       const { authService } = await import('../../services/supabase.service');
-      const { supabase } = await import('../../services/supabase');
       const userEmail = user?.email;
       
       if (!userEmail) {
@@ -324,24 +309,18 @@ export default function ProfileScreen({ navigation }: any) {
 
       // Verify current password
       try {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: userEmail,
-          password: currentPassword,
-        });
-
-        if (signInError) {
-          setIsProcessing(false);
-          setErrors(prev => ({ ...prev, currentPassword: 'Current password is incorrect' }));
-          return;
-        }
+        await authService.signIn(userEmail, currentPassword);
       } catch (verifyError: any) {
         setIsProcessing(false);
-        setErrors(prev => ({ ...prev, currentPassword: 'Failed to verify current password' }));
+        setErrors(prev => ({
+          ...prev,
+          currentPassword: verifyError?.status === 401 ? 'Current password is incorrect' : 'Failed to verify current password',
+        }));
         return;
       }
 
       // Update to new password
-      await authService.updatePassword(newPassword);
+      await authService.updatePassword(newPassword, currentPassword);
       
       showToast('Password changed successfully!', 'success');
       setChangePasswordModalVisible(false);

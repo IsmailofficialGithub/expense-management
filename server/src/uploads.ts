@@ -12,10 +12,10 @@ export function publicUrl(bucket: string, file: string) {
   return `${process.env.PUBLIC_URL ?? ''}/files/${bucket}/${file}`;
 }
 
-// Deletes a file previously returned by POST /uploads; ignores URLs that aren't ours.
-export async function deleteUpload(url: string | null | undefined) {
+// Deletes a file previously returned by POST /uploads; ignores URLs that aren't ours or weren't uploaded by userId.
+export async function deleteUpload(url: string | null | undefined, userId: string) {
   const m = url?.match(/\/files\/(avatars|receipts|chat)\/([\w-]+\.webp)$/);
-  if (m) await unlink(path.join(UPLOAD_DIR, m[1], m[2])).catch(() => {});
+  if (m && m[2].startsWith(`${userId}-`)) await unlink(path.join(UPLOAD_DIR, m[1], m[2])).catch(() => {});
 }
 
 export async function uploads(app: FastifyInstance) {

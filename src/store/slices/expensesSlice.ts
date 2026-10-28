@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction, createAction } from '@reduxjs/toolkit';
 import { expenseService, settlementService, categoryService, foodExpenseService } from '../../services/supabase.service';
-import { supabase } from '../../services/supabase';
+import { uploadImage } from '../../services/api';
 import { Expense, ExpenseWithDetails, ExpenseCategory, Settlement, CreateExpenseRequest, CreateFoodExpenseRequest, SettleUpRequest, ExpenseFilters } from '../../types/database.types';
 import { storageService } from '../../services/storage.service';
 import { syncService } from '../../services/sync.service';
@@ -333,82 +333,16 @@ export const updateExpense = createAsyncThunk(
           let receipt_url: string | null | undefined = undefined;
 
           if (receipt) {
-            // Get current user ID from state
-            const currentUser = (state as any).auth.user;
-            if (!currentUser) throw new Error('User not authenticated');
-
-            // Get the current expense to check for old receipt
-            const currentExpense = await expenseService.getExpense(expenseId);
-
-            // Delete old receipt if it exists
-            if (currentExpense.receipt_url) {
-              await expenseService.deleteReceipt(currentExpense.receipt_url);
-            }
-
-            const fileName = `${Date.now()}_${receipt.name || 'receipt.jpg'}`;
-            const filePath = `${currentUser.id}/${fileName}`; // Include user ID in path
-
-            console.log('📸 Starting receipt upload...');
-            console.log('Receipt URI:', receipt.uri);
-            console.log('File path:', filePath);
-
-            // Use fetch with arrayBuffer (React Native compatible)
-            try {
-              const response = await fetch(receipt.uri);
-
-              if (!response.ok) {
-                throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-              }
-
-              console.log('✅ Image fetched successfully');
-
-              const arrayBuffer = await response.arrayBuffer();
-              const uint8Array = new Uint8Array(arrayBuffer);
-
-              console.log('📦 Image size:', uint8Array.length, 'bytes');
-
-              // Upload to Supabase Storage
-              const { error: uploadError } = await supabase.storage
-                .from('receipts')
-                .upload(filePath, uint8Array, {
-                  contentType: receipt.type || 'image/jpeg',
-                  cacheControl: '3600',
-                  upsert: false
-                });
-
-              if (uploadError) {
-                console.error('❌ Receipt upload error:', uploadError);
-                throw uploadError;
-              }
-
-              console.log('✅ Receipt uploaded to storage');
-
-              // Get signed URL
-              const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-                .from('receipts')
-                .createSignedUrl(filePath, 31536000); // 1 year expiry
-
-              if (signedUrlError) {
-                console.error('❌ Failed to create signed URL:', signedUrlError);
-                throw signedUrlError;
-              }
-
-              console.log('✅ Signed URL created');
-              receipt_url = signedUrlData.signedUrl;
-            } catch (error) {
-              console.error('❌ Receipt upload failed:', error);
-              throw error;
-            }
+            // The server deletes the old receipt file when receipt_url changes.
+            receipt_url = await uploadImage('receipts', receipt.uri, receipt.type || 'image/jpeg');
           }
 
           // 2️⃣ Update expense main data (add receipt_url if replaced)
-          const updatedExpense = await expenseService.updateExpense(expenseId, {
+          // Expense fields + splits are replaced in one server transaction
+          await expenseService.updateExpense(expenseId, {
             ...updates,
             ...(receipt_url ? { receipt_url } : {}),
-          });
-
-          // 3️⃣ Update splits (delete old + insert new)
-          await expenseService.replaceSplits(expenseId, splits);
+          }, splits);
 
           // 4️⃣ Return fresh expense with details
           const expenseWithDetails = await expenseService.getExpense(expenseId);

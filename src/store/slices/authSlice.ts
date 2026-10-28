@@ -1,6 +1,6 @@
 // src/store/slices/authSlice.ts
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { User } from '@supabase/supabase-js';
+import type { AuthUser as User } from '../../services/api';
 import { authService, profileService } from '../../services/supabase.service';
 import { Profile, SignUpData, SignInData } from '../../types/database.types';
 

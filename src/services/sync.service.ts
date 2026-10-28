@@ -1,6 +1,6 @@
 // src/services/sync.service.ts
 import { storageService, STORAGE_KEYS } from './storage.service';
-import { supabase } from './supabase';
+import { getStoredUser } from './api';
 import {
   expenseService,
   groupService,
@@ -329,9 +329,9 @@ class SyncService {
       }
 
       // Sync payment methods
-      const user = await supabase.auth.getUser();
-      if (user.data.user) {
-        const paymentMethods = await paymentMethodService.getPaymentMethods(user.data.user.id);
+      const user = await getStoredUser();
+      if (user) {
+        const paymentMethods = await paymentMethodService.getPaymentMethods(user.id);
         if (paymentMethods) {
           await storageService.setPaymentMethods(paymentMethods);
         }

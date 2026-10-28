@@ -21,14 +21,13 @@ import {
   Icon,
 } from 'react-native-paper';
 import { useTheme } from 'react-native-paper';
-import { chatService } from '../../services/chat.service';
+import { chatService, ChatSubscription } from '../../services/chat.service';
 import { MessageWithStatus, ConversationWithDetails, TypingIndicatorWithProfile } from '../../types/database.types';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { useUI } from '../../hooks/useUI';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { format } from 'date-fns';
-import { RealtimeChannel } from '@supabase/supabase-js';
 import ErrorState from '../../components/ErrorState';
 
 interface Props {
@@ -63,7 +62,7 @@ export default function ChatScreen({ route, navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
-  const messageChannelsRef = useRef<RealtimeChannel[]>([]);
+  const messageChannelsRef = useRef<ChatSubscription[]>([]);
   const loadingMoreRef = useRef(false);
 
   useEffect(() => {

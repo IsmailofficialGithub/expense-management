@@ -28,7 +28,7 @@ import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import * as ImagePicker from 'expo-image-picker';
 import { Image, TouchableOpacity } from 'react-native';
-import { supabase } from '../../services/supabase';
+import { uploadImage } from '../../services/api';
 import { format } from 'date-fns';
 
 interface Props {
@@ -210,77 +210,14 @@ export default function EditPersonalTransactionScreen({ navigation, route }: Pro
           shouldDeleteOldReceipt = true;
         }
 
-        const fileName = `${Date.now()}_receipt.jpg`;
-        const filePath = `${profile.id}/${fileName}`;
-
-        console.log('📸 Starting receipt upload...');
-
-        // Fetch and convert to arrayBuffer (React Native compatible)
-        const response = await fetch(receiptUri);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch image: ${response.status}`);
-        }
-
-        const arrayBuffer = await response.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-
-        // Upload to receipts bucket
-        const { error: uploadError } = await supabase.storage
-          .from('receipts')
-          .upload(filePath, uint8Array, {
-            contentType: 'image/jpeg',
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (uploadError) {
-          console.error('❌ Receipt upload error:', uploadError);
-          throw uploadError;
-        }
-
-        console.log('✅ Receipt uploaded to storage');
-
-        // Get signed URL
-        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-          .from('receipts')
-          .createSignedUrl(filePath, 31536000); // 1 year expiry
-
-        if (signedUrlError) {
-          console.error('❌ Failed to create signed URL:', signedUrlError);
-          throw signedUrlError;
-        }
-
-        console.log('✅ Signed URL created');
-        receiptUrl = signedUrlData.signedUrl;
+        receiptUrl = await uploadImage('receipts', receiptUri);
       } else if (!receiptUri && !existingReceiptUrl && transaction?.receipt_url) {
         // User removed the receipt
         shouldDeleteOldReceipt = true;
         receiptUrl = null; // Set to null to clear from database
       }
 
-      // Delete old receipt if needed (cleanup)
-      if (shouldDeleteOldReceipt && transaction?.receipt_url) {
-        try {
-          // Extract file path from URL
-          const urlParts = transaction.receipt_url.split('/receipts/');
-          if (urlParts.length > 1) {
-            const pathWithQuery = urlParts[1];
-            const filePath = pathWithQuery.split('?')[0];
-
-            const { error: deleteError } = await supabase.storage
-              .from('receipts')
-              .remove([filePath]);
-
-            if (deleteError) {
-              console.error('Failed to delete old receipt:', deleteError);
-            } else {
-              console.log('✅ Old receipt deleted from storage');
-            }
-          }
-        } catch (error) {
-          console.error('Error deleting old receipt:', error);
-        }
-      }
+      // The server deletes the old receipt file when receipt_url changes.
 
       await dispatch(
         updatePersonalTransaction({

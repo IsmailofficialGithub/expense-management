@@ -1,5 +1,5 @@
 // src/services/realtime.ts — WebSocket client for the backend /realtime endpoint (replaces supabase.channel)
-import { API_URL, getAccessToken } from './api';
+import { API_URL, forceRefresh, getAccessToken } from './api';
 
 type Handler = (event: string, data: any) => void;
 
@@ -27,8 +27,9 @@ async function connect() {
         handlers.get(channel)?.forEach((h) => h(event, data));
       } catch {}
     };
-    ws.onclose = () => {
+    ws.onclose = async (e) => {
       ws = null;
+      if (e.code === 4401) await forceRefresh(); // access token expired while idle
       if (handlers.size) setTimeout(connect, Math.min(30000, 1000 * 2 ** retry++));
     };
   })().finally(() => { connecting = null; });

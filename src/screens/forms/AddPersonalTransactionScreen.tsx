@@ -41,7 +41,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image, TouchableOpacity } from 'react-native';
 import { IconButton } from 'react-native-paper';
 import { profileService } from '../../services/supabase.service';
-import { supabase } from '../../services/supabase';
+import { uploadImage } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
 import { format } from 'date-fns';
 
@@ -173,51 +173,7 @@ export default function AddPersonalTransactionScreen({ navigation, route }: Prop
         try {
           if (!profile) throw new Error('User not authenticated');
 
-          const fileName = `${Date.now()}_receipt.jpg`;
-          const filePath = `${profile.id}/${fileName}`;
-
-          console.log('📸 Starting receipt upload...');
-          console.log('Receipt URI:', receiptUri);
-
-          // Fetch and convert to arrayBuffer
-          const response = await fetch(receiptUri);
-          if (!response.ok) {
-            throw new Error(`Failed to fetch image: ${response.status}`);
-          }
-
-          const arrayBuffer = await response.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-
-          console.log('📦 Image size:', uint8Array.length, 'bytes');
-
-          // Upload to receipts bucket
-          const { error: uploadError } = await supabase.storage
-            .from('receipts')
-            .upload(filePath, uint8Array, {
-              contentType: 'image/jpeg',
-              cacheControl: '3600',
-              upsert: false
-            });
-
-          if (uploadError) {
-            console.error('❌ Receipt upload error:', uploadError);
-            throw uploadError;
-          }
-
-          console.log('✅ Receipt uploaded to storage');
-
-          // Get signed URL
-          const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-            .from('receipts')
-            .createSignedUrl(filePath, 31536000); // 1 year expiry
-
-          if (signedUrlError) {
-            console.error('❌ Failed to create signed URL:', signedUrlError);
-            throw signedUrlError;
-          }
-
-          console.log('✅ Signed URL created');
-          receiptUrl = signedUrlData.signedUrl;
+          receiptUrl = await uploadImage('receipts', receiptUri);
         } catch (uploadError) {
           console.error('Receipt upload error:', uploadError);
           showToast('Failed to upload receipt, but transaction will be saved', 'warning');

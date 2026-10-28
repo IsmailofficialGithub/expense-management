@@ -4,7 +4,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { redis } from '../redis.js';
-import { issueTokens, requireUser } from '../auth.js';
+import { issueTokens, requireUser, revokeSessions } from '../auth.js';
 import { sendMail } from '../mail.js';
 
 const email = z.string().trim().toLowerCase().email();
@@ -98,9 +98,11 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/otp', strict, async (req) => {
     const body = z.object({ email }).parse(req.body);
     const { rowCount } = await db.query('select 1 from users where email = $1', [body.email]);
-    if (rowCount) {
+    // Per-email cap too, so codes can't be re-issued without limit for guessing.
+    const sent = await redis.multi().incr(`otpSent:${body.email}`).expire(`otpSent:${body.email}`, 3600, 'NX').exec();
+    if (rowCount && Number(sent?.[0]?.[1]) <= 5) {
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-      await redis.set(`otp:${body.email}`, JSON.stringify({ code, tries: 0 }), 'EX', 600);
+      await redis.multi().set(`otp:${body.email}`, code, 'EX', 600).del(`otpTries:${body.email}`).exec();
       await sendMail(body.email, 'Your Flatmate code', `<p>Your code is <b>${code}</b>. It expires in 10 minutes.</p>`);
     }
     return { ok: true };
@@ -110,23 +112,29 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/verify-otp', strict, async (req, reply) => {
     const body = z.object({ email, code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
     const key = `otp:${body.email}`;
-    const raw = await redis.get(key);
-    const otp = raw ? JSON.parse(raw) as { code: string; tries: number } : null;
-    if (!otp || otp.tries >= 5) return reply.code(400).send({ error: 'Code expired, request a new one' });
-    if (otp.code !== body.code) {
-      await redis.set(key, JSON.stringify({ ...otp, tries: otp.tries + 1 }), 'KEEPTTL');
-      return reply.code(400).send({ error: 'Invalid code' });
-    }
-    await redis.del(key);
+    // Count the attempt atomically before comparing, so parallel guesses can't all see tries=0.
+    const [[, tries], [, code]] = (await redis.multi().incr(`otpTries:${body.email}`).expire(`otpTries:${body.email}`, 600).get(key).exec())!;
+    if (!code || Number(tries) > 5) return reply.code(400).send({ error: 'Code expired, request a new one' });
+    if (code !== body.code) return reply.code(400).send({ error: 'Invalid code' });
+    if (!(await redis.del(key))) return reply.code(400).send({ error: 'Code expired, request a new one' });
     // Proving inbox access also verifies the email.
     const { rows } = await db.query('update users set email_verified = true where email = $1 returning id, email', [body.email]);
+    await redis.set(`recovery:${rows[0].id}`, '1', 'EX', 900);
     return issueTokens(reply, rows[0]);
   });
 
-  app.patch('/password', { preHandler: requireUser }, async (req) => {
-    const body = z.object({ password }).parse(req.body);
+  // Needs the current password, unless the user just proved inbox access via verify-otp. Revokes all other sessions.
+  app.patch('/password', { preHandler: requireUser, ...strict }, async (req, reply) => {
+    const body = z.object({ password, current_password: z.string().optional() }).parse(req.body);
+    const { rows } = await db.query('select password_hash from users where id = $1', [req.user.sub]);
+    if (!rows.length) return reply.code(404).send({ error: 'User not found' });
+    const recovery = await redis.getdel(`recovery:${req.user.sub}`);
+    if (!recovery && !(body.current_password && await bcrypt.compare(body.current_password, rows[0].password_hash))) {
+      return reply.code(403).send({ error: 'Current password is incorrect' });
+    }
     await db.query('update users set password_hash = $2 where id = $1', [req.user.sub, await bcrypt.hash(body.password, 10)]);
-    return { ok: true };
+    await revokeSessions(req.user.sub);
+    return issueTokens(reply, { id: req.user.sub, email: req.user.email });
   });
 
   app.get('/me', { preHandler: requireUser }, async (req, reply) => {

@@ -2,7 +2,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { chatService } from './chat.service';
-import { supabase } from './supabase';
+import { api, getStoredUser } from './api';
 
 // Configure notification handler - Always show and play sound
 Notifications.setNotificationHandler({
@@ -129,26 +129,11 @@ export const notificationsService = {
    */
   async savePushToken(token: string): Promise<void> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      if (!(await getStoredUser())) {
         console.warn('Cannot save push token: User not authenticated');
         return;
       }
-
-      // Store token in user profile
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          push_token: token,
-          push_token_updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) {
-        console.error('Error saving push token:', error);
-      } else {
-        console.log('Push token saved successfully for user:', user.id);
-      }
+      await api.put('/push-token', { token });
     } catch (error) {
       console.error('Error in savePushToken:', error);
     }
@@ -159,16 +144,8 @@ export const notificationsService = {
    */
   async getCurrentUserPushToken(): Promise<string | null> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('push_token')
-        .eq('id', user.id)
-        .single();
-
-      return profile?.push_token || null;
+      if (!(await getStoredUser())) return null;
+      return (await api.get<{ push_token: string | null }>('/push-token')).push_token;
     } catch (error) {
       console.error('Error getting current user push token:', error);
       return null;

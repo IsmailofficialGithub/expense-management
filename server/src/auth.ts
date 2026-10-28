@@ -24,5 +24,12 @@ export async function issueTokens(reply: FastifyReply, user: { id: string; email
   const accessToken = await reply.jwtSign({ sub: user.id, email: user.email }, { expiresIn: '15m' });
   const refreshToken = randomBytes(32).toString('hex');
   await redis.set(`refresh:${refreshToken}`, JSON.stringify(user), 'EX', REFRESH_TTL);
+  // Index per user so a password change can revoke every session.
+  await redis.multi().sadd(`refreshUser:${user.id}`, refreshToken).expire(`refreshUser:${user.id}`, REFRESH_TTL).exec();
   return { accessToken, refreshToken, user };
+}
+
+export async function revokeSessions(userId: string) {
+  const tokens = await redis.smembers(`refreshUser:${userId}`);
+  await redis.del(`refreshUser:${userId}`, ...tokens.map((t) => `refresh:${t}`));
 }

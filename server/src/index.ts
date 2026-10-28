@@ -19,7 +19,7 @@ import { chatRoutes } from './routes/chat.js';
 
 if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required');
 
-const app = Fastify({ logger: true, trustProxy: true });
+const app = Fastify({ logger: true, trustProxy: (_addr, hop) => hop < 1 /* trust only nginx; the leftmost X-Forwarded-For is client-controlled */ });
 await app.register(cors);
 await app.register(jwt, { secret: process.env.JWT_SECRET });
 await app.register(rateLimit, { max: 300, timeWindow: '1 minute', redis });

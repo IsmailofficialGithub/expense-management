@@ -81,6 +81,12 @@ async function refresh(): Promise<boolean> {
   return refreshing;
 }
 
+// Drop the cached access token and refresh (e.g. the realtime socket was rejected with an expired token).
+export async function forceRefresh() {
+  accessToken = null;
+  return refresh();
+}
+
 export async function getAccessToken(): Promise<string | null> {
   if (!accessToken) await refresh();
   return accessToken;
@@ -105,7 +111,8 @@ export async function request<T = any>(method: string, path: string, body?: unkn
     if (await refresh()) res = await send();
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: any;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text.slice(0, 200) }; }
   if (!res.ok) throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`, data?.details);
   return data as T;
 }

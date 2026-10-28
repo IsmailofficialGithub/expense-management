@@ -24,8 +24,7 @@ import { useToast } from '../../hooks/useToast';
 import { useUI } from '../../hooks/useUI';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { format } from 'date-fns';
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '../../services/supabase';
+import { subscribe } from '../../services/realtime';
 import { notificationsService } from '../../services/notifications.service';
 import { AppState } from 'react-native';
 import ErrorState from '../../components/ErrorState';
@@ -51,7 +50,7 @@ export default function MessagesScreen({ navigation }: any) {
   const [appState, setAppState] = useState(AppState.currentState);
   const [error, setError] = useState<string | null>(null);
 
-  const channelsRef = useRef<RealtimeChannel[]>([]);
+  const channelsRef = useRef<Array<() => void>>([]);
 
   // Listen to app state changes (foreground/background)
   useEffect(() => {
@@ -193,9 +192,7 @@ export default function MessagesScreen({ navigation }: any) {
 
   const setupRealtimeSubscriptions = useCallback(() => {
     // Clean up existing subscriptions
-    channelsRef.current.forEach(channel => {
-      supabase.removeChannel(channel);
-    });
+    channelsRef.current.forEach(unsub => unsub());
     channelsRef.current = [];
 
     // Subscribe to messages for all conversations
@@ -203,104 +200,63 @@ export default function MessagesScreen({ navigation }: any) {
 
     if (conversationIds.length === 0) return;
 
-    // Subscribe to new messages in any of the user's conversations
-    const messagesChannel = supabase
-      .channel(`messages-updates-${Date.now()}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-        },
-        async (payload) => {
-          const newMessage = payload.new as any;
+    if (!profile?.id) return;
 
-          if (conversationIds.includes(newMessage.conversation_id)) {
-            const isMyMessage = newMessage.sender_id === profile?.id;
+    // Server publishes every new message in my conversations to user:<me> as 'conversation'
+    const unsub = subscribe(`user:${profile.id}`, async (event, data) => {
+      if (event !== 'conversation') return;
+      const newMessage = data.message as any;
+      const isMyMessage = newMessage.sender_id === profile?.id;
+      const sender = newMessage.sender;
 
-            // Get sender info
-            const { data: sender } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', newMessage.sender_id)
-              .single();
+      if (!conversationIds.includes(newMessage.conversation_id)) {
+        // New conversation started by someone else: fetch it and add to the list
+        const created = await chatService.getConversation(newMessage.conversation_id).catch(() => null);
+        if (created) setConversations(prev => prev.some(c => c.id === created.id) ? prev : [created, ...prev]);
+        return;
+      }
 
-            // Find the conversation
-            const conversation = conversations.find(c => c.id === newMessage.conversation_id);
+      const conversation = conversations.find(c => c.id === newMessage.conversation_id);
 
-            // Send notification if message is not from current user
-            if (!isMyMessage) {
-              try {
-                await notificationsService.notifyNewMessage(
-                  sender?.full_name || 'Someone',
-                  newMessage.text,
-                  newMessage.conversation_id,
-                  conversation?.type || 'individual',
-                  conversation?.type === 'group' ? conversation?.group?.name : undefined
-                );
-              } catch (error) {
-                console.error('Error sending notification:', error);
-              }
-            }
-
-            // Update conversations list locally
-            setConversations(prev => {
-              const updated = prev.map(conv => {
-                if (conv.id === newMessage.conversation_id) {
-                  return {
-                    ...conv,
-                    last_message_at: newMessage.created_at,
-                    last_message_text: newMessage.text,
-                    last_message_sender_id: newMessage.sender_id,
-                    last_message_sender: sender || conv.last_message_sender,
-                    updated_at: newMessage.created_at,
-                    unread_count: isMyMessage ? (conv.unread_count || 0) : (conv.unread_count || 0) + 1,
-                  };
-                }
-                return conv;
-              });
-
-              return updated.sort((a, b) => {
-                const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-                const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-                return bTime - aTime;
-              });
-            });
-          }
+      if (!isMyMessage) {
+        try {
+          await notificationsService.notifyNewMessage(
+            sender?.full_name || 'Someone',
+            newMessage.text,
+            newMessage.conversation_id,
+            conversation?.type || 'individual',
+            conversation?.type === 'group' ? conversation?.group?.name : undefined
+          );
+        } catch (error) {
+          console.error('Error sending notification:', error);
         }
-      )
-      .subscribe();
+      }
 
-    channelsRef.current.push(messagesChannel);
-
-    // Subscribe to conversation updates
-    const conversationsChannel = supabase
-      .channel(`conversations-updates-${Date.now()}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'conversations' },
-        async (payload) => {
-          const updatedConv = payload.new as any;
-          if (conversationIds.includes(updatedConv.id)) {
-            const updated = await chatService.getConversation(updatedConv.id);
-            if (updated) {
-              setConversations(prev => {
-                const idx = prev.findIndex(c => c.id === updated.id);
-                if (idx === -1) return prev;
-                const newArr = [...prev];
-                newArr[idx] = updated;
-                return newArr.sort((a, b) =>
-                  (new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
-                );
-              });
-            }
+      setConversations(prev => {
+        const updated = prev.map(conv => {
+          if (conv.id === newMessage.conversation_id) {
+            return {
+              ...conv,
+              last_message_at: newMessage.created_at,
+              last_message_text: newMessage.text,
+              last_message_sender_id: newMessage.sender_id,
+              last_message_sender: sender || conv.last_message_sender,
+              updated_at: newMessage.created_at,
+              unread_count: isMyMessage ? (conv.unread_count || 0) : (conv.unread_count || 0) + 1,
+            };
           }
-        }
-      )
-      .subscribe();
+          return conv;
+        });
 
-    channelsRef.current.push(conversationsChannel);
+        return updated.sort((a, b) => {
+          const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+          const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+          return bTime - aTime;
+        });
+      });
+    });
+
+    channelsRef.current.push(unsub);
   }, [conversations, profile?.id]);
 
   const applyFilters = useCallback(() => {
@@ -337,7 +293,7 @@ export default function MessagesScreen({ navigation }: any) {
     loadConversations();
 
     return () => {
-      channelsRef.current.forEach(c => supabase.removeChannel(c));
+      channelsRef.current.forEach(unsub => unsub());
       channelsRef.current = [];
     };
   }, [loadConversations]); // Run once on mount

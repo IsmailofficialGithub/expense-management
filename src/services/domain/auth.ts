@@ -1,5 +1,4 @@
 // src/services/domain/auth.ts
-import { supabase } from '../supabase';
 import * as SecureStore from 'expo-secure-store';
 import { api, AuthUser, clearSession, getStoredUser, setSession } from '../api';
 import { Platform } from 'react-native';
@@ -66,8 +65,9 @@ export const authService = {
     await api.post('/auth/otp', { email });
   },
 
-  updatePassword: async (newPassword: string) => {
-    await api.patch('/auth/password', { password: newPassword });
+  // currentPassword is required except right after verifyOtp. Server revokes other sessions and returns a fresh one.
+  updatePassword: async (newPassword: string, currentPassword?: string) => {
+    await setSession(await api.patch('/auth/password', { password: newPassword, current_password: currentPassword }));
   },
 
   // Correct code logs the user in, then NewPasswordScreen calls updatePassword.

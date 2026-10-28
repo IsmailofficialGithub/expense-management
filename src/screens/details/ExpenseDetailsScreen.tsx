@@ -13,7 +13,6 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
-import { supabase } from '../../services/supabase';
 
 const { width } = Dimensions.get('window');
 
