@@ -1,0 +1,111 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths: ['server/**', '.github/workflows/deploy-backend.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Check shell scripts
+        run: bash -n deploy.sh migrate.sh
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Docker build
+        run: docker build -t expense-api:ci .
+      - name: Set up .env
+        env:
+          SERVER_ENV: ${{ secrets.SERVER_ENV }}
+        run: |
+          umask 077
+          printf '%s\n' "$SERVER_ENV" > .env
+          for key in PORT DATABASE_URL JWT_SECRET PUBLIC_URL; do
+            grep -q "^$key=." .env || { echo "::error::SERVER_ENV is missing $key"; exit 1; }
+          done
+      - name: Smoke-test the image boots
+        run: |
+          docker network create ci
+          docker run -d --name redis --network ci redis:7-alpine
+          docker run -d --name pg --network ci -e POSTGRES_PASSWORD=ci postgres:16-alpine
+          sleep 5
+          docker run -d --name api --network ci -p 3020:3020 --env-file .env \
+            -e DATABASE_URL=postgres://postgres:ci@pg:5432/postgres -e REDIS_URL=redis://redis:6379 expense-api:ci
+          for i in $(seq 1 20); do curl -fs localhost:3020/health && exit 0; sleep 2; done
+          docker logs api; exit 1
+      - name: Package release
+        # .env is NOT packaged: artifacts on a public repo are downloadable by anyone; deploy writes it from the secret
+        run: tar czf ../release.tgz --exclude=node_modules --exclude=dist --exclude=.env --exclude=redis-data .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-release
+          path: release.tgz
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-release
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host server
+            HostName ${{ secrets.SSH_HOST }}
+            Port ${{ secrets.SSH_PORT }}
+            User ${{ secrets.SSH_USER }}
+            IdentityFile ~/.ssh/deploy
+            IdentitiesOnly yes
+          EOF
+      - name: Upload release and .env
+        env:
+          SERVER_ENV: ${{ secrets.SERVER_ENV }}
+        run: |
+          ssh server 'mkdir -p /srv/ismail_data/expense-management/server'
+          ssh server 'cd /srv/ismail_data/expense-management/server && tar xzf -' < release.tgz
+          printf '%s\n' "$SERVER_ENV" | ssh server 'umask 077 && cat > /srv/ismail_data/expense-management/server/.env'
+      - name: Run migrations
+        run: ssh server '/srv/ismail_data/expense-management/server/migrate.sh'
+      - name: Rebuild and restart
+        run: ssh server 'cd /srv/ismail_data/expense-management/server && docker compose up -d --build 2>&1 | tail -5'
+      - name: Health check
+        run: |
+          for i in $(seq 1 15); do
+            ssh server 'curl -fs localhost:3020/health' && exit 0
+            sleep 4
+          done
+          ssh server 'docker logs --tail 50 expense-api'; exit 1
