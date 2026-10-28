@@ -79,9 +79,12 @@ jobs:
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          # key is passphrase-protected: decrypt it in place so later ssh calls run non-interactively
+          ssh-keygen -p -P "$SSH_PASSPHRASE" -N "" -f ~/.ssh/deploy >/dev/null
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           cat > ~/.ssh/config <<EOF
           Host server
