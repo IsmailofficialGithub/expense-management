@@ -7,7 +7,8 @@ import {
   deleteExpenseRealtime,
 } from '../store/slices/expensesSlice';
 import { addNotificationRealtime } from '../store/slices/notificationsSlice';
-import { useAppDispatch } from '../store';
+import { fetchGroups, fetchGroup, fetchGroupBalances, setSelectedGroup } from '../store/slices/groupsSlice';
+import { useAppDispatch, useAppSelector } from '../store';
 import { notificationsService } from '../services/notifications.service';
 
 export const useRealtimeExpenses = (groupId: string) => {
@@ -41,6 +42,26 @@ export const useRealtimeExpenses = (groupId: string) => {
       realtimeService.unsubscribe(channel);
     };
   }, [groupId, dispatch]);
+};
+
+// Member added/removed in any of my groups: refresh lists live; drop the group if I was the one removed.
+export const useRealtimeMembership = (userId: string) => {
+  const dispatch = useAppDispatch();
+  const selectedGroupId = useAppSelector((s) => s.groups.selectedGroup?.id);
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = realtimeService.subscribeToMembership(userId, ({ group_id, removed_user_id }) => {
+      dispatch(fetchGroups());
+      if (group_id !== selectedGroupId) return;
+      if (removed_user_id === userId) dispatch(setSelectedGroup(null));
+      else {
+        dispatch(fetchGroup(group_id));
+        dispatch(fetchGroupBalances(group_id));
+      }
+    });
+    return () => realtimeService.unsubscribe(channel);
+  }, [userId, selectedGroupId, dispatch]);
 };
 
 export const useRealtimeNotifications = (userId: string) => {

@@ -10,6 +10,14 @@ import { sendMail } from '../mail.js';
 
 const id = z.string().uuid();
 const idParam = z.object({ id });
+
+// Every member listens on its own user channel app-wide, so member lists refresh without opening the group.
+async function notifyMembersChanged(groupId: string, data: object, extraUserIds: string[] = []) {
+  const { rows } = await db.query('select user_id from group_members where group_id = $1', [groupId]);
+  for (const u of new Set([...rows.map((r) => r.user_id as string), ...extraUserIds])) {
+    await publish(`user:${u}`, 'members_changed', data);
+  }
+}
 const opt = z.string().trim().max(500).nullish();
 
 // Profile fields other users may see (never push_token).
@@ -340,7 +348,10 @@ export async function peopleRoutes(app: FastifyInstance) {
     } finally {
       client.release();
     }
-    if (action === 'accept') await publish(`group:${groupId}`, 'member_added', { group_id: groupId, user_id: req.user.sub });
+    if (action === 'accept') {
+      await publish(`group:${groupId}`, 'member_added', { group_id: groupId, user_id: req.user.sub });
+      await notifyMembersChanged(groupId, { group_id: groupId });
+    }
     return { ok: true };
   });
 
@@ -417,6 +428,7 @@ export async function peopleRoutes(app: FastifyInstance) {
     );
     await publish(`group:${groupId}`, 'member_added', rows[0]);
     await publish(`user:${body.user_id}`, 'group_added', { id: groupId });
+    await notifyMembersChanged(groupId, { group_id: groupId });
     return reply.code(201).send(rows[0]);
   });
 
@@ -433,6 +445,7 @@ export async function peopleRoutes(app: FastifyInstance) {
       [groupId, userId],
     );
     await publish(`group:${groupId}`, 'member_removed', { group_id: groupId, user_id: userId });
+    await notifyMembersChanged(groupId, { group_id: groupId, removed_user_id: userId }, [userId]);
     return { ok: true };
   });
 

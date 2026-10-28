@@ -1,7 +1,7 @@
 // src/components/NotificationInitializer.tsx
 import React, { useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useRealtimeNotifications } from '../hooks/useRealtime';
+import { useRealtimeNotifications, useRealtimeMembership } from '../hooks/useRealtime';
 import { useAppDispatch } from '../store';
 import { fetchNotifications } from '../store/slices/notificationsSlice';
 import { notificationService } from '../services/supabase.service';
@@ -60,6 +60,7 @@ export default function NotificationInitializer() {
 
   // Setup real-time notification subscription
   useRealtimeNotifications(profile?.id || '');
+  useRealtimeMembership(profile?.id || '');
 
   // Debug: Log subscription status
   useEffect(() => {

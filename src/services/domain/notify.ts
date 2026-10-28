@@ -62,6 +62,11 @@ export const realtimeService = {
       if (event === 'notification' && data?.type === 'INSERT') callback(toPayload(data));
     }),
 
+  subscribeToMembership: (userId: string, callback: (data: { group_id: string; removed_user_id?: string }) => void) =>
+    subscribe(`user:${userId}`, (event, data) => {
+      if (event === 'members_changed') callback(data);
+    }),
+
   unsubscribe: (channel: any) => {
     if (typeof channel === 'function') channel();
   },
