@@ -1,6 +1,6 @@
 // src/screens/details/InviteUserScreen.tsx
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, StatusBar, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, StatusBar, Keyboard } from 'react-native';
 import { Text, TextInput, Button, Card, IconButton, Chip, HelperText, useTheme, Divider } from 'react-native-paper';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkCheck } from '../../hooks/useNetworkCheck';
@@ -132,10 +132,10 @@ export default function InviteUserScreen({ navigation, route }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             {/* Group Info */}
@@ -267,7 +267,6 @@ export default function InviteUserScreen({ navigation, route }: Props) {
             {/* Bottom spacing for keyboard */}
             <View style={styles.bottomSpacer} />
           </ScrollView>
-        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
 
       <LoadingOverlay visible={isInviting} message="Sending invitations..." />
