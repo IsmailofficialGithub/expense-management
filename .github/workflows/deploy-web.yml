@@ -62,4 +62,5 @@ jobs:
             rm -rf web.old; [ -d web ] && mv web web.old; mv web.new web; rm -rf web.old'
       - name: Check site
         run: |
-          ssh server 'curl -fs -H "Host: flatmate.ismailabbasi.qzz.io" http://127.0.0.1/ | grep -q "id=\"root\""'
+          # HTTP redirects to HTTPS (certbot), so check the HTTPS site via the server's own nginx
+          ssh server 'curl -fs --resolve flatmate.ismailabbasi.qzz.io:443:127.0.0.1 https://flatmate.ismailabbasi.qzz.io/ | grep -q "id=\"root\""'
