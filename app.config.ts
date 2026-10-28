@@ -7,9 +7,6 @@ export default ({ config }: { config: any }) => ({
   ],
   extra: {
     ...config.extra,
-    eas: {
-      projectId: "75672ee6-6961-4fc7-a57e-f04d11cb6dc6",
-    },
     API_URL: process.env.API_URL || 'https://api.flatmate.ismailabbasi.qzz.io',
     WHATSAPP_API_URL: process.env.WHATSAPP_API_URL || 'http://109.123.251.103:30010',
   },
