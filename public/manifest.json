@@ -1,0 +1,14 @@
+{
+  "name": "Flatmates Expense Tracker",
+  "short_name": "Flatmate",
+  "description": "Split bills, track shared expenses and settle up with your flatmates.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6200EE",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

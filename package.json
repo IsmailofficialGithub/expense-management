@@ -54,7 +54,8 @@
   "devDependencies": {
     "@types/react": "~19.1.0",
     "@types/react-native-dotenv": "^0.2.2",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "workbox-cli": "^7.4.1"
   },
   "private": true
 }

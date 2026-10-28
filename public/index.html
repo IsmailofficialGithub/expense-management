@@ -8,6 +8,9 @@
     <meta name="description" content="Split bills, track shared expenses and settle up with your flatmates." />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#6200EE" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style>
       /* Thin translucent scrollbars instead of the browser's white default (looked broken in dark mode). */
@@ -43,5 +46,35 @@
     </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
+  <script>
+    // Offline support: sw.js (Workbox, generated at deploy) keeps the app files so it opens without internet.
+    // A new deploy waits until the user taps the banner, so a page never runs half old / half new code.
+    if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').then(function (reg) {
+          function offer(sw) {
+            if (!sw || !navigator.serviceWorker.controller || document.getElementById('sw-update')) return;
+            var b = document.createElement('button');
+            b.id = 'sw-update';
+            b.textContent = 'New version available \u2014 tap to refresh';
+            b.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;padding:12px 18px;border:0;border-radius:24px;background:#6200EE;color:#fff;font:600 14px sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.3);cursor:pointer';
+            b.onclick = function () { sw.postMessage({ type: 'SKIP_WAITING' }); };
+            document.body.appendChild(b);
+          }
+          offer(reg.waiting);
+          reg.addEventListener('updatefound', function () {
+            var sw = reg.installing;
+            sw && sw.addEventListener('statechange', function () { if (sw.state === 'installed') offer(sw); });
+          });
+          setInterval(function () { reg.update(); }, 60 * 60 * 1000);
+        });
+        // First install also fires controllerchange; only reload when replacing an older version.
+        var reloaded = !navigator.serviceWorker.controller;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (!reloaded) { reloaded = true; location.reload(); }
+        });
+      });
+    }
+  </script>
 </body>
 </html>
