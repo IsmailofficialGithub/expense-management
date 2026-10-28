@@ -1,5 +1,6 @@
 // src/hooks/useNetworkCheck.ts
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { useUI } from './useUI';
 import { useToast } from './useToast';
 import { syncService } from '../services/sync.service';
@@ -13,6 +14,8 @@ interface UseNetworkCheckOptions {
 
 export const useNetworkCheck = (options: UseNetworkCheckOptions = {}) => {
   const { isOnline } = useUI();
+  // Web keeps every visited tab mounted, so each screen's toast stacked up; the OfflineIndicator label is enough there.
+  const toast = options.showToast && Platform.OS !== 'web';
   const { showToast } = useToast();
   const [wasOffline, setWasOffline] = useState(false);
 
@@ -20,14 +23,14 @@ export const useNetworkCheck = (options: UseNetworkCheckOptions = {}) => {
     if (!isOnline && !wasOffline) {
       // Just went offline
       setWasOffline(true);
-      if (options.showToast) {
+      if (toast) {
         showToast('No internet connection', 'error');
       }
       options.onOffline?.();
     } else if (isOnline && wasOffline) {
       // Just came back online
       setWasOffline(false);
-      if (options.showToast) {
+      if (toast) {
         showToast('Connection restored', 'success');
       }
       
