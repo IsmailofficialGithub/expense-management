@@ -52,14 +52,21 @@ function setClause(updates: Record<string, unknown>) {
   return { sql: keys.map((k, i) => `${k} = $${i + 2}`).join(', ') + ', updated_at = now()', values: keys.map((k) => updates[k]) };
 }
 
-function invitationEmail(inviterName: string, groupName: string, registered: boolean) {
+const WEB_URL = process.env.WEB_URL ?? 'https://flatmate.ismailabbasi.qzz.io';
+
+function invitationEmail(inviterName: string, groupName: string, registered: boolean, email: string) {
   const inviter = escapeHtml(inviterName);
   const group = escapeHtml(groupName);
   const download = 'https://github.com/IsmailofficialGithub/expense-management/releases/download/1.0/expense-management.apk';
+  const button = (href: string, label: string, color: string) =>
+    `<a href="${href}" style="display:inline-block;background:${color};color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold">${label}</a>`;
+  // Unregistered: the web signup is prefilled with the invited email; logging in afterwards joins the group automatically.
   const steps = registered
-    ? `<ol><li>Open the app</li><li>Go to Profile → Group Invitations</li><li>Accept the invitation to join &quot;${group}&quot;</li></ol>`
-    : `<p>Download the app, then sign up with this email address. You'll automatically be added to &quot;${group}&quot;.</p>
-       <p><a href="${download}" style="display:inline-block;background:#FF9800;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold">Download App</a></p>`;
+    ? `<ol><li>Open Flatmate (app or web)</li><li>Go to Profile → Group Invitations</li><li>Accept the invitation to join &quot;${group}&quot;</li></ol>
+       <p>${button(WEB_URL, 'Open Flatmate', '#6200EE')}</p>`
+    : `<p>Create your account with this email address and you'll automatically be added to &quot;${group}&quot;.</p>
+       <p>${button(`${WEB_URL}/signup?email=${encodeURIComponent(email)}`, 'Create your account', '#6200EE')}</p>
+       <p style="font-size:13px;color:#666">On Android? You can also <a href="${download}">download the app</a> and sign up there.</p>`;
   return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
     <h2 style="color:#6200EE">You've been invited!</h2>
     <p>Hi there,</p>
@@ -272,7 +279,7 @@ export async function peopleRoutes(app: FastifyInstance) {
     );
     // Email failure must not fail the invitation (same as before).
     await sendMail(body.invited_email, `You're invited to join "${ctx.group_name}" on Flatmates Expense Tracker`,
-      invitationEmail(ctx.inviter_name || 'Someone', ctx.group_name, ctx.registered)).catch((e) => req.log.error(e, 'invitation email failed'));
+      invitationEmail(ctx.inviter_name || 'Someone', ctx.group_name, ctx.registered, body.invited_email)).catch((e) => req.log.error(e, 'invitation email failed'));
     const invitee = await db.query('select id from profiles where email = $1', [body.invited_email]);
     if (invitee.rows[0]) await publish(`user:${invitee.rows[0].id}`, 'invitation_received', rows[0]);
     return reply.code(201).send(rows[0]);

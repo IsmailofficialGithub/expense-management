@@ -20,7 +20,12 @@ import { chatRoutes } from './routes/chat.js';
 if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required');
 
 const app = Fastify({ logger: true, trustProxy: (_addr, hop) => hop < 1 /* trust only nginx; the leftmost X-Forwarded-For is client-controlled */ });
-await app.register(cors);
+// Browsers only (mobile apps ignore CORS). The plugin's default allows just GET/HEAD/POST, which silently
+// blocked every edit and delete on the web app.
+await app.register(cors, {
+  origin: ['https://flatmate.ismailabbasi.qzz.io', /^http:\/\/localhost:\d+$/],
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+});
 await app.register(jwt, { secret: process.env.JWT_SECRET });
 await app.register(rateLimit, { max: 300, timeWindow: '1 minute', redis });
 await app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024, files: 1 } });

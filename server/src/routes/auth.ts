@@ -70,7 +70,8 @@ export async function authRoutes(app: FastifyInstance) {
     reply.type('text/html');
     if (!userId) return reply.code(400).send('<h2>This link is invalid or expired.</h2>');
     await db.query('update users set email_verified = true where id = $1', [userId]);
-    return '<h2>Email confirmed. You can now log in to the app.</h2>';
+    // Straight to the web login; logging in also joins any groups this email was invited to
+    return reply.redirect(process.env.WEB_URL ?? 'https://flatmate.ismailabbasi.qzz.io');
   });
 
   app.post('/login', strict, async (req, reply) => {

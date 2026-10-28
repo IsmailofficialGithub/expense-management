@@ -50,7 +50,7 @@ export type AuthStackParamList = {
         verificationEmail?: string;
         showVerificationMessage?: boolean;
     } | undefined;
-    Signup: undefined;
+    Signup: { email?: string; token?: string } | undefined;
     ForgotPassword: undefined;
     VerifyOtp: { email: string };
 };

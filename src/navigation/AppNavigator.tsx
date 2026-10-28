@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../hooks/useNotifications';
 import NotificationBadge from '../components/NotificationBadge';
@@ -54,10 +54,15 @@ const MainTab = createBottomTabNavigator<MainTabParamList>();
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 function AuthNavigator() {
+  // Invitation emails link to <web>/signup?email=...: start on Signup with the invited email filled in.
+  const webSignup = Platform.OS === 'web' && window.location.pathname === '/signup'
+    ? { email: new URLSearchParams(window.location.search).get('email') ?? undefined }
+    : null;
+
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+    <AuthStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={webSignup ? 'Signup' : 'Login'}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
-      <AuthStack.Screen name="Signup" component={SignupScreen} />
+      <AuthStack.Screen name="Signup" component={SignupScreen} initialParams={webSignup ?? undefined} />
       <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <AuthStack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
     </AuthStack.Navigator>
