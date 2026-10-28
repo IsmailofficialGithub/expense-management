@@ -56,7 +56,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
     useCallback(() => {
       // First check if group is already in the groups list (from cache)
       const existingGroup = groups.find(g => g.id === groupId);
-      if (existingGroup && !selectedGroup) {
+      if (existingGroup && selectedGroup?.id !== groupId) {
         console.log('[GroupDetails] Using group from groups list');
         dispatch(setSelectedGroup(existingGroup));
       }
@@ -293,7 +293,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
 
   // Check if group exists in groups list but not selected
   useEffect(() => {
-    if (!selectedGroup && groups.length > 0) {
+    if (selectedGroup?.id !== groupId && groups.length > 0) {
       const groupInList = groups.find(g => g.id === groupId);
       if (groupInList) {
         console.log('[GroupDetails] Found group in groups list, setting as selected');

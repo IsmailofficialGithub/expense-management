@@ -1,0 +1,31 @@
+name: expense-server
+
+services:
+  api:
+    build: .
+    container_name: expense-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - ../uploads:/app/uploads
+    ports:
+      - "127.0.0.1:${PORT:-3020}:${PORT:-3020}"
+    networks: [default, db]
+    depends_on: [redis]
+
+  redis:
+    image: redis:7-alpine
+    container_name: expense-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./redis-data:/data
+
+networks:
+  db:
+    # network of the postgres compose project (/srv/ismail_data/expense-management/postgres)
+    name: expense-management_default
+    external: true

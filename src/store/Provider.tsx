@@ -4,7 +4,7 @@ import { Provider } from 'react-redux';
 import { Platform } from 'react-native';
 import { store } from './index';
 import { initializeAuth, setUser, setProfileFromCache } from './slices/authSlice';
-import { supabase } from '../services/supabase';
+import { onAuthChange } from '../services/api';
 import { setOnlineStatus } from './slices/uiSlice';
 import { storageService } from '../services/storage.service';
 import { syncService } from '../services/sync.service';
@@ -139,10 +139,9 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
     loadCachedData();
 
     // Listen to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.id);
-        
+    const unsubscribeAuth = onAuthChange(
+      async (user) => {
+        const session = user ? { user } : null;
         if (session?.user) {
           try {
             const { profileService } = await import('../services/supabase.service');
@@ -160,11 +159,7 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
             store.dispatch(setUser({ user: session.user, profile: null }));
           }
         } else {
-          // Only clear user if this is a SIGNED_OUT event, not just initialization
-          if (event === 'SIGNED_OUT') {
-            console.log('User signed out, clearing state');
-            store.dispatch(setUser({ user: null, profile: null }));
-          }
+          store.dispatch(setUser({ user: null, profile: null }));
         }
       }
     );
@@ -239,7 +234,7 @@ export const ReduxProvider: React.FC<ReduxProviderProps> = ({ children }) => {
     }
 
     return () => {
-      subscription.unsubscribe();
+      unsubscribeAuth();
       if (unsubscribeNetwork) {
         unsubscribeNetwork();
       }
