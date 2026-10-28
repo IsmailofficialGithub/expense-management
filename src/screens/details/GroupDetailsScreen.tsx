@@ -55,18 +55,12 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [hasTriedCache, setHasTriedCache] = useState(false);
   const [summary, setSummary] = useState<GroupExpenseSummary | null>(null);
 
+  // Reload on focus / group change only. Depending on selectedGroup here looped forever: every load
+  // replaces selectedGroup, which re-ran this effect. Picking the cached group is done by the effect below.
   useFocusEffect(
     useCallback(() => {
-      // First check if group is already in the groups list (from cache)
-      const existingGroup = groups.find(g => g.id === groupId);
-      if (existingGroup && selectedGroup?.id !== groupId) {
-        console.log('[GroupDetails] Using group from groups list');
-        dispatch(setSelectedGroup(existingGroup));
-      }
-      
-      // Then try to load fresh data
       loadGroupData();
-    }, [groupId, groups, selectedGroup, dispatch])
+    }, [groupId])
   );
 
   useEffect(() => {
