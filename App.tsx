@@ -2,6 +2,7 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { installWebAlert } from './src/utils/webAlert';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ReduxProvider } from './src/store/Provider';
 import { NavigationContainer, DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationDefaultTheme } from '@react-navigation/native';
@@ -86,6 +87,8 @@ function AppContent() {
     </PaperProvider>
   );
 }
+
+installWebAlert();
 
 // Web: the app is designed for phones, so on wide screens it renders as a centered phone-width column
 // instead of stretching every input and button across the whole window.
