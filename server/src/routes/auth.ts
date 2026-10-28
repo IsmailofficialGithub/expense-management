@@ -120,7 +120,7 @@ export async function authRoutes(app: FastifyInstance) {
     const body = z.object({ email, code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
     const key = `otp:${body.email}`;
     // Count the attempt atomically before comparing, so parallel guesses can't all see tries=0.
-    const [[, tries], [, code]] = (await redis.multi().incr(`otpTries:${body.email}`).expire(`otpTries:${body.email}`, 600).get(key).exec())!;
+    const [[, tries], , [, code]] = (await redis.multi().incr(`otpTries:${body.email}`).expire(`otpTries:${body.email}`, 600).get(key).exec())!;
     if (!code || Number(tries) > 5) return reply.code(400).send({ error: 'Code expired, request a new one' });
     if (code !== body.code) return reply.code(400).send({ error: 'Invalid code' });
     if (!(await redis.del(key))) return reply.code(400).send({ error: 'Code expired, request a new one' });
@@ -165,7 +165,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/delete-account', { preHandler: requireUser, ...strict }, async (req, reply) => {
     const { code } = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
     const me = req.user.sub;
-    const [[, tries], [, stored]] = (await redis.multi().incr(`delOtpTries:${me}`).expire(`delOtpTries:${me}`, 600).get(`delOtp:${me}`).exec())!;
+    const [[, tries], , [, stored]] = (await redis.multi().incr(`delOtpTries:${me}`).expire(`delOtpTries:${me}`, 600).get(`delOtp:${me}`).exec())!;
     if (!stored || Number(tries) > 5) return reply.code(400).send({ error: 'Code expired, request a new one' });
     if (stored !== code) return reply.code(400).send({ error: 'Invalid code' });
     if (!(await redis.del(`delOtp:${me}`))) return reply.code(400).send({ error: 'Code expired, request a new one' });
