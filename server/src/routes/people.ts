@@ -7,6 +7,7 @@ import { publish } from '../realtime.js';
 import { cachedForGroup } from '../cache.js';
 import { deleteUpload } from '../uploads.js';
 import { sendMail } from '../mail.js';
+import { insertNotifications } from './notify.js';
 
 const id = z.string().uuid();
 const idParam = z.object({ id });
@@ -71,7 +72,7 @@ function invitationEmail(inviterName: string, groupName: string, registered: boo
   // Unregistered: the web signup is prefilled with the invited email; logging in afterwards joins the group automatically.
   const steps = registered
     ? `<ol><li>Open Flatmate (app or web)</li><li>Go to Profile → Group Invitations</li><li>Accept the invitation to join &quot;${group}&quot;</li></ol>
-       <p>${button(WEB_URL, 'Open Flatmate', '#6200EE')}</p>`
+       <p>${button(`${WEB_URL}/invitations`, 'View invitation', '#6200EE')}</p>`
     : `<p>Create your account with this email address and you'll automatically be added to &quot;${group}&quot;.</p>
        <p>${button(`${WEB_URL}/signup?email=${encodeURIComponent(email)}`, 'Create your account', '#6200EE')}</p>
        <p style="font-size:13px;color:#666">On Android? You can also <a href="${download}">download the app</a> and sign up there.</p>`;
@@ -289,7 +290,15 @@ export async function peopleRoutes(app: FastifyInstance) {
     await sendMail(body.invited_email, `You're invited to join "${ctx.group_name}" on Flatmates Expense Tracker`,
       invitationEmail(ctx.inviter_name || 'Someone', ctx.group_name, ctx.registered, body.invited_email)).catch((e) => req.log.error(e, 'invitation email failed'));
     const invitee = await db.query('select id from profiles where email = $1', [body.invited_email]);
-    if (invitee.rows[0]) await publish(`user:${invitee.rows[0].id}`, 'invitation_received', rows[0]);
+    if (invitee.rows[0]) {
+      await publish(`user:${invitee.rows[0].id}`, 'invitation_received', rows[0]);
+      await insertNotifications([{
+        user_id: invitee.rows[0].id, type: 'group_invitation', related_id: rows[0].id,
+        title: 'Group invitation', message: `${ctx.inviter_name || 'Someone'} invited you to join "${ctx.group_name}"`,
+        metadata: { group_id: body.group_id, invitation_id: rows[0].id },
+      }]);
+    }
+    await notifyMembersChanged(body.group_id, { group_id: body.group_id });
     return reply.code(201).send(rows[0]);
   });
 
@@ -297,11 +306,28 @@ export async function peopleRoutes(app: FastifyInstance) {
     const { id: groupId } = idParam.parse(req.params);
     await assertGroupMember(groupId, req.user.sub);
     const { rows } = await db.query(
-      `select id, group_id, invited_by, invited_email, invitation_token, status, expires_at, accepted_at, created_at
-         from group_invitations where group_id = $1 and invited_by = $2 order by created_at desc`,
-      [groupId, req.user.sub],
+      `select id, group_id, invited_by, invited_email, status, expires_at, created_at from group_invitations
+         where group_id = $1 and status = 'pending' and expires_at > now() order by created_at desc`,
+      [groupId],
     );
     return rows;
+  });
+
+  // Admin revokes a pending invite: it stops working and the invitee's notification goes away.
+  app.delete('/invitations/:id', async (req) => {
+    const { id: invitationId } = idParam.parse(req.params);
+    const { rows: [inv] } = await db.query(
+      "select group_id, invited_email from group_invitations where id = $1 and status = 'pending'", [invitationId]);
+    if (!inv) throw new HttpError(404, 'Invitation not found');
+    await assertGroupAdmin(inv.group_id, req.user.sub);
+    await db.query("update group_invitations set status = 'expired' where id = $1", [invitationId]);
+    const { rows: [invitee] } = await db.query('select id from profiles where email = $1', [inv.invited_email]);
+    if (invitee) {
+      await db.query("delete from notifications where user_id = $1 and type = 'group_invitation' and related_id = $2", [invitee.id, invitationId]);
+      await publish(`user:${invitee.id}`, 'invitation_revoked', { id: invitationId, group_id: inv.group_id });
+    }
+    await notifyMembersChanged(inv.group_id, { group_id: inv.group_id });
+    return { ok: true };
   });
 
   app.get('/invitations/pending', async (req) => {
@@ -350,8 +376,8 @@ export async function peopleRoutes(app: FastifyInstance) {
     }
     if (action === 'accept') {
       await publish(`group:${groupId}`, 'member_added', { group_id: groupId, user_id: req.user.sub });
-      await notifyMembersChanged(groupId, { group_id: groupId });
     }
+    await notifyMembersChanged(groupId, { group_id: groupId });
     return { ok: true };
   });
 

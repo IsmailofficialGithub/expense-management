@@ -11,7 +11,9 @@ import { useAppDispatch } from '../../store';
 import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember, setSelectedGroup } from '../../store/slices/groupsSlice';
 import { fetchExpenses, fetchSettlements } from '../../store/slices/expensesSlice';
 import { expenseService } from '../../services/supabase.service';
-import type { GroupExpenseSummary } from '../../types/database.types';
+import type { GroupExpenseSummary, GroupInvitation } from '../../types/database.types';
+import { invitationService } from '../../services/supabase.service';
+import { subscribe } from '../../services/realtime';
 import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
 import { useAppSelector } from '../../store';
 import { ErrorHandler } from '../../utils/errorHandler';
@@ -57,12 +59,26 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasTriedCache, setHasTriedCache] = useState(false);
   const [summary, setSummary] = useState<GroupExpenseSummary | null>(null);
+  const [pendingInvites, setPendingInvites] = useState<GroupInvitation[]>([]);
+
+  const loadPendingInvites = useCallback(() => {
+    invitationService.getMyInvitations(groupId).then(setPendingInvites).catch(() => {});
+  }, [groupId]);
+
+  // Invites sent, accepted, declined or revoked by anyone: refresh the pending list live.
+  useEffect(() => {
+    if (!profile?.id) return;
+    return subscribe(`user:${profile.id}`, (event, data) => {
+      if (event === 'members_changed' && data?.group_id === groupId) loadPendingInvites();
+    });
+  }, [profile?.id, groupId, loadPendingInvites]);
 
   // Reload on focus / group change only. Depending on selectedGroup here looped forever: every load
   // replaces selectedGroup, which re-ran this effect. Picking the cached group is done by the effect below.
   useFocusEffect(
     useCallback(() => {
       loadGroupData();
+      loadPendingInvites();
     }, [groupId])
   );
 
@@ -291,6 +307,25 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         },
       ]
     );
+  };
+
+  const handleRevokeInvite = (invite: GroupInvitation) => {
+    Alert.alert('Revoke Invitation', `Cancel the invitation to ${invite.invited_email}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Revoke',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await invitationService.revokeInvitation(invite.id);
+            setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+            showToast('Invitation revoked', 'success');
+          } catch (error) {
+            ErrorHandler.handleError(error, showToast, 'Revoke Invitation');
+          }
+        },
+      },
+    ]);
   };
 
   // Check if group exists in groups list but not selected
@@ -642,6 +677,23 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               </Card>
             );
           })}
+
+          {pendingInvites.map((invite) => (
+            <Card key={invite.id} style={[styles.memberCard, { opacity: 0.75 }]}>
+              <Card.Content style={styles.memberContent}>
+                <View style={styles.memberLeft}>
+                  <UserAvatar user={{ full_name: invite.invited_email }} size={40} />
+                  <View style={styles.memberInfo}>
+                    <Text style={[styles.memberEmail, { color: theme.colors.onSurface }]}>{invite.invited_email}</Text>
+                    <Chip compact icon="clock-outline" style={{ alignSelf: 'flex-start', marginTop: 4 }}>Pending</Chip>
+                  </View>
+                </View>
+                {isAdmin && (
+                  <IconButton icon="close" size={20} accessibilityLabel="Revoke invitation" onPress={() => handleRevokeInvite(invite)} />
+                )}
+              </Card.Content>
+            </Card>
+          ))}
         </View>
 
         {/* Bulk Payment Features */}

@@ -15,9 +15,11 @@ import {
   IconButton,
   Card,
   ActivityIndicator,
+  Badge,
 } from 'react-native-paper';
 import SafeScrollView from '../../components/SafeScrollView';
 import { useAuth } from '../../hooks/useAuth';
+import { usePendingInvitationCount } from '../../hooks/usePendingInvitations';
 import { useAppDispatch } from '../../store';
 import { signOut, updateProfile, uploadAvatar } from '../../store/slices/authSlice';
 import { setTheme } from '../../store/slices/uiSlice';
@@ -34,6 +36,7 @@ import { CommonActions } from '@react-navigation/native';
 
 export default function ProfileScreen({ navigation }: any) {
   const { profile, user, loading } = useAuth();
+  const pendingInvites = usePendingInvitationCount(profile?.id);
   const { theme: userTheme } = useUI();
   const theme = useTheme();
   const dispatch = useAppDispatch();
@@ -481,9 +484,14 @@ export default function ProfileScreen({ navigation }: any) {
         <Card style={styles.card}>
           <List.Item
             title="Group Invitations"
-            description="View and accept group invitations"
+            description={pendingInvites ? `${pendingInvites} pending` : 'View and accept group invitations'}
             left={(props) => <List.Icon {...props} icon="email" />}
-            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+            right={(props) => (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {pendingInvites > 0 && <Badge>{pendingInvites}</Badge>}
+                <List.Icon {...props} icon="chevron-right" />
+              </View>
+            )}
             onPress={() => navigation.navigate('Invitations')}
           />
           <Divider />

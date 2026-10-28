@@ -35,7 +35,7 @@ export async function sendPush(tokens: (string | null)[], title: string, body: s
   }
 }
 
-async function insertNotifications(list: NewNotification[]) {
+export async function insertNotifications(list: NewNotification[]) {
   if (!list.length) return [];
   const { rows } = await db.query(
     `insert into notifications (user_id, title, message, type, related_id, metadata)

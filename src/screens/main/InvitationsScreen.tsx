@@ -4,6 +4,7 @@ import { View, StyleSheet, RefreshControl } from 'react-native';
 import { Text, Card, Button, Avatar, Divider, useTheme } from 'react-native-paper';
 import { useAuth } from '../../hooks/useAuth';
 import { invitationService } from '../../services/supabase.service';
+import { refreshPendingInvitations } from '../../hooks/usePendingInvitations';
 import { GroupInvitationWithDetails } from '../../types/database.types';
 import { useToast } from '../../hooks/useToast';
 import { ErrorHandler } from '../../utils/errorHandler';
@@ -63,6 +64,7 @@ export default function InvitationsScreen({ navigation }: any) {
 
       // Remove from list
       setInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
+      refreshPendingInvitations();
 
       // Navigate to group details
       navigation.navigate('GroupDetails', { groupId: invitation.group_id });
@@ -91,6 +93,7 @@ export default function InvitationsScreen({ navigation }: any) {
 
       // Remove from list
       setInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
+      refreshPendingInvitations();
     } catch (error: any) {
       ErrorHandler.handleError(error, showToast, 'Reject Invitation');
     } finally {

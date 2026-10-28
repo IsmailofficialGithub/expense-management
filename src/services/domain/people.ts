@@ -97,6 +97,9 @@ export const invitationService = {
   acceptInvitation: async (invitationId: string): Promise<void> => {
     await api.post(`/invitations/${invitationId}/accept`);
   },
+  revokeInvitation: async (invitationId: string): Promise<void> => {
+    await api.del(`/invitations/${invitationId}`);
+  },
   rejectInvitation: async (invitationId: string): Promise<void> => {
     await api.post(`/invitations/${invitationId}/reject`);
   },

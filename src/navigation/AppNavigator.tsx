@@ -1,11 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../hooks/useNotifications';
+import { usePendingInvitationCount } from '../hooks/usePendingInvitations';
 import NotificationBadge from '../components/NotificationBadge';
 
 // Import screens
@@ -71,6 +73,17 @@ function AuthNavigator() {
 
 function MainNavigator() {
   const { unreadCount } = useNotifications();
+  const { profile } = useAuth();
+  const pendingInvites = usePendingInvitationCount(profile?.id);
+  const navigation = useNavigation<any>();
+
+  // Invitation emails link to <web>/invitations; open it once logged in (path survives the login screen).
+  useEffect(() => {
+    if (Platform.OS === 'web' && window.location.pathname === '/invitations') {
+      window.history.replaceState(null, '', '/');
+      navigation.navigate('Invitations');
+    }
+  }, [navigation]);
 
   return (
     <MainTab.Navigator
@@ -96,11 +109,11 @@ function MainNavigator() {
 
           const icon = <Ionicons name={iconName} size={size} color={color} />;
 
-          if (route.name === 'Notifications') {
+          if (route.name === 'Notifications' || route.name === 'Profile') {
             return (
               <View style={{ position: 'relative' }}>
                 {icon}
-                <NotificationBadge count={unreadCount} size={18} />
+                <NotificationBadge count={route.name === 'Profile' ? pendingInvites : unreadCount} size={18} />
               </View>
             );
           }
