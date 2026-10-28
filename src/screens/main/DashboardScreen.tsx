@@ -31,7 +31,8 @@ import { useToast } from "../../hooks/useToast";
 import { useNetworkCheck } from "../../hooks/useNetworkCheck";
 import LoadingOverlay from "../../components/LoadingOverlay";
 import { useTheme } from "react-native-paper";
-import { invitationService } from "../../services/supabase.service";
+import { expenseService, invitationService } from "../../services/supabase.service";
+import type { MyExpenseSummary } from "../../types/database.types";
 import { LinearGradient } from "expo-linear-gradient";
 
 export default function DashboardScreen({ navigation }: any) {
@@ -58,6 +59,8 @@ export default function DashboardScreen({ navigation }: any) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [pendingInvitationsCount, setPendingInvitationsCount] = useState(0);
+  // Server-computed totals over all my groups; null offline (falls back to the cached expenses below)
+  const [summary, setSummary] = useState<MyExpenseSummary | null>(null);
 
   useEffect(() => {
     loadData();
@@ -90,8 +93,9 @@ export default function DashboardScreen({ navigation }: any) {
         Promise.all([
           dispatch(fetchCompleteBalance()),
           dispatch(fetchGroups()),
-          dispatch(fetchExpenses()),
+          dispatch(fetchExpenses({ limit: 20 })),
           dispatch(fetchPersonalTransactions()),
+          expenseService.getMySummary().then(setSummary),
         ]).catch(err => console.warn('Background sync failed:', err));
       } else {
         // Offline: data is already in Redux from cache
@@ -100,7 +104,7 @@ export default function DashboardScreen({ navigation }: any) {
           dispatch(fetchGroups());
         }
         if (expenses.length === 0) {
-          dispatch(fetchExpenses());
+          dispatch(fetchExpenses({ limit: 20 }));
         }
         if (transactions.length === 0) {
           dispatch(fetchPersonalTransactions());
@@ -136,12 +140,12 @@ export default function DashboardScreen({ navigation }: any) {
 
   // Calculate group expenses balance
   const myExpenses = expenses.filter((exp) => exp.paid_by === profile?.id);
-  const totalPaidByMe = myExpenses.reduce(
+  const localPaidByMe = myExpenses.reduce(
     (sum, exp) => sum + Number(exp.amount),
     0,
   );
 
-  const totalIOwe = expenses.reduce((sum, exp) => {
+  const localIOwe = expenses.reduce((sum, exp) => {
     if (exp.paid_by !== profile?.id) {
       const mySplit = exp.splits?.find((s) => s.user_id === profile?.id);
       if (mySplit && !mySplit.is_settled) {
@@ -151,7 +155,7 @@ export default function DashboardScreen({ navigation }: any) {
     return sum;
   }, 0);
 
-  const totalOwedToMe = myExpenses.reduce((sum, exp) => {
+  const localOwedToMe = myExpenses.reduce((sum, exp) => {
     const othersOweMeForThisExpense =
       exp.splits
         ?.filter((s) => s.user_id !== profile?.id && !s.is_settled)
@@ -159,10 +163,14 @@ export default function DashboardScreen({ navigation }: any) {
     return sum + othersOweMeForThisExpense;
   }, 0);
 
+  // Server totals cover every expense; local ones only the cached page (offline fallback)
+  const totalPaidByMe = summary?.total_paid_by_me ?? localPaidByMe;
+  const totalIOwe = summary?.total_i_owe ?? localIOwe;
+  const totalOwedToMe = summary?.total_owed_to_me ?? localOwedToMe;
   const groupNetBalance = totalOwedToMe - totalIOwe;
 
   // Overall balance (Income - Personal Expenses - Group Debts + Group Credits)
-  const overallBalance = personalIncome - personalExpenses - totalIOwe + totalOwedToMe;
+  const overallBalance = personalIncome - personalExpenses + groupNetBalance;
 
   // Get recent expenses (last 5) - sorted by date, newest first
   const recentExpenses = [...expenses]
@@ -188,7 +196,9 @@ export default function DashboardScreen({ navigation }: any) {
   }, {});
 
   // Get top 4 expense categories
-  const topExpenseCategories = Object.values(expensesByCategory)
+  const topExpenseCategories = (summary
+    ? summary.by_category.map((c) => ({ name: c.name, icon: c.icon || '💰', amount: c.amount, color: c.color || theme.colors.primary }))
+    : Object.values(expensesByCategory))
     .sort((a: any, b: any) => b.amount - a.amount)
     .slice(0, 4) as any[];
 

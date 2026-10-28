@@ -18,6 +18,8 @@ import {
   AdvanceCollectionContribution,
   BulkSettlementSummary,
   CreateFoodExpenseRequest,
+  GroupExpenseSummary,
+  MyExpenseSummary,
 } from '../../types/database.types';
 import { notificationService } from '../supabase.service';
 
@@ -113,6 +115,10 @@ export const expenseService = {
 
   getExpenses: async (filters?: ExpenseFilters): Promise<ExpenseWithDetails[]> =>
     api.get(`/expenses${qs({ ...filters })}`),
+
+  getGroupSummary: async (groupId: string): Promise<GroupExpenseSummary> => api.get(`/groups/${groupId}/summary`),
+
+  getMySummary: async (): Promise<MyExpenseSummary> => api.get('/me/expense-summary'),
 
   async getExpense(expenseId: string): Promise<ExpenseWithDetails> {
     return api.get(`/expenses/${expenseId}`);

@@ -34,7 +34,7 @@ export default function SplashScreen() {
     if (!dataLoadingRef.current) {
       dataLoadingRef.current = true;
       dispatch(fetchGroups());
-      dispatch(fetchExpenses());
+      dispatch(fetchExpenses({ limit: 50 }));
       dispatch(fetchPersonalTransactions());
       dispatch(fetchCompleteBalance());
       dispatch(fetchNotifications());

@@ -6,6 +6,7 @@ import { db } from '../db.js';
 import { requireUser } from '../auth.js';
 import { assertGroupAdmin, assertGroupMember, HttpError } from '../access.js';
 import { publish } from '../realtime.js';
+import { cached, cachedForGroup, groupVersions } from '../cache.js';
 import { deleteUpload } from '../uploads.js';
 import { sendMail } from '../mail.js';
 
@@ -16,12 +17,16 @@ const optText = z.string().max(2000).nullish();
 
 // to_jsonb keeps numerics as JSON numbers (like PostgREST did); never leak push tokens.
 const prof = (a: string) => `(to_jsonb(${a}) - 'push_token' - 'push_token_updated_at')`;
-const EXPENSE_LIST = `to_jsonb(e) || jsonb_build_object(
+const slimProf = (a: string) => `jsonb_build_object('id', ${a}.id, 'email', ${a}.email, 'full_name', ${a}.full_name, 'avatar_url', ${a}.avatar_url)`;
+const expenseJson = (splitUser: string) => `to_jsonb(e) || jsonb_build_object(
   'category', (select to_jsonb(c) from expense_categories c where c.id = e.category_id),
   'paid_by_user', (select ${prof('p')} from profiles p where p.id = e.paid_by),
-  'splits', coalesce((select jsonb_agg(to_jsonb(s) || jsonb_build_object('user', ${prof('u')}) order by s.created_at)
+  'splits', coalesce((select jsonb_agg(to_jsonb(s) || jsonb_build_object('user', ${splitUser}) order by s.created_at)
                         from expense_splits s join profiles u on u.id = s.user_id where s.expense_id = e.id), '[]'))`;
-const EXPENSE_DETAIL = `${EXPENSE_LIST} || jsonb_build_object(
+// Lists repeat a profile per split, so they get the slim one; single-expense views keep the full profile.
+const EXPENSE_LIST = expenseJson(slimProf('u'));
+const EXPENSE_FULL = expenseJson(prof('u'));
+const EXPENSE_DETAIL = `${EXPENSE_FULL} || jsonb_build_object(
   'group', (select to_jsonb(g) from groups g where g.id = e.group_id),
   'hotel', (select to_jsonb(h) from hotels h where h.id = e.hotel_id),
   'food_items', coalesce((select jsonb_agg(to_jsonb(f) order by f.created_at) from expense_food_items f where f.expense_id = e.id), '[]'),
@@ -184,6 +189,11 @@ export async function moneyRoutes(app: FastifyInstance) {
       date_from: date.optional(), date_to: date.optional(),
       min_amount: z.coerce.number().optional(), max_amount: z.coerce.number().optional(),
       search: z.string().max(200).optional(),
+      with_user: id.optional(),
+      status: z.enum(['settled', 'pending']).optional(),
+      sort: z.enum(['date', 'amount']).optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+      offset: z.coerce.number().int().min(0).optional(),
     }).parse(req.query);
     const params: unknown[] = [req.user.sub];
     const where = ['e.group_id in (select group_id from group_members where user_id = $1)'];
@@ -196,9 +206,58 @@ export async function moneyRoutes(app: FastifyInstance) {
     if (f.min_amount) add('e.amount >= ?', f.min_amount);
     if (f.max_amount) add('e.amount <= ?', f.max_amount);
     if (f.search) add(`e.description ilike '%' || ? || '%'`, f.search.replace(/[%_\\]/g, '\\$&'));
+    // Expenses between me and with_user: one paid, the other has a split (member details screen).
+    if (f.with_user) add(`((e.paid_by = $1 and exists (select 1 from expense_splits x where x.expense_id = e.id and x.user_id = ?))
+      or (e.paid_by = $${params.length + 1} and exists (select 1 from expense_splits x where x.expense_id = e.id and x.user_id = $1)))`, f.with_user);
+    const unsettled = 'exists (select 1 from expense_splits x where x.expense_id = e.id and not x.is_settled)';
+    if (f.status) where.push(f.status === 'pending' ? unsettled : `not ${unsettled}`);
+    const order = f.sort === 'amount' ? 'e.amount desc, e.date desc' : 'e.date desc, e.created_at desc';
+    params.push(f.limit ?? null, f.offset ?? 0);
     const { rows } = await db.query(
-      `select ${EXPENSE_LIST} j from expenses e where ${where.join(' and ')} order by e.date desc, e.created_at desc`, params);
+      `select ${EXPENSE_LIST} j from expenses e where ${where.join(' and ')} order by ${order}, e.id
+        limit $${params.length - 1} offset $${params.length}`, params);
     return rows.map((r) => r.j);
+  });
+
+  // Totals for the group screens (replaces adding up the whole expense list on the phone). Per-user, cached per group version.
+  app.get<{ Params: { id: string } }>('/groups/:id/summary', async (req) => {
+    const groupId = id.parse(req.params.id);
+    const me = req.user.sub;
+    await assertGroupMember(groupId, me);
+    return cachedForGroup(`gsum:${me}`, groupId, async () => {
+      const { rows: [t] } = await db.query(
+        `select coalesce(sum(e.amount), 0)::float8 as total_spent, count(*)::int as expense_count,
+                count(*) filter (where not exists (select 1 from expense_splits x where x.expense_id = e.id and not x.is_settled))::int as settled_count,
+                count(*) filter (where exists (select 1 from expense_splits x where x.expense_id = e.id and not x.is_settled))::int as pending_count,
+                coalesce(sum(e.amount) filter (where e.paid_by = $2), 0)::float8 as my_paid,
+                coalesce((select sum(s.amount) from expense_splits s join expenses e2 on e2.id = s.expense_id
+                           where e2.group_id = $1 and s.user_id = $2), 0)::float8 as my_share
+           from expenses e where e.group_id = $1`, [groupId, me]);
+      const { rows: by_category } = await db.query(
+        `select coalesce(c.name, 'Other') as name, c.icon, c.color, sum(e.amount)::float8 as total, count(*)::int as count
+           from expenses e left join expense_categories c on c.id = e.category_id
+          where e.group_id = $1 group by 1, 2, 3 order by total desc`, [groupId]);
+      return { ...t, by_category };
+    });
+  });
+
+  // Dashboard totals across all my groups. Key embeds every group's version, so any change in any group refreshes it.
+  app.get('/me/expense-summary', async (req) => {
+    const me = req.user.sub;
+    const groups = (await db.query('select group_id from group_members where user_id = $1 order by group_id', [me])).rows.map((r) => r.group_id);
+    return cached(`mesum:${me}:${await groupVersions(groups)}`, async () => {
+      const { rows: [t] } = await db.query(
+        `with mine as (select e.* from expenses e join group_members gm on gm.group_id = e.group_id and gm.user_id = $1)
+         select coalesce((select sum(amount) from mine where paid_by = $1), 0)::float8 as total_paid_by_me,
+                coalesce((select sum(s.amount) from expense_splits s join mine e on e.id = s.expense_id
+                           where s.user_id = $1 and e.paid_by <> $1 and not s.is_settled), 0)::float8 as total_i_owe,
+                coalesce((select sum(s.amount) from expense_splits s join mine e on e.id = s.expense_id
+                           where e.paid_by = $1 and s.user_id <> $1 and not s.is_settled), 0)::float8 as total_owed_to_me,
+                coalesce((select jsonb_agg(c order by c.amount desc) from (
+                  select coalesce(ec.name, 'Other') as name, ec.icon, ec.color, sum(e.amount)::float8 as amount
+                    from mine e left join expense_categories ec on ec.id = e.category_id group by 1, 2, 3) c), '[]') as by_category`, [me]);
+      return t;
+    });
   });
 
   app.get<{ Params: { id: string } }>('/expenses/:id', async (req) => {
@@ -566,7 +625,7 @@ export async function moneyRoutes(app: FastifyInstance) {
   app.get<{ Params: { groupId: string } }>('/groups/:groupId/bulk-stats', async (req) => {
     const groupId = id.parse(req.params.groupId);
     await assertGroupMember(groupId, req.user.sub);
-    const { rows: [s] } = await db.query(
+    return cachedForGroup('bulkstats', groupId, async () => (await db.query(
       `select count(*) filter (where status = 'active')::int as "activeCount",
               count(*)::int as "totalCount",
               count(*) filter (where status = 'completed')::int as "completedCount",
@@ -576,15 +635,14 @@ export async function moneyRoutes(app: FastifyInstance) {
                 where c2.group_id = $1 and ac.status in ('pending', 'pending_approval')) as "pendingCount",
               (select coalesce(sum(ac.amount), 0)::float8 from advance_collection_contributions ac join group_advance_collections c2 on c2.id = ac.collection_id
                 where c2.group_id = $1 and ac.status in ('pending', 'pending_approval')) as "pendingAmount"
-         from group_advance_collections where group_id = $1`, [groupId]);
-    return s;
+         from group_advance_collections where group_id = $1`, [groupId])).rows[0]);
   });
 
   app.get<{ Params: { groupId: string } }>('/groups/:groupId/bulk-settlement-summary', async (req) => {
     const groupId = id.parse(req.params.groupId);
     const { recipient_id } = z.object({ recipient_id: id }).parse(req.query);
     await assertGroupMember(groupId, req.user.sub);
-    return bulkSummary(groupId, recipient_id);
+    return cachedForGroup(`bulksum:${recipient_id}`, groupId, () => bulkSummary(groupId, recipient_id));
   });
 
   app.post('/bulk-settlements', async (req, reply) => {

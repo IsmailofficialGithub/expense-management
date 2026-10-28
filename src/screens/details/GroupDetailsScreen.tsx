@@ -10,6 +10,8 @@ import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { fetchGroup, fetchGroupBalances, updateGroup, deleteGroup, addGroupMember, removeGroupMember, setSelectedGroup } from '../../store/slices/groupsSlice';
 import { fetchExpenses, fetchSettlements } from '../../store/slices/expensesSlice';
+import { expenseService } from '../../services/supabase.service';
+import type { GroupExpenseSummary } from '../../types/database.types';
 import { fetchBulkPaymentStats } from '../../store/slices/bulkPaymentsSlice';
 import { useAppSelector } from '../../store';
 import { ErrorHandler } from '../../utils/errorHandler';
@@ -51,6 +53,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasTriedCache, setHasTriedCache] = useState(false);
+  const [summary, setSummary] = useState<GroupExpenseSummary | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -81,7 +84,8 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
       // Use Promise.allSettled so one failure doesn't stop others
       const fetchPromises = [
         dispatch(fetchGroup(groupId)).unwrap(),
-        dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+        // Screen shows only the 5 most recent; totals come from the server summary
+        dispatch(fetchExpenses({ group_id: groupId, limit: 5 })).unwrap(),
       ];
 
       // Only fetch these if online (they require network)
@@ -89,7 +93,8 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
         fetchPromises.push(
           dispatch(fetchGroupBalances(groupId)).unwrap(),
           dispatch(fetchSettlements(groupId)).unwrap(),
-          dispatch(fetchBulkPaymentStats(groupId)).unwrap()
+          dispatch(fetchBulkPaymentStats(groupId)).unwrap(),
+          expenseService.getGroupSummary(groupId).then(setSummary)
         );
       }
 
@@ -359,7 +364,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
 
   const isAdmin = selectedGroup.created_by === profile?.id;
   const groupExpenses = expenses.filter(e => e.group_id === groupId);
-  const totalSpent = groupExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const totalSpent = summary?.total_spent ?? groupExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const myBalance = balances.find(b => b.user_id === profile?.id);
 
   return (
@@ -428,7 +433,10 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
               icon="download"
               onPress={async () => {
                 try {
-                  const reportExpenses = expenses.filter(e => e.group_id === groupId);
+                  // Report needs the full history, fetched on demand (the screen only keeps the latest few)
+                  const reportExpenses = isOnline
+                    ? await expenseService.getExpenses({ group_id: groupId })
+                    : expenses.filter(e => e.group_id === groupId);
                   await CsvService.generateAndShareExpenseReport(
                     reportExpenses,
                     `expenses_${selectedGroup.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}`

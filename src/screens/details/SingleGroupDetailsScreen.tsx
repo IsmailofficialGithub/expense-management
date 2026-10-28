@@ -9,6 +9,10 @@ import { useNetworkCheck } from '../../hooks/useNetworkCheck';
 import { useAppDispatch } from '../../store';
 import { fetchGroup, fetchGroupBalances } from '../../store/slices/groupsSlice';
 import { fetchExpenses } from '../../store/slices/expensesSlice';
+import { expenseService } from '../../services/supabase.service';
+import type { GroupExpenseSummary } from '../../types/database.types';
+
+const PAGE_SIZE = 30;
 import { ErrorHandler } from '../../utils/errorHandler';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { format } from 'date-fns';
@@ -28,7 +32,7 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
     const { groupId } = route.params;
     const theme = useTheme();
     const { selectedGroup, balances, loading } = useGroups();
-    const { expenses } = useExpenses();
+    const { expenses, hasMore, loading: expensesLoading } = useExpenses();
     const { profile } = useAuth();
     const { showToast } = useToast();
     const { isOnline } = useNetworkCheck();
@@ -38,10 +42,29 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
     const [refreshing, setRefreshing] = useState(false);
     const [filterType, setFilterType] = useState<'all' | 'pending' | 'settled'>('all');
     const [sortBy, setSortBy] = useState<'date' | 'amount'>('date');
+    const [summary, setSummary] = useState<GroupExpenseSummary | null>(null);
 
     useEffect(() => {
         loadGroupData();
     }, [groupId]);
+
+    // Filter and sort run on the server, one page at a time
+    const pageFilters = (offset = 0) => ({
+        group_id: groupId,
+        status: filterType === 'all' ? undefined : filterType,
+        sort: sortBy,
+        limit: PAGE_SIZE,
+        offset,
+    });
+
+    useEffect(() => {
+        if (isOnline) dispatch(fetchExpenses(pageFilters()));
+    }, [groupId, filterType, sortBy]);
+
+    const loadMore = () => {
+        const loaded = expenses.filter(e => e.group_id === groupId).length;
+        dispatch(fetchExpenses(pageFilters(loaded)));
+    };
 
     const loadGroupData = async () => {
         if (!isOnline) {
@@ -53,7 +76,7 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
             await Promise.all([
                 dispatch(fetchGroup(groupId)).unwrap(),
                 dispatch(fetchGroupBalances(groupId)).unwrap(),
-                dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+                expenseService.getGroupSummary(groupId).then(setSummary),
             ]);
         } catch (error) {
             ErrorHandler.handleError(error, showToast, 'Load Group Details');
@@ -62,7 +85,7 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await loadGroupData();
+        await Promise.all([loadGroupData(), dispatch(fetchExpenses(pageFilters()))]);
         setRefreshing(false);
     };
 
@@ -92,24 +115,28 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
         }
     });
 
-    const totalExpenses = groupExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
-    const settledExpenses = groupExpenses.filter(e => e.splits?.every(s => s.is_settled));
-    const pendingExpenses = groupExpenses.filter(e => e.splits?.some(s => !s.is_settled));
+    // Totals and counts cover the whole group (server summary); the list below is only the loaded pages
+    const totalExpenses = summary?.total_spent ?? groupExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+    const settledCount = summary?.settled_count ?? groupExpenses.filter(e => e.splits?.every(s => s.is_settled)).length;
+    const pendingCount = summary?.pending_count ?? groupExpenses.filter(e => e.splits?.some(s => !s.is_settled)).length;
+    const expenseCount = summary?.expense_count ?? groupExpenses.length;
     const myBalance = balances.find(b => b.user_id === profile?.id);
 
     // Calculate my contribution
-    const myTotalPaid = groupExpenses
+    const myTotalPaid = summary?.my_paid ?? groupExpenses
         .filter(e => e.paid_by === profile?.id)
         .reduce((sum, exp) => sum + Number(exp.amount), 0);
 
-    const myTotalShare = groupExpenses
+    const myTotalShare = summary?.my_share ?? groupExpenses
         .reduce((sum, exp) => {
             const mySplit = exp.splits?.find(s => s.user_id === profile?.id);
             return sum + (mySplit ? Number(mySplit.amount) : 0);
         }, 0);
 
     // Get category breakdown
-    const categoryBreakdown = groupExpenses.reduce((acc, expense) => {
+    const categoryBreakdown = summary
+        ? Object.fromEntries(summary.by_category.map(c => [c.name, { total: c.total, count: c.count, icon: c.icon || '💰' }]))
+        : groupExpenses.reduce((acc, expense) => {
         const categoryName = expense.category?.name || 'Other';
         if (!acc[categoryName]) {
             acc[categoryName] = {
@@ -175,7 +202,7 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
                                     ₹{totalExpenses.toFixed(2)}
                                 </Text>
                                 <Text style={[styles.statCount, { color: theme.colors.onSurfaceVariant }]}>
-                                    {groupExpenses.length} transactions
+                                    {expenseCount} transactions
                                 </Text>
                             </View>
 
@@ -276,9 +303,9 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
                             value={filterType}
                             onValueChange={(value) => setFilterType(value as 'all' | 'pending' | 'settled')}
                             buttons={[
-                                { value: 'all', label: `All (${groupExpenses.length})` },
-                                { value: 'pending', label: `Pending (${pendingExpenses.length})` },
-                                { value: 'settled', label: `Settled (${settledExpenses.length})` },
+                                { value: 'all', label: `All (${expenseCount})` },
+                                { value: 'pending', label: `Pending (${pendingCount})` },
+                                { value: 'settled', label: `Settled (${settledCount})` },
                             ]}
                             style={styles.segmentedButtons}
                         />
@@ -382,6 +409,11 @@ export default function SingleGroupDetailsScreen({ navigation, route }: Props) {
                             </Card>
                         );
                     })
+                )}
+                {hasMore && isOnline && (
+                    <Button mode="outlined" onPress={loadMore} loading={expensesLoading} disabled={expensesLoading} style={{ marginTop: 8 }}>
+                        Load more
+                    </Button>
                 )}
             </ScrollView>
 

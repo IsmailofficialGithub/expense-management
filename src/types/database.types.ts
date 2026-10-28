@@ -608,6 +608,29 @@ export interface ExpenseFilters {
   min_amount?: number
   max_amount?: number
   search?: string
+  with_user?: string
+  status?: 'settled' | 'pending'
+  sort?: 'date' | 'amount'
+  limit?: number
+  offset?: number
+}
+
+// Server-computed totals (GET /groups/:id/summary, GET /me/expense-summary)
+export interface GroupExpenseSummary {
+  total_spent: number
+  expense_count: number
+  settled_count: number
+  pending_count: number
+  my_paid: number
+  my_share: number
+  by_category: { name: string; icon: string | null; color: string | null; total: number; count: number }[]
+}
+
+export interface MyExpenseSummary {
+  total_paid_by_me: number
+  total_i_owe: number
+  total_owed_to_me: number
+  by_category: { name: string; icon: string | null; color: string | null; amount: number }[]
 }
 
 export type ExpenseSortBy =

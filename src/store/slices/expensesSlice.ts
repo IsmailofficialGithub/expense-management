@@ -11,6 +11,7 @@ interface ExpensesState {
   categories: ExpenseCategory[];
   settlements: Settlement[];
   filters: ExpenseFilters;
+  hasMore: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -21,6 +22,7 @@ const initialState: ExpensesState = {
   categories: [],
   settlements: [],
   filters: {},
+  hasMore: false,
   loading: false,
   error: null,
 };
@@ -34,8 +36,8 @@ export const fetchExpenses = createAsyncThunk('expenses/fetchExpenses', async (f
     if (isOnline) {
       try {
         const expenses = await expenseService.getExpenses(filters);
-        // Save to local storage
-        await storageService.setExpenses(expenses);
+        // Only the first page goes to local storage: whole histories are too big for AsyncStorage
+        if (!filters?.offset) await storageService.setExpenses(expenses);
         return expenses;
       } catch (error: any) {
         // If online fails, try offline
@@ -637,7 +639,10 @@ const expensesSlice = createSlice({
     });
     builder.addCase(fetchExpenses.fulfilled, (state, action) => {
       state.loading = false;
-      state.expenses = action.payload;
+      const { offset, limit } = action.meta.arg ?? {};
+      // offset > 0 = "load more": append the next page instead of replacing
+      state.expenses = offset ? [...state.expenses, ...action.payload] : action.payload;
+      state.hasMore = !!limit && action.payload.length === limit;
     });
     builder.addCase(fetchExpenses.rejected, (state, action) => {
       state.loading = false;

@@ -9,6 +9,7 @@ export const useExpenses = () => {
     categories: expenses.categories,
     settlements: expenses.settlements,
     filters: expenses.filters,
+    hasMore: expenses.hasMore,
     loading: expenses.loading,
     error: expenses.error,
   };

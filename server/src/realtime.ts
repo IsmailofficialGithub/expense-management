@@ -3,9 +3,11 @@ import type { WebSocket } from 'ws';
 import { Redis } from 'ioredis';
 import { redis } from './redis.js';
 import { db } from './db.js';
+import { bumpGroup } from './cache.js';
 
 // Channels: group:<id>, user:<id>, conversation:<id>. Redis pub/sub lets several API instances share events.
-export function publish(channel: string, event: string, data: unknown) {
+export async function publish(channel: string, event: string, data: unknown) {
+  if (channel.startsWith('group:')) await bumpGroup(channel.slice(6));
   return redis.publish(`rt:${channel}`, JSON.stringify({ channel, event, data }));
 }
 

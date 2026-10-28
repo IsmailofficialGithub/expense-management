@@ -305,7 +305,7 @@ class SyncService {
   async syncFromServer(): Promise<void> {
     try {
       // Sync expenses
-      const expenses = await expenseService.getExpenses();
+      const expenses = await expenseService.getExpenses({ limit: 50 });
       if (expenses) {
         await storageService.setExpenses(expenses);
       }

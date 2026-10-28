@@ -54,7 +54,8 @@ export default function GroupMemberDetailsScreen({ navigation, route }: Props) {
         if (!isOnline) return;
         try {
             await Promise.all([
-                dispatch(fetchExpenses({ group_id: groupId })).unwrap(),
+                // Only expenses shared between me and this member
+                dispatch(fetchExpenses({ group_id: groupId, with_user: userId })).unwrap(),
                 dispatch(fetchSettlements(groupId)).unwrap(),
                 dispatch(fetchGroup(groupId)).unwrap(),
                 dispatch(fetchGroupBalances(groupId)).unwrap(),

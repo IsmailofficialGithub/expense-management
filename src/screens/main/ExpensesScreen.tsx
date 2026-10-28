@@ -14,9 +14,11 @@ import { useToast } from '../../hooks/useToast';
 import { useTheme } from 'react-native-paper';
 import ErrorState from '../../components/ErrorState';
 
+const PAGE_SIZE = 50;
+
 export default function ExpensesScreen({ navigation }: any) {
   const theme = useTheme();
-  const { expenses, categories, filters, loading } = useExpenses();
+  const { expenses, categories, filters, loading, hasMore } = useExpenses();
   const { groups } = useGroups();
   const { profile } = useAuth();
   const dispatch = useAppDispatch();
@@ -27,16 +29,29 @@ export default function ExpensesScreen({ navigation }: any) {
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'paid' | 'owe'>('all');
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  // Search runs on the server (covers expenses not loaded yet); debounced so typing doesn't fire a request per key
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchQuery.trim()), 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   useEffect(() => {
     loadData();
-  }, [filters]);
+  }, [filters, search]);
+
+  const pageFilters = (offset = 0) => ({ ...filters, search: search || undefined, limit: PAGE_SIZE, offset });
+
+  const loadMore = () => {
+    if (hasMore && !loading) dispatch(fetchExpenses(pageFilters(expenses.length)));
+  };
 
   const loadData = async () => {
     setError(null);
     try {
       await Promise.all([
-        dispatch(fetchExpenses(filters)).unwrap(),
+        dispatch(fetchExpenses(pageFilters())).unwrap(),
         dispatch(fetchCategories()).unwrap(),
       ]);
     } catch (error: any) {
@@ -317,6 +332,8 @@ export default function ExpensesScreen({ navigation }: any) {
         keyExtractor={(item) => item[0]}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }

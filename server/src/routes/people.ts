@@ -4,6 +4,7 @@ import { db } from '../db.js';
 import { requireUser } from '../auth.js';
 import { assertGroupAdmin, assertGroupMember, HttpError } from '../access.js';
 import { publish } from '../realtime.js';
+import { cachedForGroup } from '../cache.js';
 import { deleteUpload } from '../uploads.js';
 import { sendMail } from '../mail.js';
 
@@ -431,7 +432,8 @@ export async function peopleRoutes(app: FastifyInstance) {
   app.get('/groups/:id/balances', async (req) => {
     const { id: groupId } = idParam.parse(req.params);
     await assertGroupMember(groupId, req.user.sub);
-    return (await db.query('select * from user_group_balances where group_id = $1', [groupId])).rows;
+    return cachedForGroup('balances', groupId, async () =>
+      (await db.query('select * from user_group_balances where group_id = $1', [groupId])).rows);
   });
 
   // ---------- categories ----------
