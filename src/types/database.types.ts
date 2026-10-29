@@ -168,6 +168,7 @@ export interface GroupMember {
   user_id: string
   role: 'admin' | 'member'
   joined_at: string
+  status?: 'active' | 'pending' | 'left'
 }
 
 export interface ExpenseCategory {
@@ -492,6 +493,8 @@ export interface ExpenseWithDetails extends Expense {
 
 export interface GroupWithMembers extends Group {
   members: (GroupMember & { user: Profile })[]
+  // Invited, not accepted yet: selectable in expense splits only
+  pending_members?: (GroupMember & { user: Profile })[]
   creator: Profile
 }
 

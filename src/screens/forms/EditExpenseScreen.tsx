@@ -525,7 +525,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
         {/* Member Selection */}
         <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Split with *</Text>
         <View style={styles.membersContainer}>
-          {selectedGroup.members?.map(member => {
+          {[...selectedGroup.members, ...(selectedGroup.pending_members ?? [])].map(member => {
             const isSelected = selectedMembers.includes(member.user_id);
             const user = member.user;
             const splitAmount = splitType === 'equal' ? calculateEqualSplit() : parseFloat(customSplits[member.user_id] || '0');
@@ -548,6 +548,7 @@ export default function EditExpenseScreen({ navigation, route }: Props) {
                       style={styles.memberChip}
                     >
                       {user?.full_name || 'Unknown'}
+                          {member.status === 'pending' ? ' (invited)' : ''}
                     </Chip>
                     {isSelected && (
                       <Text style={[styles.memberSplit, { color: theme.colors.primary }]}>

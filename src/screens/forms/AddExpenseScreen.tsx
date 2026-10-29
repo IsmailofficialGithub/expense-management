@@ -579,7 +579,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
                 <>
                   <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>Split with *</Text>
                   <View style={styles.membersContainer}>
-                    {selectedGroup.members?.map((member: any) => {
+                    {[...selectedGroup.members, ...(selectedGroup.pending_members ?? [])].map((member: any) => {
                       const isSelected = selectedMembers.includes(member.user_id);
                       const user = member.user;
                       const splitAmount =
@@ -605,6 +605,7 @@ export default function AddExpenseScreen({ navigation, route }: Props) {
                                 style={styles.memberChip}
                               >
                                 {user?.full_name || "Unknown"}
+                          {member.status === 'pending' ? ' (invited)' : ''}
                               </Chip>
                               {isSelected && (
                                 <Text style={[styles.memberSplit, { color: theme.colors.primary }]}>

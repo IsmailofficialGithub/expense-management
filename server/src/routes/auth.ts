@@ -25,9 +25,9 @@ async function acceptPendingInvitations(userId: string, userEmail: string) {
        update group_invitations set status = 'accepted', accepted_at = now()
         where invited_email = $2 and status = 'pending' and expires_at > now()
        returning group_id)
-     insert into group_members (group_id, user_id, role)
+     insert into group_memberships (group_id, user_id, role)
      select distinct group_id, $1::uuid, 'member' from inv
-     on conflict (group_id, user_id) do nothing`,
+     on conflict (group_id, user_id) do update set status = 'active'`,
     [userId, userEmail],
   );
 }
@@ -41,7 +41,9 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       await client.query('begin');
       const { rows } = await client.query(
-        'insert into users (email, password_hash) values ($1, $2) on conflict (email) do nothing returning id',
+        // Invitees added to expenses before signing up have a placeholder account ('!' hash); signup claims it.
+        `insert into users (email, password_hash) values ($1, $2)
+         on conflict (email) do update set password_hash = excluded.password_hash where users.password_hash = '!' returning id`,
         [body.email, hash],
       );
       if (!rows.length) {
@@ -49,7 +51,8 @@ export async function authRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: 'User already registered' });
       }
       userId = rows[0].id;
-      await client.query('insert into profiles (id, email, full_name, avatar_url) values ($1, $2, $3, $4)',
+      await client.query(`insert into profiles (id, email, full_name, avatar_url) values ($1, $2, $3, $4)
+                          on conflict (id) do update set full_name = excluded.full_name, updated_at = now()`,
         [userId, body.email, body.full_name, defaultAvatar(userId)]);
       await client.query('commit');
     } catch (e) {
@@ -80,7 +83,7 @@ export async function authRoutes(app: FastifyInstance) {
     const body = z.object({ email, password: z.string() }).parse(req.body);
     const { rows } = await db.query('select id, email, password_hash, email_verified from users where email = $1', [body.email]);
     const user = rows[0];
-    if (!user || !(await bcrypt.compare(body.password, user.password_hash))) {
+    if (!user || user.password_hash === '!' || !(await bcrypt.compare(body.password, user.password_hash))) {
       return reply.code(401).send({ error: 'Invalid login credentials' });
     }
     if (!user.email_verified) return reply.code(403).send({ error: 'Email not confirmed' });
@@ -142,6 +145,69 @@ export async function authRoutes(app: FastifyInstance) {
     await db.query('update users set password_hash = $2 where id = $1', [req.user.sub, await bcrypt.hash(body.password, 10)]);
     await revokeSessions(req.user.sub);
     return issueTokens(reply, { id: req.user.sub, email: req.user.email });
+  });
+
+  // ---------- leave a group from the invite email (no account needed; the invitee proves inbox access with a code) ----------
+  const leaveToken = z.string().regex(/^[a-f0-9]{48}$/);
+  const inviteByToken = async (token: string) => (await db.query(
+    `select i.id, i.group_id, i.invited_email, i.status, g.name as group_name
+       from group_invitations i join groups g on g.id = i.group_id where i.invitation_token = $1`, [token])).rows[0];
+
+  app.get('/leave-group', async (req, reply) => {
+    const { token } = z.object({ token: leaveToken }).parse(req.query);
+    const inv = await inviteByToken(token);
+    reply.type('text/html');
+    if (!inv || inv.status !== 'pending') return reply.code(400).send('<h2>This link is invalid, or you already left or joined this group.</h2>');
+    const t = JSON.stringify(token);
+    return `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+<div style="font-family:Arial,sans-serif;max-width:420px;margin:40px auto;padding:0 16px">
+<h2>Leave &quot;${escapeHtml(inv.group_name)}&quot;?</h2>
+<p>We'll send a 6-digit code to <b>${escapeHtml(inv.invited_email)}</b> to confirm it's you.</p>
+<button id="send">Email me a code</button>
+<div id="step2" hidden><p><label>Code <input id="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label></p><button id="leave">Leave group</button></div>
+<p id="msg" role="status"></p></div>
+<script>
+const post = (u, b) => fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(async (r) => ({ ok: r.ok, ...(await r.json()) }));
+const msg = (m) => { document.getElementById('msg').textContent = m; };
+document.getElementById('send').onclick = async () => {
+  const r = await post('leave-group/code', { token: ${t} });
+  if (!r.ok) return msg(r.error || 'Something went wrong');
+  document.getElementById('step2').hidden = false; msg('Code sent. Check your email.');
+};
+document.getElementById('leave').onclick = async () => {
+  const r = await post('leave-group', { token: ${t}, code: document.getElementById('code').value.trim() });
+  if (!r.ok) return msg(r.error || 'Something went wrong');
+  document.body.innerHTML = '<h2 style="font-family:Arial,sans-serif;text-align:center;margin-top:60px">You left the group.</h2>';
+};
+</script>`;
+  });
+
+  app.post('/leave-group/code', strict, async (req, reply) => {
+    const { token } = z.object({ token: leaveToken }).parse(req.body);
+    const inv = await inviteByToken(token);
+    if (!inv || inv.status !== 'pending') return reply.code(400).send({ error: 'This link is no longer valid' });
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    await redis.multi().set(`leaveOtp:${token}`, code, 'EX', 600).del(`leaveTries:${token}`).exec();
+    await sendMail(inv.invited_email, `Your code to leave "${inv.group_name}"`, `<p>Your code is <b>${code}</b>. It expires in 10 minutes.</p>`);
+    return { ok: true };
+  });
+
+  // Declines the invite. Shares already assigned stay on their expenses as a placeholder (status 'left').
+  app.post('/leave-group', strict, async (req, reply) => {
+    const body = z.object({ token: leaveToken, code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
+    const [[, tries], , [, code]] = (await redis.multi().incr(`leaveTries:${body.token}`).expire(`leaveTries:${body.token}`, 600).get(`leaveOtp:${body.token}`).exec())!;
+    if (!code || Number(tries) > 5) return reply.code(400).send({ error: 'Code expired, request a new one' });
+    if (code !== body.code) return reply.code(400).send({ error: 'Invalid code' });
+    if (!(await redis.del(`leaveOtp:${body.token}`))) return reply.code(400).send({ error: 'Code expired, request a new one' });
+    const { rows: [inv] } = await db.query(
+      `with i as (update group_invitations set status = 'expired' where invitation_token = $1 and status = 'pending' returning group_id, invited_email)
+       update group_memberships m set status = 'left' from i, profiles p
+        where m.group_id = i.group_id and p.email = i.invited_email and m.user_id = p.id and m.status = 'pending'
+       returning m.group_id`,
+      [body.token],
+    );
+    if (inv) await publish(`group:${inv.group_id}`, 'member_removed', { group_id: inv.group_id });
+    return { ok: true };
   });
 
   app.get('/me', { preHandler: requireUser }, async (req, reply) => {

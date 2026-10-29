@@ -8,6 +8,7 @@ import { cachedForGroup } from '../cache.js';
 import { deleteUpload } from '../uploads.js';
 import { sendMail } from '../mail.js';
 import { insertNotifications } from './notify.js';
+import { defaultAvatar } from './auth.js';
 
 const id = z.string().uuid();
 const idParam = z.object({ id });
@@ -29,7 +30,10 @@ const profileJson = (a: string) =>
 const groupSelect = `
   select g.*, ${profileJson('cp')} as created_by_profile,
     (select coalesce(json_agg(to_jsonb(gm) || jsonb_build_object('user', ${profileJson('mp')}) order by gm.joined_at), '[]')
-       from group_members gm join profiles mp on mp.id = gm.user_id where gm.group_id = g.id) as members
+       from group_members gm join profiles mp on mp.id = gm.user_id where gm.group_id = g.id) as members,
+    -- Invited but not accepted yet: can be put in expense splits, nothing else.
+    (select coalesce(json_agg(to_jsonb(gm) || jsonb_build_object('user', ${profileJson('mp')}) order by gm.joined_at), '[]')
+       from group_memberships gm join profiles mp on mp.id = gm.user_id where gm.group_id = g.id and gm.status = 'pending') as pending_members
   from groups g join profiles cp on cp.id = g.created_by`;
 
 const hotelSelect = `
@@ -286,6 +290,21 @@ export async function peopleRoutes(app: FastifyInstance) {
        returning id, group_id, invited_by, invited_email, invitation_token, status, expires_at, accepted_at, created_at`,
       [body.group_id, req.user.sub, body.invited_email],
     );
+    // Placeholder account ('!' hash can't log in; signup claims it) so the invitee can be put in expense splits now.
+    const { rows: [u] } = await db.query(
+      `with u as (insert into users (email, password_hash) values ($1, '!') on conflict (email) do nothing returning id)
+       select id, true as created from u union all select id, false from users where email = $1 limit 1`,
+      [body.invited_email],
+    );
+    if (u.created) {
+      await db.query('insert into profiles (id, email, full_name, avatar_url) values ($1, $2, $3, $4) on conflict do nothing',
+        [u.id, body.invited_email, body.invited_email.split('@')[0], defaultAvatar(u.id)]);
+    }
+    await db.query(
+      `insert into group_memberships (group_id, user_id, role, status) values ($1, $2, 'member', 'pending')
+       on conflict (group_id, user_id) do update set status = 'pending' where group_memberships.status = 'left'`,
+      [body.group_id, u.id],
+    );
     // Email failure must not fail the invitation (same as before).
     await sendMail(body.invited_email, `You're invited to join "${ctx.group_name}" on Flatmates Expense Tracker`,
       invitationEmail(ctx.inviter_name || 'Someone', ctx.group_name, ctx.registered, body.invited_email)).catch((e) => req.log.error(e, 'invitation email failed'));
@@ -322,6 +341,9 @@ export async function peopleRoutes(app: FastifyInstance) {
     await assertGroupAdmin(inv.group_id, req.user.sub);
     await db.query("update group_invitations set status = 'expired' where id = $1", [invitationId]);
     const { rows: [invitee] } = await db.query('select id from profiles where email = $1', [inv.invited_email]);
+    await db.query(
+      `update group_memberships m set status = 'left' from profiles p
+        where m.group_id = $1 and m.user_id = p.id and p.email = $2 and m.status = 'pending'`, [inv.group_id, inv.invited_email]);
     if (invitee) {
       await db.query("delete from notifications where user_id = $1 and type = 'group_invitation' and related_id = $2", [invitee.id, invitationId]);
       await publish(`user:${invitee.id}`, 'invitation_revoked', { id: invitationId, group_id: inv.group_id });
@@ -359,13 +381,14 @@ export async function peopleRoutes(app: FastifyInstance) {
       groupId = inv.group_id;
       if (action === 'accept') {
         await client.query(
-          "insert into group_members (group_id, user_id, role) values ($1, $2, 'member') on conflict (group_id, user_id) do nothing",
+          "insert into group_memberships (group_id, user_id, role) values ($1, $2, 'member') on conflict (group_id, user_id) do update set status = 'active'",
           [groupId, req.user.sub],
         );
         await client.query("update group_invitations set status = 'accepted', accepted_at = now() where id = $1", [invitationId]);
       } else {
-        // 'expired' doubles as rejected (schema has no rejected status).
+        // 'expired' doubles as rejected (schema has no rejected status). Shares already assigned stay as a placeholder.
         await client.query("update group_invitations set status = 'expired' where id = $1", [invitationId]);
+        await client.query("update group_memberships set status = 'left' where group_id = $1 and user_id = $2 and status = 'pending'", [groupId, req.user.sub]);
       }
       await client.query('commit');
     } catch (e) {
@@ -449,7 +472,8 @@ export async function peopleRoutes(app: FastifyInstance) {
     await assertGroupAdmin(groupId, req.user.sub);
     const body = z.object({ user_id: id, role: z.enum(['admin', 'member']).default('member') }).parse(req.body);
     const { rows } = await db.query(
-      'insert into group_members (group_id, user_id, role) values ($1, $2, $3) returning *',
+      `insert into group_memberships (group_id, user_id, role) values ($1, $2, $3)
+       on conflict (group_id, user_id) do update set status = 'active', role = excluded.role returning *`,
       [groupId, body.user_id, body.role],
     );
     await publish(`group:${groupId}`, 'member_added', rows[0]);

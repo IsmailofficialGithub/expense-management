@@ -67,6 +67,25 @@ function expenseEmail(name: string, paidBy: string, group: string, desc: string,
 </table></body></html>`;
 }
 
+// For someone added to an expense before accepting the group invite.
+function pendingExpenseEmail(email: string, paidBy: string, group: string, desc: string, share: number, total: number, token: string | null) {
+  const web = process.env.WEB_URL ?? 'https://flatmate.ismailabbasi.qzz.io';
+  const button = (href: string, label: string, color: string) =>
+    `<a href="${href}" style="display:inline-block;background:${color};color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;margin:4px">${label}</a>`;
+  const leave = token
+    ? `<p style="color:#555">Don't know ${esc(paidBy)} or this group? ${button(`${process.env.PUBLIC_URL ?? ''}/auth/leave-group?token=${token}`, 'Leave the group', '#B00020')}</p>`
+    : '';
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+    <h2 style="color:#6200EE">You've been invited, and added to an expense</h2>
+    <p>You were invited to <strong>"${esc(group)}"</strong> on Flatmates Expense Tracker, and <strong>${esc(paidBy)}</strong> added an expense that includes you.</p>
+    <div style="background:#f0f4ff;border-left:5px solid #6200EE;padding:16px;border-radius:8px">
+      <div><strong>${esc(desc)}</strong></div>
+      <div>Your share: <strong>₹${share.toFixed(2)}</strong> (total ₹${total.toFixed(2)})</div></div>
+    <p>To see it and join the group, sign up or log in with this email address:</p>
+    <p>${button(`${web}/signup?email=${encodeURIComponent(email)}`, 'Sign up', '#6200EE')}${button(`${web}/login`, 'Log in', '#3700B3')}</p>
+    ${leave}</div>`;
+}
+
 export async function notifyRoutes(app: FastifyInstance) {
   app.get('/notifications', auth, async (req) => {
     const q = z.object({
@@ -122,15 +141,25 @@ export async function notifyRoutes(app: FastifyInstance) {
     const groupName = expense.group_name || 'a group';
 
     const { rows: members } = await db.query(
-      `select gm.user_id, p.email, p.full_name, p.push_token, s.amount as split
-         from group_members gm join profiles p on p.id = gm.user_id
+      `select gm.user_id, gm.status, p.email, p.full_name, p.push_token, s.amount as split,
+              (select invitation_token from group_invitations i where i.group_id = $1 and i.invited_email = p.email
+                 and i.status = 'pending' order by i.created_at desc limit 1) as invite_token
+         from group_memberships gm join profiles p on p.id = gm.user_id
          left join expense_splits s on s.expense_id = $2 and s.user_id = gm.user_id
-        where gm.group_id = $1 and gm.user_id is distinct from $3`,
+        where gm.group_id = $1 and gm.user_id is distinct from $3
+          and (gm.status = 'active' or (gm.status = 'pending' and s.amount > 0))`,
       [groupId, expenseId, expense.paid_by],
     );
 
     const list: NewNotification[] = [];
     for (const m of members) {
+      // Pending invitees only get the invite-style email: no in-app notifications or pushes until they join.
+      if (m.status === 'pending') {
+        sendMail(m.email, `You're included in "${expense.description}" in ${groupName}`,
+          pendingExpenseEmail(m.email, paidByName, groupName, expense.description, Number(m.split), amount, m.invite_token))
+          .catch((e) => console.error('Expense email failed', e));
+        continue;
+      }
       list.push({
         user_id: m.user_id, title: 'New Expense Added',
         message: `${paidByName} added "${expense.description}" - ₹${amount.toFixed(2)}`,
@@ -158,7 +187,7 @@ export async function notifyRoutes(app: FastifyInstance) {
     (async () => {
       const added = list.find((n) => n.type === 'expense_added');
       if (added) {
-        await sendPush(members.map((m) => m.push_token), added.title, added.message,
+        await sendPush(members.filter((m) => m.status === 'active').map((m) => m.push_token), added.title, added.message,
           { type: added.type, expense_id: expenseId, group_id: groupId });
       }
       for (const n of list.filter((x) => x.type === 'expense_split_assigned')) {

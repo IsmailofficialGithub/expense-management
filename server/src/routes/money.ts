@@ -97,14 +97,15 @@ async function insertSplits(c: PoolClient, expenseId: string, splits: z.infer<ty
   );
 }
 
-// Run inside the write transaction, on the final state: payer and split users are members, splits sum to amount.
+// Run inside the write transaction, on the final state: payer is a member, split users are members or invitees
+// (pending, or left with an old share), splits sum to amount.
 async function assertExpenseValid(c: PoolClient, expenseId: string) {
   const { rows: [r] } = await c.query(
     `select e.amount, (select coalesce(sum(amount), 0) from expense_splits where expense_id = e.id) as split_sum,
             (select count(*) from expense_splits s where s.expense_id = e.id) as split_count,
             exists (select 1 from group_members where group_id = e.group_id and user_id = e.paid_by) as payer_ok,
             not exists (select 1 from expense_splits s where s.expense_id = e.id and not exists
-              (select 1 from group_members gm where gm.group_id = e.group_id and gm.user_id = s.user_id)) as splits_ok
+              (select 1 from group_memberships gm where gm.group_id = e.group_id and gm.user_id = s.user_id)) as splits_ok
        from expenses e where e.id = $1`,
     [expenseId],
   );
