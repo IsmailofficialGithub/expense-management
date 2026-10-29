@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { auth, covers, createGroup, createUser, db, getApp, tokenFor, redis, sentMails, sentWhatsApps } from './helpers.js';
 import { sendMail } from '../src/mail.js';
 import { isOnWhatsApp } from '../src/whatsapp.js';
-import { deliver, drainQueue } from '../src/messaging.js';
+import { deliver, drainQueue, htmlToPlainText } from '../src/messaging.js';
 import { reportTick, runReports } from '../src/reports.js';
 
 covers('POST /admin/outbound/:id/resend', 'GET /admin/whatsapp/status', 'POST /admin/whatsapp/connect',
@@ -219,4 +219,10 @@ describe('admin routes', () => {
     expect(r.statusCode).toBe(200);
     expect(typeof r.json().sent).toBe('number');
   });
+});
+
+test('WhatsApp text keeps links from email buttons', () => {
+  const text = htmlToPlainText('<p>Join us</p><p><a href="https://x.io/signup?email=a%40b.c" style="color:#fff"><b>Sign up</b></a><a href="https://x.io/login">Log in</a></p>');
+  expect(text).toContain('Sign up: https://x.io/signup?email=a%40b.c');
+  expect(text).toContain('Log in: https://x.io/login');
 });

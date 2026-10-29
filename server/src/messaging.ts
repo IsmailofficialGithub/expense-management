@@ -18,6 +18,8 @@ export function htmlToPlainText(html: string): string {
     .replace(/<\/h[1-6]>/gi, '\n\n').replace(/<\/li>/gi, '\n').replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, ' | ').replace(/<\/th>/gi, ' | ');
   text = text
+    // WhatsApp can't render buttons: keep each link as "Label: url" on its own line.
+    .replace(/<a\s[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, (_m, href: string, label: string) => `\n${label.replace(/<[^>]*>/g, '').trim()}: ${href}\n`)
     .replace(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi, '📌 *$1*\n')
     .replace(/<(strong|b)[^>]*>(.*?)<\/\1>/gi, '*$2*')
     .replace(/<(em|i)[^>]*>(.*?)<\/\1>/gi, '_$2_')
