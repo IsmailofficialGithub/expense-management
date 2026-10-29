@@ -20,7 +20,7 @@ export function Dashboard() {
     <ScrollView>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         {scalars.map(([k, v]) => (
-          <Card key={k} style={{ minWidth: 160 }}><Card.Content>
+          <Card key={k} style={{ flexGrow: 1, flexBasis: 140 }}><Card.Content>
             <Text variant="labelMedium">{k.replace(/_/g, ' ')}</Text>
             <Text variant="headlineSmall">{String(v)}</Text>
           </Card.Content></Card>
@@ -87,9 +87,9 @@ function ConversationMessages({ conversationId }: { conversationId: string }) {
         columns={[{ key: 'created_at', render: when }, { key: 'sender_id' }, { key: 'text' }, { key: 'admin_action' }]}
         fields={['text']} />
       <Text variant="titleSmall" style={{ marginTop: 8 }}>Send as user</Text>
-      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <TextInput dense mode="outlined" label="Sender user id" value={sender} onChangeText={setSender} style={{ width: 320 }} />
-        <TextInput dense mode="outlined" label="Message" value={text} onChangeText={setText} style={{ flex: 1 }} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <TextInput dense mode="outlined" label="Sender user id" value={sender} onChangeText={setSender} style={{ flexGrow: 1, minWidth: 220 }} />
+        <TextInput dense mode="outlined" label="Message" value={text} onChangeText={setText} style={{ flexGrow: 2, minWidth: 220 }} />
         <Button mode="contained" disabled={!sender.trim() || !text.trim()} onPress={send}>Send</Button>
       </View>
       {!!error && <HelperText type="error">{error}</HelperText>}

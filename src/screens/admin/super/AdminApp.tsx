@@ -1,7 +1,7 @@
 // Super admin panel at /mikasa/go (web only). Own login and token, separate from the normal app session.
 import React, { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { Button, Card, Drawer, HelperText, Text, TextInput } from 'react-native-paper';
+import { ScrollView, useWindowDimensions, View } from 'react-native';
+import { Appbar, Button, Card, Drawer, HelperText, Text, TextInput } from 'react-native-paper';
 import { adminApi, adminLogout, hasAdminToken, setOnAdminLogout } from './adminApi';
 import { Chats, Dashboard, Expenses, Groups, Logs, Notifications, Settings, Settlements, Users } from './pages';
 
@@ -53,6 +53,8 @@ function Login({ onDone }: { onDone: () => void }) {
 
 export default function AdminApp() {
   const [authed, setAuthed] = useState(hasAdminToken);
+  const narrow = useWindowDimensions().width < 768;
+  const [menuOpen, setMenuOpen] = useState(false);
   const [page, setPage] = useState<PageName>(() => {
     const p = window.location.pathname.split('/')[3];
     return (Object.keys(PAGES) as PageName[]).find((k) => k.toLowerCase() === p) ?? 'Dashboard';
@@ -62,14 +64,33 @@ export default function AdminApp() {
 
   if (!authed) return <Login onDone={() => setAuthed(true)} />;
   const Page = PAGES[page];
+  const menu = (
+    <>
+      {(Object.keys(PAGES) as PageName[]).map((k) => (
+        <Drawer.Item key={k} label={k} icon={ICONS[k]} active={page === k} onPress={() => { setPage(k); setMenuOpen(false); }} />
+      ))}
+      <Drawer.Item label="Log out" icon="logout" onPress={adminLogout} />
+    </>
+  );
+  // Phones: top bar + menu that opens over the page instead of a fixed sidebar.
+  if (narrow) {
+    return (
+      <View style={{ flex: 1, height: '100%' as any }}>
+        <Appbar.Header mode="small" statusBarHeight={0}>
+          <Appbar.Action icon={menuOpen ? 'close' : 'menu'} onPress={() => setMenuOpen((o) => !o)} accessibilityLabel="Menu" />
+          <Appbar.Content title={page} />
+        </Appbar.Header>
+        {menuOpen
+          ? <ScrollView>{menu}</ScrollView>
+          : <View style={{ flex: 1, padding: 12 }}><Page /></View>}
+      </View>
+    );
+  }
   return (
     <View style={{ flex: 1, flexDirection: 'row', height: '100%' as any }}>
       <ScrollView style={{ width: 220, flexGrow: 0, borderRightWidth: 1, borderColor: '#ddd' }}>
         <Text variant="titleMedium" style={{ padding: 16 }}>Flatmate Admin</Text>
-        {(Object.keys(PAGES) as PageName[]).map((k) => (
-          <Drawer.Item key={k} label={k} icon={ICONS[k]} active={page === k} onPress={() => setPage(k)} />
-        ))}
-        <Drawer.Item label="Log out" icon="logout" onPress={adminLogout} />
+        {menu}
       </ScrollView>
       <View style={{ flex: 1, padding: 16 }}>
         <Text variant="headlineSmall" style={{ marginBottom: 12 }}>{page}</Text>
