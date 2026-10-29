@@ -53,11 +53,18 @@ const resources: Record<string, Resource> = {
     }),
   },
   groups: {
-    table: 'groups', search: ['name', 'description'], filters: ['created_by'], touch: true,
+    table: 'groups',
+    from: `select g.*, coalesce(nullif(p.full_name, ''), p.email) as creator_name,
+                  (select count(*)::int from group_members m where m.group_id = g.id) as member_count
+             from groups g left join profiles p on p.id = g.created_by`,
+    search: ['name', 'description', 'creator_name'], filters: ['created_by'], touch: true,
     write: z.object({ name: str(200).min(1), description: opt(), created_by: uuid }), required: ['name', 'created_by'],
   },
   members: {
-    table: 'group_memberships', search: [], filters: ['group_id', 'user_id', 'status', 'role'], order: 'joined_at',
+    table: 'group_memberships',
+    from: `select m.*, coalesce(nullif(p.full_name, ''), p.email) as user_name, p.email as user_email
+             from group_memberships m left join profiles p on p.id = m.user_id`,
+    search: ['user_name', 'user_email'], filters: ['group_id', 'user_id', 'status', 'role'], order: 'joined_at',
     write: z.object({ group_id: uuid, user_id: uuid, role: z.enum(['admin', 'member']), status: z.enum(['active', 'pending', 'left']) }),
     required: ['group_id', 'user_id'],
   },
@@ -70,7 +77,10 @@ const resources: Record<string, Resource> = {
     required: ['group_id', 'invited_by', 'invited_email'],
   },
   expenses: {
-    table: 'expenses', search: ['description', 'notes'], filters: ['group_id', 'paid_by', 'category_id', 'split_type'], touch: true,
+    table: 'expenses',
+    from: `select e.*, g.name as group_name, coalesce(nullif(p.full_name, ''), p.email) as payer_name
+             from expenses e left join groups g on g.id = e.group_id left join profiles p on p.id = e.paid_by`,
+    search: ['description', 'notes', 'group_name', 'payer_name'], filters: ['group_id', 'paid_by', 'category_id', 'split_type'], touch: true,
     // Writes go through the dedicated routes below (split validation).
   },
   splits: {
@@ -82,7 +92,11 @@ const resources: Record<string, Resource> = {
     write: z.object({ item_name: str(200).min(1), quantity: z.number().int().positive(), unit_price: num.nonnegative(), total_price: num.nonnegative() }),
   },
   settlements: {
-    table: 'settlements', search: ['notes'], filters: ['group_id', 'from_user', 'to_user', 'is_bulk'],
+    table: 'settlements',
+    from: `select s.*, g.name as group_name, coalesce(nullif(f.full_name, ''), f.email) as from_name, coalesce(nullif(t.full_name, ''), t.email) as to_name
+             from settlements s left join groups g on g.id = s.group_id
+             left join profiles f on f.id = s.from_user left join profiles t on t.id = s.to_user`,
+    search: ['notes', 'group_name', 'from_name', 'to_name'], filters: ['group_id', 'from_user', 'to_user', 'is_bulk'],
     write: z.object({ group_id: uuid, from_user: uuid, to_user: uuid, amount: num.positive(), settled_at: ts, notes: opt() }),
     required: ['group_id', 'from_user', 'to_user', 'amount'],
   },
@@ -148,21 +162,34 @@ const resources: Record<string, Resource> = {
     required: ['user_id', 'creditor_id', 'amount', 'description'],
   },
   notifications: {
-    table: 'notifications', search: ['title', 'message'], filters: ['user_id', 'type', 'is_read'],
+    table: 'notifications',
+    from: `select n.*, coalesce(nullif(p.full_name, ''), p.email) as user_name from notifications n left join profiles p on p.id = n.user_id`,
+    search: ['title', 'message', 'user_name'], filters: ['user_id', 'type', 'is_read'],
     write: z.object({ user_id: uuid, title: str(200).min(1), message: str(2000).min(1), type: str(50).min(1), is_read: bool }),
     required: ['user_id', 'title', 'message', 'type'],
   },
   chats: {
-    table: 'conversations', search: ['last_message_text'], filters: ['type', 'group_id'], order: 'coalesce(last_message_at, created_at)',
+    table: 'conversations',
+    // title: group name, or the two people's names for a direct chat.
+    from: `select c.*, coalesce(g.name, (select string_agg(coalesce(nullif(p.full_name, ''), p.email), ' & ' order by p.full_name)
+                    from conversation_participants cp join profiles p on p.id = cp.user_id where cp.conversation_id = c.id)) as title,
+                  (select count(*)::int from messages m where m.conversation_id = c.id) as message_count
+             from conversations c left join groups g on g.id = c.group_id`,
+    search: ['last_message_text', 'title'], filters: ['type', 'group_id'], order: 'coalesce(last_message_at, created_at)',
     touch: true, write: z.object({ type: z.enum(['group', 'individual']), group_id: uuid.nullish(), created_by: uuid }),
     required: ['type', 'created_by'],
   },
   participants: {
-    table: 'conversation_participants', search: [], filters: ['conversation_id', 'user_id'], order: 'joined_at',
+    table: 'conversation_participants',
+    from: `select cp.*, coalesce(nullif(p.full_name, ''), p.email) as user_name
+             from conversation_participants cp left join profiles p on p.id = cp.user_id`,
+    search: ['user_name'], filters: ['conversation_id', 'user_id'], order: 'joined_at',
     write: z.object({ conversation_id: uuid, user_id: uuid, is_muted: bool }), required: ['conversation_id', 'user_id'],
   },
   messages: {
-    table: 'messages', search: ['text'], filters: ['conversation_id', 'sender_id', 'admin_action', 'is_deleted'],
+    table: 'messages',
+    from: `select m.*, coalesce(nullif(p.full_name, ''), p.email) as sender_name from messages m left join profiles p on p.id = m.sender_id`,
+    search: ['text', 'sender_name'], filters: ['conversation_id', 'sender_id', 'admin_action', 'is_deleted'],
     // Sending/editing goes through /admin/chats/:id/messages and PATCH /admin/messages/:id (admin_action label).
   },
   logs: { table: 'audit_logs', key: 'int', search: ['message', 'url', 'actor_email'], filters: ['actor_id', 'route', 'method', 'status', 'is_admin'] },

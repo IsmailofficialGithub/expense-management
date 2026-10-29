@@ -91,8 +91,8 @@ function AppContent() {
 installWebAlert();
 
 // Web: the app is designed for phones, so on wide screens it renders as a centered phone-width column
-// instead of stretching every input and button across the whole window.
-const webFrame = Platform.OS === 'web'
+// instead of stretching every input and button across the whole window. The admin panel (/mikasa/go) uses the full width.
+const webFrame = Platform.OS === 'web' && !window.location.pathname.startsWith('/mikasa/go')
   ? StyleSheet.create({
       outer: { flex: 1, backgroundColor: '#1f2433', alignItems: 'center' },
       inner: { flex: 1, width: '100%', maxWidth: 480, overflow: 'hidden', boxShadow: '0 0 40px rgba(0,0,0,0.35)' } as any,

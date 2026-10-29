@@ -5,12 +5,14 @@ import AdminForm from './AdminForm';
 import { adminApi, listOf } from './adminApi';
 
 const PAGE = 25;
+// Plain values from render() still need <Text>, or web falls back to the browser's default font.
+const show = (v: React.ReactNode) => (typeof v === 'string' || typeof v === 'number' ? <Text selectable>{v}</Text> : v);
 const cell = (v: unknown) => (v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v)).slice(0, 80);
 
 export type Column = { key: string; label?: string; render?: (row: any) => React.ReactNode };
 
 // Generic paginated CRUD table over /admin/<resource>.
-export default function AdminTable({ resource, columns, fields, canCreate = true, onDelete, rowActions, renderExpanded, filters }: {
+export default function AdminTable({ resource, columns, fields, canCreate = true, onDelete, rowActions, renderExpanded, onRowPress, filters }: {
   resource: string;
   columns: Column[];
   fields?: string[]; // writable fields; omit for read-only
@@ -18,6 +20,7 @@ export default function AdminTable({ resource, columns, fields, canCreate = true
   onDelete?: (row: any) => Promise<void>; // override default DELETE
   rowActions?: (row: any, reload: () => void) => React.ReactNode;
   renderExpanded?: (row: any) => React.ReactNode;
+  onRowPress?: (row: any) => void; // instead of expanding
   filters?: Record<string, unknown>;
 }) {
   const [rows, setRows] = useState<any[]>([]);
@@ -56,6 +59,7 @@ export default function AdminTable({ resource, columns, fields, canCreate = true
   const pages = total !== undefined ? Math.max(1, Math.ceil(total / PAGE)) : undefined;
   const numberOfPages = pages ?? (rows.length === PAGE ? page + 2 : page + 1);
   const pageLabel = `Page ${page + 1}${pages ? ` of ${pages}` : ''}${total !== undefined ? ` · ${total} rows` : ''}`;
+  const press = (row: any) => (onRowPress ? () => onRowPress(row) : renderExpanded ? () => setExpanded(expanded === row.id ? null : row.id) : undefined);
   const actions = (row: any) => (
     <>
       {rowActions?.(row, load)}
@@ -76,12 +80,12 @@ export default function AdminTable({ resource, columns, fields, canCreate = true
         // Phones: one card per row, label above value, instead of a 900px-wide table.
         <ScrollView style={{ flex: 1 }}>
           {rows.map((row) => (
-            <Card key={row.id} style={{ marginBottom: 8 }} onPress={renderExpanded ? () => setExpanded(expanded === row.id ? null : row.id) : undefined}>
+            <Card key={row.id} style={{ marginBottom: 8 }} onPress={press(row)}>
               <Card.Content>
                 {columns.map((c) => (
                   <View key={c.key} style={{ flexDirection: 'row', gap: 8, paddingVertical: 2 }}>
                     <Text variant="labelMedium" style={{ width: 96, opacity: 0.7 }}>{c.label ?? c.key}</Text>
-                    <View style={{ flex: 1 }}>{c.render ? c.render(row) : <Text selectable>{cell(row[c.key])}</Text>}</View>
+                    <View style={{ flex: 1 }}>{show(c.render ? c.render(row) : cell(row[c.key]))}</View>
                   </View>
                 ))}
                 {expanded === row.id && <ScrollView horizontal style={{ marginTop: 8 }}>{renderExpanded?.(row)}</ScrollView>}
@@ -105,8 +109,8 @@ export default function AdminTable({ resource, columns, fields, canCreate = true
           </DataTable.Header>
           {rows.map((row) => (
             <React.Fragment key={row.id}>
-              <DataTable.Row onPress={renderExpanded ? () => setExpanded(expanded === row.id ? null : row.id) : undefined}>
-                {columns.map((c) => <DataTable.Cell key={c.key}>{c.render ? c.render(row) : cell(row[c.key])}</DataTable.Cell>)}
+              <DataTable.Row onPress={press(row)}>
+                {columns.map((c) => <DataTable.Cell key={c.key}>{show(c.render ? c.render(row) : cell(row[c.key]))}</DataTable.Cell>)}
                 <DataTable.Cell numeric>{actions(row)}</DataTable.Cell>
               </DataTable.Row>
               {expanded === row.id && <View style={{ padding: 12 }}>{renderExpanded?.(row)}</View>}

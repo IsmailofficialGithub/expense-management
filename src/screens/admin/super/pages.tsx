@@ -45,62 +45,126 @@ export const Users = () => (
     onDelete={(r) => adminApi.post(`/admin/users/${r.id}/delete`)} />
 );
 
+const money = (v: unknown) => `₹${Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const day = (v: unknown) => (v ? new Date(String(v)).toLocaleDateString() : '');
+
 export const Groups = () => (
-  <AdminTable resource="groups" columns={[{ key: 'name' }, { key: 'description' }, { key: 'created_by' }, { key: 'created_at' }]}
+  <AdminTable resource="groups"
+    columns={[{ key: 'name' }, { key: 'creator_name', label: 'created by' }, { key: 'member_count', label: 'members' },
+      { key: 'created_at', label: 'created', render: (r) => day(r.created_at) }]}
     fields={['name', 'description', 'created_by']}
     renderExpanded={(r) => <AdminTable resource="members" filters={{ group_id: r.id }}
-      columns={[{ key: 'user_id' }, { key: 'role' }, { key: 'status' }]} fields={['group_id', 'user_id', 'role', 'status']} />} />
+      columns={[{ key: 'user_name', label: 'name' }, { key: 'role' }, { key: 'status' }]} fields={['group_id', 'user_id', 'role', 'status']} />} />
 );
 
 export const Expenses = () => (
-  <AdminTable resource="expenses" columns={[{ key: 'description' }, { key: 'amount' }, { key: 'group_id' }, { key: 'paid_by' }, { key: 'date' }]}
+  <AdminTable resource="expenses"
+    columns={[{ key: 'description' }, { key: 'amount', render: (r) => money(r.amount) }, { key: 'group_name', label: 'group' },
+      { key: 'payer_name', label: 'paid by' }, { key: 'date', render: (r) => day(r.date) }]}
     fields={['group_id', 'description', 'amount', 'category_id', 'paid_by', 'date', 'split_type', 'splits', 'notes']}
-    renderExpanded={(r) => <Text style={mono}>{json(r)}</Text>} />
+    renderExpanded={(r) => <Text selectable style={mono}>{json(r)}</Text>} />
 );
 
 export const Settlements = () => (
-  <AdminTable resource="settlements" columns={[{ key: 'group_id' }, { key: 'from_user' }, { key: 'to_user' }, { key: 'amount' }, { key: 'created_at' }]}
+  <AdminTable resource="settlements"
+    columns={[{ key: 'from_name', label: 'from', render: (r) => `${r.from_name} → ${r.to_name}` },
+      { key: 'amount', render: (r) => money(r.amount) }, { key: 'group_name', label: 'group' },
+      { key: 'settled_at', label: 'date', render: (r) => day(r.settled_at ?? r.created_at) }, { key: 'notes' }]}
     fields={['group_id', 'from_user', 'to_user', 'amount', 'notes']} />
 );
 
 export const Notifications = () => (
-  <AdminTable resource="notifications" columns={[{ key: 'user_id' }, { key: 'title' }, { key: 'message' }, { key: 'is_read' }, { key: 'created_at' }]}
+  <AdminTable resource="notifications"
+    columns={[{ key: 'user_name', label: 'user' }, { key: 'title' }, { key: 'message' },
+      { key: 'is_read', label: 'read', render: (r) => (r.is_read ? 'yes' : 'no') }, { key: 'created_at', label: 'when', render: when }]}
     fields={['user_id', 'type', 'title', 'message', 'is_read']} />
 );
 
-function ConversationMessages({ conversationId }: { conversationId: string }) {
+// One conversation: messages as chat bubbles, newest at the bottom, and a "send as" picker of its participants.
+function Conversation({ chat, onBack }: { chat: any; onBack: () => void }) {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [people, setPeople] = useState<any[]>([]);
   const [sender, setSender] = useState('');
   const [text, setText] = useState('');
+  const [editing, setEditing] = useState<any | null>(null);
   const [error, setError] = useState('');
-  const [key, setKey] = useState(0);
+  const load = async () => {
+    try {
+      const [m, p] = await Promise.all([
+        adminApi.get('/admin/messages', { conversation_id: chat.id, limit: 200 }),
+        adminApi.get('/admin/participants', { conversation_id: chat.id, limit: 200 }),
+      ]);
+      setMessages([...m.rows].reverse());
+      setPeople(p.rows);
+      setSender((s) => s || p.rows[0]?.user_id || '');
+    } catch (e: any) { setError(e.message); }
+  };
+  useEffect(() => { load(); }, [chat.id]);
   const send = async () => {
     try {
       setError('');
-      await adminApi.post(`/admin/chats/${conversationId}/messages`, { sender_id: sender.trim(), text });
-      setText('');
-      setKey((k) => k + 1);
+      if (editing) await adminApi.patch(`/admin/messages/${editing.id}`, { text });
+      else await adminApi.post(`/admin/chats/${chat.id}/messages`, { sender_id: sender, text });
+      setText(''); setEditing(null); load();
     } catch (e: any) { setError(e.message); }
   };
+  const remove = async (m: any) => {
+    if (!window.confirm('Delete this message?')) return;
+    try { await adminApi.del(`/admin/messages/${m.id}`); load(); } catch (e: any) { setError(e.message); }
+  };
   return (
-    <View>
-      <AdminTable key={key} resource="messages" filters={{ conversation_id: conversationId }} canCreate={false}
-        columns={[{ key: 'created_at', render: when }, { key: 'sender_id' }, { key: 'text' }, { key: 'admin_action' }]}
-        fields={['text']} />
-      <Text variant="titleSmall" style={{ marginTop: 8 }}>Send as user</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-        <TextInput dense mode="outlined" label="Sender user id" value={sender} onChangeText={setSender} style={{ flexGrow: 1, minWidth: 220 }} />
-        <TextInput dense mode="outlined" label="Message" value={text} onChangeText={setText} style={{ flexGrow: 2, minWidth: 220 }} />
-        <Button mode="contained" disabled={!sender.trim() || !text.trim()} onPress={send}>Send</Button>
+    <View style={{ flex: 1 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <IconButton icon="arrow-left" onPress={onBack} accessibilityLabel="Back to chats" />
+        <Text variant="titleMedium" style={{ flex: 1 }} numberOfLines={1}>{chat.title}</Text>
+        <IconButton icon="refresh" onPress={load} accessibilityLabel="Refresh" />
+      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 8, gap: 8 }}>
+        {!messages.length && <Text style={{ textAlign: 'center', opacity: 0.6 }}>No messages</Text>}
+        {messages.map((m) => (
+          <Card key={m.id} mode="contained" style={{ maxWidth: '85%', alignSelf: m.sender_id === sender ? 'flex-end' : 'flex-start' }}>
+            <Card.Content style={{ paddingVertical: 8 }}>
+              <Text variant="labelMedium" style={{ opacity: 0.7 }}>
+                {m.sender_name}{m.admin_action ? ` · ${m.admin_action} by admin` : ''}{m.is_deleted ? ' · deleted' : ''}
+              </Text>
+              <Text variant="bodyMedium" selectable>{m.text}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+                <Text variant="labelSmall" style={{ opacity: 0.6, flex: 1 }}>{when(m)}</Text>
+                <IconButton icon="pencil" size={16} onPress={() => { setEditing(m); setText(m.text); }} accessibilityLabel="Edit message" />
+                <IconButton icon="delete" size={16} onPress={() => remove(m)} accessibilityLabel="Delete message" />
+              </View>
+            </Card.Content>
+          </Card>
+        ))}
+      </ScrollView>
+      {!editing && (
+        <ScrollView horizontal style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingVertical: 6 }}>
+          <Text variant="labelMedium" style={{ alignSelf: 'center' }}>Send as:</Text>
+          {people.map((p) => (
+            <Chip key={p.user_id} compact selected={sender === p.user_id} onPress={() => setSender(p.user_id)}>{p.user_name}</Chip>
+          ))}
+        </ScrollView>
+      )}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <TextInput dense mode="outlined" style={{ flex: 1 }} value={text} onChangeText={setText}
+          placeholder={editing ? 'Edit message' : 'Message'} onSubmitEditing={send} />
+        {editing && <IconButton icon="close" onPress={() => { setEditing(null); setText(''); }} accessibilityLabel="Cancel edit" />}
+        <IconButton icon="send" mode="contained" disabled={!text.trim() || (!editing && !sender)} onPress={send} accessibilityLabel="Send" />
       </View>
       {!!error && <HelperText type="error">{error}</HelperText>}
     </View>
   );
 }
 
-export const Chats = () => (
-  <AdminTable resource="chats" columns={[{ key: 'id' }, { key: 'type' }, { key: 'group_id' }, { key: 'last_message_text', label: 'last message' }, { key: 'updated_at' }]}
-    fields={['type', 'group_id', 'created_by']} renderExpanded={(r) => <ConversationMessages conversationId={r.id} />} />
-);
+export function Chats() {
+  const [open, setOpen] = useState<any | null>(null);
+  if (open) return <Conversation chat={open} onBack={() => setOpen(null)} />;
+  return (
+    <AdminTable resource="chats" onRowPress={setOpen}
+      columns={[{ key: 'title', label: 'chat' }, { key: 'type' }, { key: 'message_count', label: 'messages' },
+        { key: 'last_message_text', label: 'last message' }, { key: 'last_message_at', label: 'last active', render: (r) => day(r.last_message_at) }]} />
+  );
+}
 
 export const Logs = () => (
   <AdminTable resource="logs"

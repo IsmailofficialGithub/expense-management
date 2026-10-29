@@ -1,7 +1,7 @@
 // Super admin panel at /mikasa/go (web only). Own login and token, separate from the normal app session.
 import React, { useEffect, useState } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
-import { Appbar, Button, Card, Drawer, HelperText, Text, TextInput } from 'react-native-paper';
+import { Appbar, Button, Card, Drawer, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import { adminApi, adminLogout, hasAdminToken, setOnAdminLogout } from './adminApi';
 import { Chats, Dashboard, Expenses, Groups, Logs, Notifications, Settings, Settlements, Users } from './pages';
 
@@ -19,6 +19,7 @@ function Login({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<'password' | 'otp'>('password');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const theme = useTheme();
   const submit = async () => {
     setBusy(true);
     setError('');
@@ -28,7 +29,7 @@ function Login({ onDone }: { onDone: () => void }) {
     } catch (e: any) { setError(e?.message ?? 'Failed'); } finally { setBusy(false); }
   };
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: theme.colors.background }}>
       <Card style={{ width: '100%', maxWidth: 400 }}>
         <Card.Title title="Admin login" subtitle={step === 'otp' ? `Code sent to ${email}` : undefined} />
         <Card.Content>
@@ -54,6 +55,7 @@ function Login({ onDone }: { onDone: () => void }) {
 export default function AdminApp() {
   const [authed, setAuthed] = useState(hasAdminToken);
   const narrow = useWindowDimensions().width < 768;
+  const bg = { backgroundColor: useTheme().colors.background };
   const [menuOpen, setMenuOpen] = useState(false);
   const [page, setPage] = useState<PageName>(() => {
     const p = window.location.pathname.split('/')[3];
@@ -75,7 +77,7 @@ export default function AdminApp() {
   // Phones: top bar + menu that opens over the page instead of a fixed sidebar.
   if (narrow) {
     return (
-      <View style={{ flex: 1, height: '100%' as any }}>
+      <View style={[{ flex: 1, height: '100%' as any }, bg]}>
         <Appbar.Header mode="small" statusBarHeight={0}>
           <Appbar.Action icon={menuOpen ? 'close' : 'menu'} onPress={() => setMenuOpen((o) => !o)} accessibilityLabel="Menu" />
           <Appbar.Content title={page} />
@@ -87,7 +89,7 @@ export default function AdminApp() {
     );
   }
   return (
-    <View style={{ flex: 1, flexDirection: 'row', height: '100%' as any }}>
+    <View style={[{ flex: 1, flexDirection: 'row', height: '100%' as any }, bg]}>
       <ScrollView style={{ width: 220, flexGrow: 0, borderRightWidth: 1, borderColor: '#ddd' }}>
         <Text variant="titleMedium" style={{ padding: 16 }}>Flatmate Admin</Text>
         {menu}
