@@ -48,6 +48,10 @@ import BulkSettlementScreen from '../screens/details/BulkSettlementScreen';
 import BulkPaymentStatsScreen from '../screens/details/BulkPaymentStatsScreen';
 import SplashScreen from '../screens/SplashScreen';
 import ShareHandlerScreen from '../screens/ShareHandlerScreen';
+import AdminApp from '../screens/admin/super/AdminApp';
+
+// Super admin panel: web only, fixed for the page load so the early return below keeps hook order stable.
+const isAdminPath = Platform.OS === 'web' && window.location.pathname.startsWith('/mikasa/go');
 
 import { RootStackParamList, MainTabParamList, AuthStackParamList } from './types';
 
@@ -136,6 +140,11 @@ function MainNavigator() {
 }
 
 export default function AppNavigator() {
+  if (isAdminPath) return <AdminApp />;
+  return <UserAppNavigator />;
+}
+
+function UserAppNavigator() {
   const { isAuthenticated, initialized, isPasswordReset } = useAuth();
 
   console.log('🟢 [APP NAV] Render - isAuthenticated:', isAuthenticated, 'initialized:', initialized, 'isPasswordReset:', isPasswordReset);

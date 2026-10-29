@@ -8,7 +8,7 @@ import { assertGroupAdmin, assertGroupMember, HttpError } from '../access.js';
 import { publish } from '../realtime.js';
 import { cached, cachedForGroup, groupVersions } from '../cache.js';
 import { deleteUpload } from '../uploads.js';
-import { sendMail } from '../mail.js';
+import { deliver } from '../messaging.js';
 
 const id = z.string().uuid();
 const money = z.number().finite().nonnegative();
@@ -73,7 +73,7 @@ const createExpense = z.object({
 });
 const updateExpense = z.object({ ...expenseFields, splits: z.array(splitSchema).min(1).max(200).optional() }).partial();
 
-async function tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
+export async function tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
   const client = await db.connect();
   try {
     await client.query('begin');
@@ -88,7 +88,7 @@ async function tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
   }
 }
 
-async function insertSplits(c: PoolClient, expenseId: string, splits: z.infer<typeof splitSchema>[]) {
+export async function insertSplits(c: PoolClient, expenseId: string, splits: z.infer<typeof splitSchema>[]) {
   await c.query(
     `insert into expense_splits (expense_id, user_id, amount, percentage, shares)
      select $1, * from unnest($2::uuid[], $3::numeric[], $4::numeric[], $5::numeric[])`,
@@ -99,7 +99,7 @@ async function insertSplits(c: PoolClient, expenseId: string, splits: z.infer<ty
 
 // Run inside the write transaction, on the final state: payer is a member, split users are members or invitees
 // (pending, or left with an old share), splits sum to amount.
-async function assertExpenseValid(c: PoolClient, expenseId: string) {
+export async function assertExpenseValid(c: PoolClient, expenseId: string) {
   const { rows: [r] } = await c.query(
     `select e.amount, (select coalesce(sum(amount), 0) from expense_splits where expense_id = e.id) as split_sum,
             (select count(*) from expense_splits s where s.expense_id = e.id) as split_count,
@@ -487,13 +487,14 @@ export async function moneyRoutes(app: FastifyInstance) {
       })));
       for (const m of members) {
         if (!m.email) continue;
-        sendMail(m.email, `New Advance Collection in "${groupName}" - ₹${per.toFixed(2)} per member`,
-          `<p>Hi ${escapeHtml(m.full_name || 'there')},</p>
+        deliver({ userId: m.id, email: m.email, kind: 'advance_collection',
+          subject: `New Advance Collection in "${groupName}" - ₹${per.toFixed(2)} per member`,
+          html: `<p>Hi ${escapeHtml(m.full_name || 'there')},</p>
            <p><strong>${escapeHtml(creatorName)}</strong> has created a new advance collection in <strong>"${escapeHtml(groupName)}"</strong>.</p>
            <p><strong>Recipient:</strong> ${escapeHtml(recipientName)}<br><strong>Amount per Member:</strong> ₹${per.toFixed(2)}<br>
            <strong>Total Amount:</strong> ₹${total.toFixed(2)}${b.description ? `<br><strong>Description:</strong> ${escapeHtml(b.description)}` : ''}</p>
            <p>Open the Flatmates app, go to "${escapeHtml(groupName)}" → Advance Collections and mark your contribution (₹${per.toFixed(2)}) as paid.</p>`,
-        ).catch((e) => req.log.warn(e, 'advance collection email failed'));
+        }).catch((e) => req.log.warn(e, 'advance collection email failed'));
       }
     } catch (e) {
       req.log.warn(e, 'advance collection notifications failed');

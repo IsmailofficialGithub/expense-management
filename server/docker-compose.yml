@@ -11,6 +11,7 @@ services:
       UPLOAD_DIR: /app/uploads
     volumes:
       - ../uploads:/app/uploads
+      - ./wa-session:/app/wa-session
     ports:
       - "127.0.0.1:${PORT:-3020}:${PORT:-3020}"
     networks: [default, db]

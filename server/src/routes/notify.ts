@@ -4,7 +4,7 @@ import { db } from '../db.js';
 import { requireUser } from '../auth.js';
 import { assertConversationParticipant, assertGroupMember, HttpError } from '../access.js';
 import { publish } from '../realtime.js';
-import { sendMail } from '../mail.js';
+import { deliver } from '../messaging.js';
 
 const uuid = z.string().uuid();
 const auth = { preHandler: requireUser };
@@ -155,8 +155,8 @@ export async function notifyRoutes(app: FastifyInstance) {
     for (const m of members) {
       // Pending invitees only get the invite-style email: no in-app notifications or pushes until they join.
       if (m.status === 'pending') {
-        sendMail(m.email, `You're included in "${expense.description}" in ${groupName}`,
-          pendingExpenseEmail(m.email, paidByName, groupName, expense.description, Number(m.split), amount, m.invite_token))
+        deliver({ userId: m.user_id, email: m.email, kind: 'expense', subject: `You're included in "${expense.description}" in ${groupName}`,
+          html: pendingExpenseEmail(m.email, paidByName, groupName, expense.description, Number(m.split), amount, m.invite_token) })
           .catch((e) => console.error('Expense email failed', e));
         continue;
       }
@@ -175,8 +175,8 @@ export async function notifyRoutes(app: FastifyInstance) {
           metadata: { expense_id: expenseId, group_id: groupId, split_amount: split, total_amount: expense.amount },
         });
         if (m.email) {
-          sendMail(m.email, `Included in expense: ${expense.description} (${groupName})`,
-            expenseEmail(m.full_name, paidByName, groupName, expense.description, split, amount))
+          deliver({ userId: m.user_id, email: m.email, kind: 'expense', subject: `Included in expense: ${expense.description} (${groupName})`,
+            html: expenseEmail(m.full_name, paidByName, groupName, expense.description, split, amount) })
             .catch((e) => console.error('Expense email failed', e));
         }
       }

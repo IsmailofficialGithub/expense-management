@@ -6,7 +6,7 @@ import { assertGroupAdmin, assertGroupMember, HttpError } from '../access.js';
 import { publish } from '../realtime.js';
 import { cachedForGroup } from '../cache.js';
 import { deleteUpload } from '../uploads.js';
-import { sendMail } from '../mail.js';
+import { deliver } from '../messaging.js';
 import { insertNotifications } from './notify.js';
 import { defaultAvatar } from './auth.js';
 
@@ -123,8 +123,13 @@ export async function peopleRoutes(app: FastifyInstance) {
       full_name: z.string().trim().min(1).max(100).optional(),
       phone: z.string().trim().max(30).nullish(),
       avatar_url: z.string().url().max(1000).nullish(),
+      phone_e164: z.string().regex(/^\+[1-9]\d{6,14}$/).nullish(),
+      report_daily: z.boolean().optional(),
+      report_weekly: z.boolean().optional(),
+      whatsapp_opt_in: z.boolean().optional(),
     }).parse(req.body);
-    const { sql, values } = setClause(body);
+    // Any explicit phone_e164 (even null) answers the one-time "add country code" prompt.
+    const { sql, values } = setClause(body.phone_e164 !== undefined ? { ...body, phone_needs_country: false } : body);
     const old = body.avatar_url !== undefined
       ? (await db.query('select avatar_url from profiles where id = $1', [req.user.sub])).rows[0]?.avatar_url
       : undefined;
@@ -306,8 +311,9 @@ export async function peopleRoutes(app: FastifyInstance) {
       [body.group_id, u.id],
     );
     // Email failure must not fail the invitation (same as before).
-    await sendMail(body.invited_email, `You're invited to join "${ctx.group_name}" on Flatmates Expense Tracker`,
-      invitationEmail(ctx.inviter_name || 'Someone', ctx.group_name, ctx.registered, body.invited_email)).catch((e) => req.log.error(e, 'invitation email failed'));
+    await deliver({ userId: u.id, email: body.invited_email, kind: 'invitation',
+      subject: `You're invited to join "${ctx.group_name}" on Flatmates Expense Tracker`,
+      html: invitationEmail(ctx.inviter_name || 'Someone', ctx.group_name, ctx.registered, body.invited_email) }).catch((e) => req.log.error(e, 'invitation email failed'));
     const invitee = await db.query('select id from profiles where email = $1', [body.invited_email]);
     if (invitee.rows[0]) {
       await publish(`user:${invitee.rows[0].id}`, 'invitation_received', rows[0]);

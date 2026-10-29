@@ -1,5 +1,5 @@
 // src/screens/main/ProfileScreen.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Alert, Image } from 'react-native';
 import {
   Text,
@@ -16,7 +16,21 @@ import {
   Card,
   ActivityIndicator,
   Badge,
+  Menu,
 } from 'react-native-paper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// shortcut: short hand-picked list, swap for a full country list if users need others.
+const COUNTRY_CODES = [
+  { code: '+92', name: 'Pakistan' }, { code: '+91', name: 'India' }, { code: '+971', name: 'UAE' },
+  { code: '+966', name: 'Saudi Arabia' }, { code: '+44', name: 'UK' }, { code: '+1', name: 'USA/Canada' },
+  { code: '+61', name: 'Australia' }, { code: '+49', name: 'Germany' }, { code: '+880', name: 'Bangladesh' },
+];
+// Split a stored E.164 number into a known country code + national part.
+const splitE164 = (e164?: string | null) => {
+  const c = e164 ? [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length).find((x) => e164.startsWith(x.code)) : undefined;
+  return { code: c?.code ?? '+92', number: c ? e164!.slice(c.code.length) : '' };
+};
 import SafeScrollView from '../../components/SafeScrollView';
 import { useAuth } from '../../hooks/useAuth';
 import { usePendingInvitationCount } from '../../hooks/usePendingInvitations';
@@ -63,6 +77,8 @@ export default function ProfileScreen({ navigation }: any) {
   // Edit profile state
   const [editName, setEditName] = useState(displayProfile.full_name || '');
   const [editPhone, setEditPhone] = useState(displayProfile.phone || '');
+  const [editCountry, setEditCountry] = useState('+92');
+  const [countryMenu, setCountryMenu] = useState(false);
   const [editEmail, setEditEmail] = useState(displayProfile.email || '');
 
   // Change password state
@@ -92,7 +108,9 @@ export default function ProfileScreen({ navigation }: any) {
   // Open edit modal
   const handleEditProfile = () => {
     setEditName(displayProfile.full_name || '');
-    setEditPhone(displayProfile.phone || '');
+    const split = splitE164(profile?.phone_e164);
+    setEditCountry(split.code);
+    setEditPhone(split.number || (displayProfile.phone || '').replace(/^\+/, ''));
     setEditEmail(displayProfile.email || '');
     setErrors({ name: '', phone: '', email: '', currentPassword: '', newPassword: '', confirmPassword: '' });
     setEditModalVisible(true);
@@ -115,7 +133,7 @@ export default function ProfileScreen({ navigation }: any) {
       isValid = false;
     }
 
-    if (editPhone && !/^\+?[\d\s\-()]+$/.test(editPhone)) {
+    if (editPhone && !/^[1-9]\d{5,13}$/.test(editPhone.replace(/[\s\-()]/g, '').replace(/^0+/, ''))) {
       newErrors.phone = 'Invalid phone number format';
       isValid = false;
     }
@@ -141,12 +159,15 @@ export default function ProfileScreen({ navigation }: any) {
       return;
     }
 
+    const digits = editPhone.replace(/[\s\-()]/g, '').replace(/^0+/, '');
+    const e164 = digits ? `${editCountry}${digits}` : null;
     setSaving(true);
     try {
       await dispatch(
         updateProfile({
           full_name: editName.trim(),
-          phone: editPhone.trim() || null,
+          phone: e164,
+          phone_e164: e164,
         })
       ).unwrap();
 
@@ -339,6 +360,29 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   // Handle theme toggle - toggle between light and dark
+  // One-time nudge for legacy numbers saved without a country code (WhatsApp is skipped until fixed).
+  useEffect(() => {
+    if (!profile?.phone_needs_country) return;
+    (async () => {
+      try {
+        if (await AsyncStorage.getItem('phone_country_prompted')) return;
+        await AsyncStorage.setItem('phone_country_prompted', '1');
+      } catch { return; }
+      Alert.alert('Add country code', 'Your phone number has no country code, so WhatsApp updates are paused. Update it now?', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Update', onPress: handleEditProfile },
+      ]);
+    })();
+  }, [profile?.phone_needs_country]);
+
+  const toggleProfileFlag = async (key: 'report_daily' | 'report_weekly' | 'whatsapp_opt_in', value: boolean) => {
+    try {
+      await dispatch(updateProfile({ [key]: value })).unwrap();
+    } catch (error) {
+      ErrorHandler.handleError(error, showToast, 'Update Profile');
+    }
+  };
+
   const handleThemeToggle = () => {
     const newTheme = userTheme === 'dark' ? 'light' : 'dark';
     dispatch(setTheme(newTheme));
@@ -571,6 +615,17 @@ export default function ProfileScreen({ navigation }: any) {
               />
             )}
           />
+          {(['report_daily', 'report_weekly', 'whatsapp_opt_in'] as const).map((key) => (
+            <React.Fragment key={key}>
+              <Divider />
+              <List.Item
+                title={{ report_daily: 'Daily report', report_weekly: 'Weekly report', whatsapp_opt_in: 'WhatsApp messages' }[key]}
+                description={key === 'whatsapp_opt_in' && profile?.phone_needs_country ? 'Add a country code to your phone first' : undefined}
+                left={(props) => <List.Icon {...props} icon={key === 'whatsapp_opt_in' ? 'whatsapp' : 'chart-bar'} />}
+                right={() => <Switch value={profile?.[key] !== false} onValueChange={(v) => toggleProfileFlag(key, v)} />}
+              />
+            </React.Fragment>
+          ))}
           <Divider />
           <List.Item
             title="Notifications"
@@ -671,6 +726,19 @@ export default function ProfileScreen({ navigation }: any) {
             Email cannot be changed
           </HelperText>
 
+          <Menu
+            visible={countryMenu}
+            onDismiss={() => setCountryMenu(false)}
+            anchor={
+              <Button mode="outlined" icon="earth" onPress={() => setCountryMenu(true)} style={styles.input}>
+                {`${COUNTRY_CODES.find((c) => c.code === editCountry)?.name ?? ''} (${editCountry})`}
+              </Button>
+            }
+          >
+            {COUNTRY_CODES.map((c) => (
+              <Menu.Item key={c.code} title={`${c.name} (${c.code})`} onPress={() => { setEditCountry(c.code); setCountryMenu(false); }} />
+            ))}
+          </Menu>
           <TextInput
             label="Phone"
             value={editPhone}
@@ -679,7 +747,7 @@ export default function ProfileScreen({ navigation }: any) {
             keyboardType="phone-pad"
             error={!!errors.phone}
             style={styles.input}
-            left={<TextInput.Icon icon="phone" />}
+            left={<TextInput.Affix text={editCountry} />}
           />
           {errors.phone ? (
             <HelperText type="error" visible={!!errors.phone} style={{ color: theme.colors.error }}>

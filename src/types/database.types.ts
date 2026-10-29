@@ -149,6 +149,11 @@ export interface Profile {
   full_name: string | null
   avatar_url: string | null
   phone: string | null
+  phone_e164?: string | null
+  phone_needs_country?: boolean
+  report_daily?: boolean
+  report_weekly?: boolean
+  whatsapp_opt_in?: boolean
   created_at: string
   updated_at: string
 }
@@ -715,6 +720,7 @@ export interface Message {
   related_expense_id: string | null;
   media_url: string | null;
   media_type: string | null;
+  admin_action?: 'sent' | 'edited' | null;
 }
 
 export interface MessageRead {

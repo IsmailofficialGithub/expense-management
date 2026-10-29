@@ -32,6 +32,64 @@ async function acceptPendingInvitations(userId: string, userEmail: string) {
   );
 }
 
+// Anonymises the account. Shared expenses, settlements and chat messages stay (shown as "Deleted user") so other
+// members' balances and history don't change; personal data is deleted. Also used by the admin panel.
+export async function deleteAccount(me: string) {
+  // Captured before anonymising, to tell everyone I shared a group with.
+  const { rows: mates } = await db.query(
+    `select distinct m.user_id, m.group_id, g.name as group_name, coalesce(p.full_name, p.email) as my_name
+       from group_members mine join group_members m on m.group_id = mine.group_id and m.user_id <> $1
+       join groups g on g.id = mine.group_id join profiles p on p.id = $1
+      where mine.user_id = $1`, [me]);
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const { rows: [u] } = await client.query('select email from users where id = $1 for update', [me]);
+    if (!u) throw new Error('user missing');
+    // Groups I created: hand over to the longest-standing other member, or delete if I'm alone.
+    const { rows: owned } = await client.query('select id from groups where created_by = $1', [me]);
+    for (const { id: groupId } of owned) {
+      const { rows: [heir] } = await client.query(
+        'select user_id from group_members where group_id = $1 and user_id <> $2 order by (role = \'admin\') desc, joined_at limit 1', [groupId, me]);
+      if (heir) {
+        await client.query('update groups set created_by = $2, updated_at = now() where id = $1', [groupId, heir.user_id]);
+        await client.query("update group_members set role = 'admin' where group_id = $1 and user_id = $2", [groupId, heir.user_id]);
+      } else {
+        await client.query('delete from groups where id = $1', [groupId]);
+      }
+    }
+    await client.query("update group_members set role = 'member' where user_id = $1", [me]);
+    await client.query("update group_invitations set status = 'expired' where invited_email = $1 and status = 'pending'", [u.email]);
+    for (const t of ['personal_transactions', 'personal_debts', 'user_payment_methods', 'notifications', 'typing_indicators', 'message_deletions', 'message_reads']) {
+      await client.query(`delete from ${t} where user_id = $1`, [me]);
+    }
+    // Free the email for a new signup; '!' never matches a bcrypt hash, so nobody can log in.
+    const gone = `deleted-${me}@deleted.invalid`;
+    await client.query("update users set email = $2, password_hash = '!', email_verified = false where id = $1", [me, gone]);
+    await client.query(
+      `update profiles set email = $2, full_name = 'Deleted user', avatar_url = null, phone = null, phone_e164 = null,
+         push_token = null, push_token_updated_at = null, updated_at = now() where id = $1`, [me, gone]);
+    await client.query('commit');
+  } catch (e) {
+    await client.query('rollback');
+    throw e;
+  } finally {
+    client.release();
+  }
+  await revokeSessions(me);
+  // Best effort: the account is already gone, so a notification failure must not fail the request.
+  try {
+    await insertNotifications(mates.map((m) => ({
+      user_id: m.user_id, type: 'member_left', related_id: m.group_id,
+      title: 'Member left', message: `${m.my_name} deleted their account and left "${m.group_name}"`,
+      metadata: { group_id: m.group_id },
+    })));
+    for (const m of mates) await publish(`user:${m.user_id}`, 'members_changed', { group_id: m.group_id });
+  } catch (e) {
+    console.error('account deletion notifications failed', e);
+  }
+}
+
 export async function authRoutes(app: FastifyInstance) {
   app.post('/signup', strict, async (req, reply) => {
     const body = z.object({ email, password, full_name: z.string().trim().min(1).max(100) }).parse(req.body);
@@ -226,8 +284,7 @@ document.getElementById('leave').onclick = async () => {
     return { ok: true };
   });
 
-  // Step 2: correct code anonymises the account. Shared expenses, settlements and chat messages stay
-  // (shown as "Deleted user") so other members' balances and history don't change; personal data is deleted.
+  // Step 2: correct code anonymises the account (see deleteAccount).
   app.post('/delete-account', { preHandler: requireUser, ...strict }, async (req, reply) => {
     const { code } = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
     const me = req.user.sub;
@@ -236,59 +293,7 @@ document.getElementById('leave').onclick = async () => {
     if (stored !== code) return reply.code(400).send({ error: 'Invalid code' });
     if (!(await redis.del(`delOtp:${me}`))) return reply.code(400).send({ error: 'Code expired, request a new one' });
 
-    // Captured before anonymising, to tell everyone I shared a group with.
-    const { rows: mates } = await db.query(
-      `select distinct m.user_id, m.group_id, g.name as group_name, coalesce(p.full_name, p.email) as my_name
-         from group_members mine join group_members m on m.group_id = mine.group_id and m.user_id <> $1
-         join groups g on g.id = mine.group_id join profiles p on p.id = $1
-        where mine.user_id = $1`, [me]);
-    const client = await db.connect();
-    try {
-      await client.query('begin');
-      const { rows: [u] } = await client.query('select email from users where id = $1 for update', [me]);
-      if (!u) throw new Error('user missing');
-      // Groups I created: hand over to the longest-standing other member, or delete if I'm alone.
-      const { rows: owned } = await client.query('select id from groups where created_by = $1', [me]);
-      for (const { id: groupId } of owned) {
-        const { rows: [heir] } = await client.query(
-          'select user_id from group_members where group_id = $1 and user_id <> $2 order by (role = \'admin\') desc, joined_at limit 1', [groupId, me]);
-        if (heir) {
-          await client.query('update groups set created_by = $2, updated_at = now() where id = $1', [groupId, heir.user_id]);
-          await client.query("update group_members set role = 'admin' where group_id = $1 and user_id = $2", [groupId, heir.user_id]);
-        } else {
-          await client.query('delete from groups where id = $1', [groupId]);
-        }
-      }
-      await client.query("update group_members set role = 'member' where user_id = $1", [me]);
-      await client.query("update group_invitations set status = 'expired' where invited_email = $1 and status = 'pending'", [u.email]);
-      for (const t of ['personal_transactions', 'personal_debts', 'user_payment_methods', 'notifications', 'typing_indicators', 'message_deletions', 'message_reads']) {
-        await client.query(`delete from ${t} where user_id = $1`, [me]);
-      }
-      // Free the email for a new signup; '!' never matches a bcrypt hash, so nobody can log in.
-      const gone = `deleted-${me}@deleted.invalid`;
-      await client.query("update users set email = $2, password_hash = '!', email_verified = false where id = $1", [me, gone]);
-      await client.query(
-        `update profiles set email = $2, full_name = 'Deleted user', avatar_url = null, phone = null,
-           push_token = null, push_token_updated_at = null, updated_at = now() where id = $1`, [me, gone]);
-      await client.query('commit');
-    } catch (e) {
-      await client.query('rollback');
-      throw e;
-    } finally {
-      client.release();
-    }
-    await revokeSessions(me);
-    // Best effort: the account is already gone, so a notification failure must not fail the request.
-    try {
-      await insertNotifications(mates.map((m) => ({
-        user_id: m.user_id, type: 'member_left', related_id: m.group_id,
-        title: 'Member left', message: `${m.my_name} deleted their account and left "${m.group_name}"`,
-        metadata: { group_id: m.group_id },
-      })));
-      for (const m of mates) await publish(`user:${m.user_id}`, 'members_changed', { group_id: m.group_id });
-    } catch (e) {
-      req.log.error(e, 'account deletion notifications failed');
-    }
+    await deleteAccount(me);
     return { ok: true };
   });
 }

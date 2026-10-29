@@ -4,8 +4,8 @@ import { redis } from './redis.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { sub: string; email: string };
-    user: { sub: string; email: string };
+    payload: { sub: string; email: string; adm?: boolean };
+    user: { sub: string; email: string; adm?: boolean };
   }
 }
 
@@ -20,8 +20,9 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply) {
   }
 }
 
-export async function issueTokens(reply: FastifyReply, user: { id: string; email: string }) {
-  const accessToken = await reply.jwtSign({ sub: user.id, email: user.email }, { expiresIn: '15m' });
+// claims: extra access-token claims (adm for super admins). Not stored with the refresh token, so a refresh drops them.
+export async function issueTokens(reply: FastifyReply, user: { id: string; email: string }, claims: { adm?: boolean } = {}) {
+  const accessToken = await reply.jwtSign({ ...claims, sub: user.id, email: user.email }, { expiresIn: '15m' });
   const refreshToken = randomBytes(32).toString('hex');
   await redis.set(`refresh:${refreshToken}`, JSON.stringify(user), 'EX', REFRESH_TTL);
   // Index per user so a password change can revoke every session.

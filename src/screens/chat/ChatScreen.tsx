@@ -615,7 +615,7 @@ export default function ChatScreen({ route, navigation }: Props) {
                   isMyMessage ? { color: 'rgba(255,255,255,0.7)' } : { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                {format(new Date(item.created_at), 'hh:mm a')}
+                {item.admin_action ? `${item.admin_action} by admin · ` : ''}{format(new Date(item.created_at), 'hh:mm a')}
               </Text>
               {isMyMessage && (
                 <View style={styles.messageStatusContainer}>
