@@ -37,12 +37,32 @@ export function Dashboard() {
   );
 }
 
+// Fresh, styled report for one user, by email + WhatsApp (if they have a number and WhatsApp is connected).
+function SendReport({ userId }: { userId: string }) {
+  const [state, setState] = useState('');
+  const send = async (type: 'daily' | 'weekly') => {
+    setState('sending…');
+    try {
+      const r = await adminApi.post(`/admin/reports/run?type=${type}&user_id=${userId}`);
+      setState(r.sent ? 'sent ✓' : 'not sent');
+    } catch (e: any) { setState(e.message); }
+  };
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+      <Button compact icon="send" onPress={() => send('daily')}>Daily report</Button>
+      <Button compact icon="send" onPress={() => send('weekly')}>Weekly</Button>
+      {!!state && <Text variant="labelSmall">{state}</Text>}
+    </View>
+  );
+}
+
 export const Users = () => (
   <AdminTable resource="users" canCreate={false}
     columns={[{ key: 'email' }, { key: 'full_name' }, { key: 'phone_e164', label: 'phone' },
       { key: 'phone_needs_country', label: 'flag', render: (r) => (r.phone_needs_country ? <Chip compact>needs country</Chip> : '') }, { key: 'created_at' }]}
     fields={['full_name', 'phone', 'phone_e164', 'report_daily', 'report_weekly', 'whatsapp_opt_in']}
-    onDelete={(r) => adminApi.post(`/admin/users/${r.id}/delete`)} />
+    onDelete={(r) => adminApi.post(`/admin/users/${r.id}/delete`)}
+    rowActions={(r) => <SendReport userId={r.id} />} />
 );
 
 const money = (v: unknown) => `₹${Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -209,9 +229,12 @@ export function Settings() {
       </Card>
       {!!msg && <HelperText type="info">{msg}</HelperText>}
       <Text variant="titleMedium" style={{ marginVertical: 12 }}>Outbound messages</Text>
+      <Text variant="bodySmall" style={{ marginBottom: 8, opacity: 0.7 }}>
+        ↻ resends that exact old message on its own channel. To send a fresh report to someone, use Users → Daily report.
+      </Text>
       <AdminTable resource="outbound"
         columns={[{ key: 'created_at', render: when }, { key: 'channel' }, { key: 'to_addr', label: 'to' }, { key: 'kind' }, { key: 'status' }, { key: 'attempts' }, { key: 'last_error' }]}
-        rowActions={(r, reload) => <IconButton icon="send" size={18} onPress={async () => {
+        rowActions={(r, reload) => <IconButton icon="replay" size={18} accessibilityLabel="Resend this exact old message" onPress={async () => {
           try { await adminApi.post(`/admin/outbound/${r.id}/resend`); reload(); } catch (e: any) { setMsg(e.message); }
         }} />}
         renderExpanded={(r) => <Text selectable style={mono}>{json(r)}</Text>} />

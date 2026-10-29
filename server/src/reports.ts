@@ -32,14 +32,15 @@ const layout = (title: string, body: string) => `<!DOCTYPE html><html><body styl
 
 // One report per opted-in user with active groups. Window ends at `now`, so a fixed clock gives fixed output.
 // force: send even with no activity (manual run from the admin panel), so delivery can be tested any time.
-export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(), force = false): Promise<{ sent: number }> {
+// userId: only that user, ignoring their report opt-out (admin sends it on purpose).
+export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(), force = false, userId?: string): Promise<{ sent: number }> {
   const days = type === 'daily' ? 1 : 7;
   const to = now, from = new Date(now.getTime() - days * DAY), prevFrom = new Date(now.getTime() - 2 * days * DAY);
   const { rows: users } = await db.query(
     `select p.id, p.email, p.full_name, p.phone_e164 from profiles p
-      where ${type === 'daily' ? 'p.report_daily' : 'p.report_weekly'}
-        and exists (select 1 from group_members gm where gm.user_id = p.id)
-      order by p.id`);
+      where ${userId ? 'p.id = $1' : `${type === 'daily' ? 'p.report_daily' : 'p.report_weekly'}
+        and exists (select 1 from group_members gm where gm.user_id = p.id)`}
+      order by p.id`, userId ? [userId] : []);
   let sent = 0;
   for (const u of users) {
     // User's share of expenses in their active groups, current window.

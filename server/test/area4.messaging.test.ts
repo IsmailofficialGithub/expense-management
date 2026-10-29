@@ -138,6 +138,10 @@ describe('reports', () => {
     // Manual run from the admin panel (force) still reaches the idle user.
     await runReports('daily', THU, true);
     expect((await outbound(idle.id)).map((x) => x.kind)).toContain('daily_report');
+    // One user only: nobody else gets one.
+    const before = (await outbound(a.id)).length;
+    expect(await runReports('daily', THU, true, idle.id)).toEqual({ sent: 1 });
+    expect((await outbound(a.id)).length).toBe(before);
   });
 
   test('reportTick: daily on other days, weekly on WEEKLY_REPORT_DAY, nothing off-hour', async () => {
