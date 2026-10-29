@@ -134,7 +134,7 @@ describe('reports', () => {
     expect(await outbound(idle.id)).toEqual([]);
     const [m] = await outbound(a.id);
     expect(m).toMatchObject({ subject: 'Your daily expense summary', kind: 'daily_report' });
-    expect(m.body).toContain('<b>50.00</b>');
+    expect(m.body).toContain('<b>₹50.00</b>');
   });
 
   test('reportTick: daily on other days, weekly on WEEKLY_REPORT_DAY, nothing off-hour', async () => {

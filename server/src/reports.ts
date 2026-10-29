@@ -15,9 +15,20 @@ export function localParts(now: Date, tz = process.env.REPORT_TZ ?? 'UTC') {
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-const money = (n: number) => Number(n).toFixed(2);
+const money = (n: number) => `₹${Number(n).toFixed(2)}`;
+// Inline styles only (email clients drop <style>); same look as the expense email in routes/notify.ts.
 const table = (rows: string[][]) =>
-  `<table cellpadding="4">${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+  `<table role="presentation" style="width:100%;border-collapse:collapse;margin:8px 0 20px;">${rows.map((r) =>
+    `<tr>${r.map((c, i) => `<td style="padding:10px 8px;border-bottom:1px solid #eee;color:#333;font-size:15px;${
+      i === r.length - 1 ? 'text-align:right;font-weight:600;' : ''}">${c}</td>`).join('')}</tr>`).join('')}</table>`;
+const h3 = (t: string) => `<h3 style="color:#6200EE;font-size:16px;margin:24px 0 4px;">${t}</h3>`;
+const layout = (title: string, body: string) => `<!DOCTYPE html><html><body style="margin:0;padding:20px 0;font-family:'Segoe UI',Tahoma,sans-serif;background:#f9f9f9;">
+<table role="presentation" style="max-width:600px;width:100%;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;">
+<tr><td style="background:linear-gradient(135deg,#6200EE,#9c27b0);background-color:#6200EE;padding:32px 20px;text-align:center;"><h1 style="color:#fff;margin:0;font-size:24px;">${title}</h1></td></tr>
+<tr><td style="padding:28px 24px;color:#555;font-size:15px;line-height:1.6;">${body}
+<p style="text-align:center;margin-top:24px;"><a href="${process.env.WEB_URL ?? 'https://flatmate.ismailabbasi.qzz.io'}" style="background:#6200EE;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Open Flatmate</a></p></td></tr>
+<tr><td style="padding:20px;text-align:center;background:#fcfcfc;border-top:1px solid #eee;color:#999;font-size:12px;">You can turn these reports off in your Flatmate profile.</td></tr>
+</table></body></html>`;
 
 // One report per opted-in user with active groups. Window ends at `now`, so a fixed clock gives fixed output.
 export async function runReports(type: 'daily' | 'weekly', now: Date = new Date()): Promise<{ sent: number }> {
@@ -69,14 +80,14 @@ export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(
       }
       html += `<p>Your share over the last 7 days: <b>${money(total)}</b> (${change}).</p>`;
       if (spend.length) {
-        html += `<h3>By group</h3>${table([...byGroup].map(([k, v]) => [esc(k), money(v)]))}`;
-        html += `<h3>By category</h3>${table([...byCat].map(([k, v]) => [esc(k), money(v)]))}`;
+        html += `${h3('By group')}${table([...byGroup].map(([k, v]) => [esc(k), money(v)]))}`;
+        html += `${h3('By category')}${table([...byCat].map(([k, v]) => [esc(k), money(v)]))}`;
       }
     }
     html += debts.length
-      ? `<h3>Current balances</h3>${table(debts.map((d) => [esc(d.grp), d.balance > 0 ? `you are owed ${money(d.balance)}` : `you owe ${money(-d.balance)}`]))}`
+      ? `${h3('Current balances')}${table(debts.map((d) => [esc(d.grp), d.balance > 0 ? `you are owed ${money(d.balance)}` : `you owe ${money(-d.balance)}`]))}`
       : '<p>You are all settled up.</p>';
-    await deliver({ userId: u.id, email: u.email, phone: u.phone_e164, kind: `${type}_report`, subject, html });
+    await deliver({ userId: u.id, email: u.email, phone: u.phone_e164, kind: `${type}_report`, subject, html: layout(subject, html) });
     sent++;
   }
   return { sent };
