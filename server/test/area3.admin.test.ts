@@ -4,7 +4,7 @@ import { auth, covers, createGroup, createUser, db, flushAuditLogs, getApp, type
 covers(
   'GET /admin/stats', 'POST /admin/users', 'POST /admin/users/:id/delete', 'DELETE /admin/users/:id',
   'POST /admin/expenses', 'PATCH /admin/expenses/:id', 'POST /admin/chats/:id/messages', 'PATCH /admin/messages/:id',
-  'POST /admin/outbound/:id/resend', 'GET /admin/whatsapp/status', 'POST /admin/whatsapp/connect', 'POST /admin/whatsapp/disconnect',
+  'POST /admin/outbound/:id/resend', 'GET /admin/whatsapp/status', 'POST /admin/whatsapp/connect', 'POST /admin/whatsapp/disconnect', 'POST /admin/whatsapp/test',
   'POST /admin/reports/run', 'GET /admin/:resource', 'GET /admin/:resource/:id', 'POST /admin/:resource',
   'PATCH /admin/:resource/:id', 'DELETE /admin/:resource/:id',
 );
@@ -41,7 +41,7 @@ const routes: [string, string][] = [
   ['GET', '/admin/stats'], ['POST', '/admin/users'], ['POST', `/admin/users/${Z}/delete`], ['DELETE', `/admin/users/${Z}`],
   ['POST', '/admin/expenses'], ['PATCH', `/admin/expenses/${Z}`], ['POST', `/admin/chats/${Z}/messages`], ['PATCH', `/admin/messages/${Z}`],
   ['POST', '/admin/outbound/1/resend'], ['GET', '/admin/whatsapp/status'], ['POST', '/admin/whatsapp/connect'],
-  ['POST', '/admin/whatsapp/disconnect'], ['POST', '/admin/reports/run?type=daily'], ['GET', '/admin/hotels'],
+  ['POST', '/admin/whatsapp/disconnect'], ['POST', '/admin/whatsapp/test'], ['POST', '/admin/reports/run?type=daily'], ['GET', '/admin/hotels'],
   ['GET', `/admin/hotels/${Z}`], ['POST', '/admin/hotels'], ['PATCH', `/admin/hotels/${Z}`], ['DELETE', `/admin/hotels/${Z}`],
 ];
 
@@ -141,6 +141,11 @@ describe('admin routes', () => {
     expect((await call('GET', '/admin/whatsapp/status', admin)).json()).toEqual({ status: 'disconnected' });
     expect((await call('POST', '/admin/whatsapp/connect', admin)).json()).toEqual({ status: 'connecting' });
     expect((await call('POST', '/admin/whatsapp/disconnect', admin)).json()).toEqual({ status: 'disconnected' });
+  });
+
+  test('whatsapp test send: validates the number, refuses while disconnected', async () => {
+    expect((await call('POST', '/admin/whatsapp/test', admin, { phone: '0300123' })).statusCode).toBe(400);
+    expect((await call('POST', '/admin/whatsapp/test', admin, { phone: '+923001234567' })).statusCode).toBe(409);
   });
 
   test('reports run', async () => {

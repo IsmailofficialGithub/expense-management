@@ -176,6 +176,7 @@ export const Logs = () => (
 export function Settings() {
   const [wa, setWa] = useState<{ status: string; qr?: string; me?: string } | null>(null);
   const [msg, setMsg] = useState('');
+  const [testPhone, setTestPhone] = useState('+92');
   const poll = () => adminApi.get('/admin/whatsapp/status').then(setWa).catch((e) => setMsg(e.message));
   useEffect(() => { poll(); const t = setInterval(poll, 3000); return () => clearInterval(t); }, []);
   const act = (label: string, fn: () => Promise<any>) => async () => {
@@ -193,6 +194,12 @@ export function Settings() {
           <Button onPress={act('Connect', () => adminApi.post('/admin/whatsapp/connect'))} disabled={wa?.status === 'connected'}>Connect</Button>
           <Button onPress={act('Disconnect', () => adminApi.post('/admin/whatsapp/disconnect'))} disabled={wa?.status === 'disconnected'}>Disconnect</Button>
         </Card.Actions>
+        <Card.Content style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <TextInput dense mode="outlined" label="Test number (+country code)" value={testPhone} onChangeText={setTestPhone}
+            keyboardType="phone-pad" style={{ flexGrow: 1, minWidth: 200 }} />
+          <Button mode="contained" disabled={wa?.status !== 'connected'}
+            onPress={act('Test WhatsApp', () => adminApi.post('/admin/whatsapp/test', { phone: testPhone.replace(/[\s-]/g, '') }))}>Send test</Button>
+        </Card.Content>
       </Card>
       <Card style={{ marginTop: 12 }}><Card.Title title="Reports" />
         <Card.Actions>

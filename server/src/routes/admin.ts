@@ -12,7 +12,7 @@ import { publish } from '../realtime.js';
 import { deleteAccount, defaultAvatar } from './auth.js';
 import { tx, insertSplits, assertExpenseValid } from './money.js';
 import { resendOutbound } from '../messaging.js';
-import { getStatus, connect, disconnect } from '../whatsapp.js';
+import { getStatus, connect, disconnect, isOnWhatsApp, sendWhatsApp } from '../whatsapp.js';
 import { runReports } from '../reports.js';
 
 const email = z.string().trim().toLowerCase().email();
@@ -419,6 +419,15 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/admin/whatsapp/status', sa, async () => getStatus());
   app.post('/admin/whatsapp/connect', sa, async () => { await connect(); return getStatus(); });
   app.post('/admin/whatsapp/disconnect', sa, async () => { await disconnect(); return getStatus(); });
+
+  // Direct send, bypassing the queue, so the admin sees the real result right away.
+  app.post('/admin/whatsapp/test', sa, async (req) => {
+    const { phone } = z.object({ phone: z.string().regex(/^\+\d{7,15}$/, 'Use international format, e.g. +923001234567') }).parse(req.body);
+    if (getStatus().status !== 'connected') throw new HttpError(409, 'WhatsApp is not connected');
+    if (!(await isOnWhatsApp(phone))) throw new HttpError(400, `${phone} is not on WhatsApp`);
+    await sendWhatsApp(phone, 'Test message from Flatmate admin. WhatsApp delivery works.');
+    return { ok: true };
+  });
 
   app.post('/admin/reports/run', sa, async (req) => {
     const { type } = z.object({ type: z.enum(['daily', 'weekly']) }).parse(req.query);
