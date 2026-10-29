@@ -135,6 +135,9 @@ describe('reports', () => {
     const [m] = await outbound(a.id);
     expect(m).toMatchObject({ subject: 'Your daily expense summary', kind: 'daily_report' });
     expect(m.body).toContain('<b>₹50.00</b>');
+    // Manual run from the admin panel (force) still reaches the idle user.
+    await runReports('daily', THU, true);
+    expect((await outbound(idle.id)).map((x) => x.kind)).toContain('daily_report');
   });
 
   test('reportTick: daily on other days, weekly on WEEKLY_REPORT_DAY, nothing off-hour', async () => {

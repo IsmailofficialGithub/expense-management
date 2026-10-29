@@ -31,7 +31,8 @@ const layout = (title: string, body: string) => `<!DOCTYPE html><html><body styl
 </table></body></html>`;
 
 // One report per opted-in user with active groups. Window ends at `now`, so a fixed clock gives fixed output.
-export async function runReports(type: 'daily' | 'weekly', now: Date = new Date()): Promise<{ sent: number }> {
+// force: send even with no activity (manual run from the admin panel), so delivery can be tested any time.
+export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(), force = false): Promise<{ sent: number }> {
   const days = type === 'daily' ? 1 : 7;
   const to = now, from = new Date(now.getTime() - days * DAY), prevFrom = new Date(now.getTime() - 2 * days * DAY);
   const { rows: users } = await db.query(
@@ -54,7 +55,7 @@ export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(
                 where e.created_at >= $2 and e.created_at < $3)
             + (select count(*) from settlements s join group_members gm on gm.group_id = s.group_id and gm.user_id = $1
                 where s.created_at >= $2 and s.created_at < $3) as n`, [u.id, from, to]);
-    if (type === 'daily' && !act.n) continue;
+    if (type === 'daily' && !act.n && !force) continue;
     const { rows: debts } = await db.query(
       `select g.name as grp, b.balance from user_group_balances b join groups g on g.id = b.group_id
         where b.user_id = $1 and b.balance <> 0 order by g.name`, [u.id]);

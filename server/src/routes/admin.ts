@@ -431,7 +431,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post('/admin/reports/run', sa, async (req) => {
     const { type } = z.object({ type: z.enum(['daily', 'weekly']) }).parse(req.query);
-    return runReports(type);
+    return runReports(type, new Date(), true);
   });
 
   // Generic CRUD over the resources map. Static routes above win over these param routes.
