@@ -1,4 +1,5 @@
-import { rm } from 'node:fs/promises';
+import { readdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, type WASocket } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import { db } from './db.js';
@@ -9,6 +10,16 @@ import { superAdminEmails } from './admin.js';
 export type WaStatus = { status: 'connected' | 'disconnected' | 'qr'; qr?: string; me?: string };
 
 const SESSION_DIR = process.env.WA_SESSION_DIR ?? './wa-session';
+
+// Empty the session folder but keep the folder: in Docker it is a mount point and can't be removed (EBUSY).
+// Never throws: a failed cleanup must not crash the API.
+async function clearSession() {
+  try {
+    for (const f of await readdir(SESSION_DIR)) await rm(join(SESSION_DIR, f), { recursive: true, force: true });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') console.error('WhatsApp session cleanup failed', e);
+  }
+}
 const ALERT_KEY = 'wa:disconnect_alerted';
 let sock: WASocket | null = null;
 let state: WaStatus = { status: 'disconnected' };
@@ -45,29 +56,32 @@ export async function connect(): Promise<void> {
   const s = makeWASocket({ auth });
   sock = s;
   s.ev.on('creds.update', saveCreds);
-  s.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-    if (sock !== s) return;
-    if (qr) state = { status: 'qr', qr: await QRCode.toDataURL(qr) };
-    if (connection === 'open') {
-      state = { status: 'connected', me: s.user?.id?.split(':')[0] };
-      await redis.del(ALERT_KEY);
+  // Errors here would be unhandled rejections and crash the whole API, so they are only logged.
+  s.ev.on('connection.update', (u) => onUpdate(s, u).catch((e) => console.error('WhatsApp connection handler failed', e)));
+}
+
+async function onUpdate(s: WASocket, { connection, lastDisconnect, qr }: Partial<import('@whiskeysockets/baileys').ConnectionState>) {
+  if (sock !== s) return;
+  if (qr) state = { status: 'qr', qr: await QRCode.toDataURL(qr) };
+  if (connection === 'open') {
+    state = { status: 'connected', me: s.user?.id?.split(':')[0] };
+    await redis.del(ALERT_KEY);
+  }
+  if (connection === 'close') {
+    sock = null;
+    state = { status: 'disconnected' };
+    if (!wanted) return;
+    const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
+    if (code === DisconnectReason.loggedOut) {
+      wanted = false;
+      await setEnabled(false);
+      await clearSession();
+      await alertAdmins('logged out from the phone');
+      return;
     }
-    if (connection === 'close') {
-      sock = null;
-      state = { status: 'disconnected' };
-      if (!wanted) return;
-      const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
-      if (code === DisconnectReason.loggedOut) {
-        wanted = false;
-        await rm(SESSION_DIR, { recursive: true, force: true });
-        await setEnabled(false);
-        await alertAdmins('logged out from the phone');
-        return;
-      }
-      if (code !== DisconnectReason.restartRequired) await alertAdmins(`code ${code ?? 'unknown'}`);
-      setTimeout(() => { if (wanted) connect().catch((e) => console.error('WhatsApp reconnect failed', e)); }, 5000);
-    }
-  });
+    if (code !== DisconnectReason.restartRequired) await alertAdmins(`code ${code ?? 'unknown'}`);
+    setTimeout(() => { if (wanted) connect().catch((e) => console.error('WhatsApp reconnect failed', e)); }, 5000);
+  }
 }
 
 export async function disconnect(): Promise<void> {
@@ -77,7 +91,7 @@ export async function disconnect(): Promise<void> {
   sock = null;
   state = { status: 'disconnected' };
   await s?.logout().catch(() => s.end(undefined));
-  await rm(SESSION_DIR, { recursive: true, force: true });
+  await clearSession();
 }
 
 const jid = (e164: string) => `${e164.replace(/\D/g, '')}@s.whatsapp.net`;
