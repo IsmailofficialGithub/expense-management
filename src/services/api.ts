@@ -101,8 +101,9 @@ export async function getAccessToken(): Promise<string | null> {
 }
 
 export async function request<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+  let sentToken: string | null = null;
   const send = async () => {
-    const token = await getAccessToken();
+    const token = sentToken = await getAccessToken();
     const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
     return fetch(`${API_URL}${path}`, {
       method,
@@ -114,9 +115,11 @@ export async function request<T = any>(method: string, path: string, body?: unkn
     });
   };
   let res = await send();
-  if (res.status === 401 && accessToken !== null) {
-    accessToken = null;
-    if (await refresh()) res = await send();
+  // Retry once per request that carried a token. Concurrent 401s share one refresh (see refresh()); only the
+  // token that actually failed is dropped, so a newer token another request already got is kept.
+  if (res.status === 401 && sentToken) {
+    if (accessToken === sentToken) accessToken = null;
+    if (accessToken || await refresh()) res = await send();
   }
   const text = await res.text();
   let data: any;
