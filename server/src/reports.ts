@@ -63,11 +63,17 @@ export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(
     const total = spend.reduce((a, r) => a + r.amt, 0);
     const name = esc(u.full_name || u.email);
     let html = `<p>Hi ${name},</p>`;
+    // WhatsApp version: short lines, bullets, bold totals (WhatsApp shows *x* as bold). Names are not HTML-escaped here.
+    const wa: string[] = [`Hi ${u.full_name || u.email},`, ''];
+    const bullets = (rows: [string, number][]) => rows.map(([k, v]) => `• ${k} — ${money(v)}`);
     let subject: string;
     if (type === 'daily') {
       subject = 'Your daily expense summary';
       html += `<p>Activity in the last 24 hours: ${act.n} item(s). Your share: <b>${money(total)}</b>.</p>`;
       if (spend.length) html += table(spend.map((r) => [esc(r.grp), esc(r.cat), money(r.amt)]));
+      wa.unshift('📊 *Daily summary*', '');
+      wa.push(`🧾 Last 24 hours: ${act.n} item(s)`, `Your share: *${money(total)}*`);
+      if (spend.length) wa.push('', ...bullets(spend.map((r) => [`${r.grp} · ${r.cat}`, r.amt])));
     } else {
       subject = 'Your weekly expense report';
       const { rows: [prev] } = await db.query(
@@ -81,6 +87,9 @@ export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(
         byCat.set(r.cat, (byCat.get(r.cat) ?? 0) + r.amt);
       }
       html += `<p>Your share over the last 7 days: <b>${money(total)}</b> (${change}).</p>`;
+      wa.unshift('📅 *Weekly report*', '');
+      wa.push(`💸 Your share this week: *${money(total)}*`, `_${change}_`);
+      if (spend.length) wa.push('', '*By group*', ...bullets([...byGroup]), '', '*By category*', ...bullets([...byCat]));
       if (spend.length) {
         html += `${h3('By group')}${table([...byGroup].map(([k, v]) => [esc(k), money(v)]))}`;
         html += `${h3('By category')}${table([...byCat].map(([k, v]) => [esc(k), money(v)]))}`;
@@ -89,7 +98,11 @@ export async function runReports(type: 'daily' | 'weekly', now: Date = new Date(
     html += debts.length
       ? `${h3('Current balances')}${table(debts.map((d) => [esc(d.grp), d.balance > 0 ? `you are owed ${money(d.balance)}` : `you owe ${money(-d.balance)}`]))}`
       : '<p>You are all settled up.</p>';
-    await deliver({ userId: u.id, email: u.email, phone: u.phone_e164, kind: `${type}_report`, subject, html: layout(subject, html) });
+    wa.push('', '💰 *Balances*', ...(debts.length
+      ? debts.map((d) => (d.balance > 0 ? `🟢 ${d.grp} — you are owed ${money(d.balance)}` : `🔴 ${d.grp} — you owe ${money(-d.balance)}`))
+      : ['✅ You are all settled up.']));
+    wa.push('', `Open Flatmate: ${process.env.WEB_URL ?? 'https://flatmate.ismailabbasi.qzz.io'}`);
+    await deliver({ userId: u.id, email: u.email, phone: u.phone_e164, kind: `${type}_report`, subject, html: layout(subject, html), text: wa.join('\n') });
     sent++;
   }
   return { sent };

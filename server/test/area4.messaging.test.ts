@@ -167,7 +167,23 @@ describe('reports', () => {
     const at = new Date('2026-11-03T21:00:00Z');
     const { a } = await withExpense(new Date(at.getTime() - 3_600_000));
     await runReports('daily', at);
-    expect((await outbound(a.id)).map((m) => m.channel)).toContain('whatsapp');
+    const wa = (await outbound(a.id)).find((m) => m.channel === 'whatsapp');
+    // Hand-written chat text, not the converted email (no table pipes, no footer).
+    expect(wa?.body).toContain('📊 *Daily summary*');
+    expect(wa?.body).toContain('💰 *Balances*');
+    expect(wa?.body).not.toContain('|');
+    expect(wa?.body).not.toContain('turn these reports off');
+    if (process.env.SHOW_WA) console.log(wa?.body);
+  });
+
+  test('weekly report WhatsApp text', async () => {
+    const at = new Date('2026-11-06T21:00:00Z');
+    const { a } = await withExpense(new Date(at.getTime() - 3_600_000));
+    await runReports('weekly', at);
+    const wa = (await outbound(a.id)).find((m) => m.channel === 'whatsapp' && m.kind === 'weekly_report');
+    expect(wa?.body).toContain('📅 *Weekly report*');
+    expect(wa?.body).toContain('*By category*');
+    if (process.env.SHOW_WA) console.log(wa?.body);
   });
 });
 

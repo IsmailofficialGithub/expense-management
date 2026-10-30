@@ -3,7 +3,8 @@ import { redis } from './redis.js';
 import { sendMail } from './mail.js';
 import { autoConnect, getStatus, isOnWhatsApp, sendWhatsApp } from './whatsapp.js';
 
-export type Delivery = { userId?: string; email: string; phone?: string | null; kind: string; subject: string; html: string };
+// text: hand-written WhatsApp version; when omitted it is converted from html.
+export type Delivery = { userId?: string; email: string; phone?: string | null; kind: string; subject: string; html: string; text?: string };
 
 // Kinds that also go to WhatsApp; everything else (OTP, verification, deletion) stays email-only.
 const WA_KINDS = new Set(['expense', 'advance_collection', 'invitation', 'daily_report', 'weekly_report']);
@@ -51,7 +52,7 @@ export async function deliver(d: Delivery): Promise<void> {
     `select id, phone_e164, phone_needs_country, whatsapp_opt_in from profiles where ${d.userId ? 'id = $1' : 'email = $1'}`,
     [d.userId ?? d.email]);
   if (!p?.whatsapp_opt_in || p.phone_needs_country || !p.phone_e164) return;
-  const text = `*${d.subject}*\n\n${htmlToPlainText(d.html)}`;
+  const text = d.text ?? `*${d.subject}*\n\n${htmlToPlainText(d.html)}`;
   await enqueue('whatsapp', p.phone_e164, { ...d, userId: p.id }, text);
 }
 
