@@ -40,7 +40,7 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const theme = useTheme();
   const { selectedGroup, balances, loading, groups } = useGroups();
-  const { expenses, settlements } = useExpenses();
+  const { expenses } = useExpenses();
   const { profile } = useAuth();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
@@ -619,11 +619,8 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
             const memberBalance = balances.find(b => b.user_id === member.user_id);
             const isCurrentUser = member.user_id === profile?.id;
 
-            const settlementsGiven = settlements
-              .filter(s => s.from_user === member.user_id && s.group_id === groupId)
-              .reduce((sum, s) => sum + s.amount, 0);
-
-            const adjustedBalance = memberBalance ? memberBalance.balance + settlementsGiven : 0;
+            // The server balance already includes settlements paid and received; don't add them again.
+            const adjustedBalance = memberBalance ? memberBalance.balance : 0;
 
             return (
               <Card
