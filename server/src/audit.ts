@@ -35,6 +35,7 @@ export const routeMessages: Record<string, (c: Ctx) => string> = {
   'PATCH /auth/password': (c) => `${c.actor} changed their password`,
   'POST /auth/delete-account': (c) => `${c.actor} deleted their account`,
   'POST /admin/login': (c) => `${c.actor} started admin login`,
+  'POST /admin/users/:id/impersonate': (c) => c.status < 300 ? `${c.actor} logged in as ${c.res?.user?.email ?? c.params.id}` : `${c.actor} failed to log in as ${c.params.id}`,
   'POST /admin/verify': (c) => c.status < 300 ? `${c.actor} logged in to the admin panel` : `${c.actor} failed admin verification`,
   'POST /groups': (c) => `${c.actor} created group "${c.body?.name}"`,
   'PATCH /groups/:id': (c) => `${c.actor} updated group ${c.params.id}`,
@@ -120,16 +121,16 @@ export function registerAudit(app: FastifyInstance) {
   });
   app.addHook('onResponse', async (req, reply) => {
     if (req.routeOptions.url === '/health') return;
-    const user = (req as FastifyRequest & { user?: { sub: string; email: string; adm?: boolean } }).user;
+    const user = (req as FastifyRequest & { user?: { sub: string; email: string; adm?: boolean; imp?: string } }).user;
     const body = req.body as any;
-    const actorEmail = user?.email ?? (typeof body?.email === 'string' ? body.email : null);
+    const actorEmail = user?.imp ? `${user.imp} as ${user.email}` : user?.email ?? (typeof body?.email === 'string' ? body.email : null);
     const route = req.routeOptions.url ?? null;
     const key = `${req.method} ${route ?? req.url.split('?')[0]}`;
     enqueue({
       created_at: new Date().toISOString(),
       actor_id: user?.sub ?? null,
       actor_email: actorEmail,
-      is_admin: user?.adm === true,
+      is_admin: user?.adm === true || !!user?.imp,
       method: req.method,
       route,
       url: req.url.replace(/([?&]([^=&]*)=)[^&]*/g, (m, p: string, k: string) => (SECRET.test(k.replace(/%5f/gi, "_")) ? `${p}[redacted]` : m)),

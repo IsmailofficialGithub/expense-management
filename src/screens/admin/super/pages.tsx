@@ -3,6 +3,7 @@ import { Image, ScrollView, View } from 'react-native';
 import { Avatar, Button, Card, Chip, Divider, HelperText, IconButton, Switch, Text, TextInput } from 'react-native-paper';
 import AdminTable from './AdminTable';
 import { adminApi } from './adminApi';
+import { startImpersonation } from '../../../utils/adminPortal';
 import DebtsView, { type GroupDebts } from '../../../components/DebtsView';
 
 const json = (v: unknown) => JSON.stringify(v, null, 2);
@@ -57,13 +58,28 @@ function SendReport({ userId }: { userId: string }) {
   );
 }
 
+// Open the normal app as this user (marked session: yellow banner, audit log names the admin).
+function LoginAs({ user }: { user: any }) {
+  const [error, setError] = useState('');
+  const go = async () => {
+    if (!window.confirm(`Log in to the app as ${user.email}? You will see the app exactly as they do. Use "Exit" in the yellow bar to come back.`)) return;
+    try { await startImpersonation(await adminApi.post(`/admin/users/${user.id}/impersonate`)); } catch (e: any) { setError(e.message); }
+  };
+  return (
+    <>
+      <Button compact icon="incognito" onPress={go}>Log in as</Button>
+      {!!error && <Text variant="labelSmall">{error}</Text>}
+    </>
+  );
+}
+
 export const Users = () => (
   <AdminTable resource="users" canCreate={false}
     columns={[{ key: 'email' }, { key: 'full_name' }, { key: 'phone_e164', label: 'phone' },
       { key: 'phone_needs_country', label: 'flag', render: (r) => (r.phone_needs_country ? <Chip compact>needs country</Chip> : '') }, { key: 'created_at' }]}
     fields={['full_name', 'phone', 'phone_e164', 'report_daily', 'report_weekly', 'whatsapp_opt_in']}
     onDelete={(r) => adminApi.post(`/admin/users/${r.id}/delete`)}
-    rowActions={(r) => <SendReport userId={r.id} />} />
+    rowActions={(r) => <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}><LoginAs user={r} /><SendReport userId={r.id} /></View>} />
 );
 
 const money = (v: unknown) => `₹${Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;

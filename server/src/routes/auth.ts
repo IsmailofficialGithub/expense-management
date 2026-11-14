@@ -194,6 +194,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   // Needs the current password, unless the user just proved inbox access via verify-otp. Revokes all other sessions.
   app.patch('/password', { preHandler: requireUser, ...strict }, async (req, reply) => {
+    if (req.user.imp) return reply.code(403).send({ error: 'Not allowed while an admin is logged in as this user' });
     const body = z.object({ password, current_password: z.string().optional() }).parse(req.body);
     const { rows } = await db.query('select password_hash from users where id = $1', [req.user.sub]);
     if (!rows.length) return reply.code(404).send({ error: 'User not found' });
@@ -288,6 +289,7 @@ document.getElementById('leave').onclick = async () => {
 
   // Step 2: correct code anonymises the account (see deleteAccount).
   app.post('/delete-account', { preHandler: requireUser, ...strict }, async (req, reply) => {
+    if (req.user.imp) return reply.code(403).send({ error: 'Not allowed while an admin is logged in as this user' });
     const { code } = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
     const me = req.user.sub;
     const [[, tries], , [, stored]] = (await redis.multi().incr(`delOtpTries:${me}`).expire(`delOtpTries:${me}`, 600).get(`delOtp:${me}`).exec())!;

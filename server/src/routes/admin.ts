@@ -335,6 +335,15 @@ export async function adminRoutes(app: FastifyInstance) {
     return { ok: true };
   };
   app.post('/admin/users/:id/delete', sa, deleteUser);
+
+  // "Log in as": a normal app session for that user, marked with the admin's email (imp) so the app shows a
+  // banner, the audit log names the admin, and password change / account deletion are refused.
+  app.post('/admin/users/:id/impersonate', sa, async (req, reply) => {
+    const id = uuid.parse((req.params as { id: string }).id);
+    const { rows: [u] } = await db.query('select id, email from users where id = $1', [id]);
+    if (!u) throw new HttpError(404, 'Not found');
+    return issueTokens(reply, { id: u.id, email: u.email, imp: req.user.email });
+  });
   app.delete('/admin/users/:id', sa, deleteUser);
 
   // Expenses: same validation as the app (payer/split members, splits sum to amount).

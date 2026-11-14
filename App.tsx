@@ -11,6 +11,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import Toast from './src/components/Toast';
 import OfflineIndicator from './src/components/OfflineIndicator';
+import ImpersonationBanner from './src/components/ImpersonationBanner';
 import NotificationInitializer from './src/components/NotificationInitializer';
 import { useUI } from './src/hooks/useUI';
 import { useShareIntent } from 'expo-share-intent';
@@ -78,6 +79,7 @@ function AppContent() {
         ref={navigationRef}
         theme={navigationTheme}
       >
+        <ImpersonationBanner />
         <OfflineIndicator />
         <NotificationInitializer />
         <AppNavigator />
