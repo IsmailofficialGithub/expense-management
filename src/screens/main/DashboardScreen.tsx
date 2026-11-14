@@ -36,6 +36,12 @@ import type { MyExpenseSummary } from "../../types/database.types";
 import { LinearGradient } from "expo-linear-gradient";
 import CategoryIcon from '../../components/CategoryIcon';
 
+const INCOME = '#43A047';
+const EXPENSE = '#E53935';
+const money = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+// Soft background for an icon: the color at ~15% opacity (6-digit hex only), else the fallback.
+const tint = (color: string, fallback: string) => (/^#[0-9a-f]{6}$/i.test(color) ? `${color}26` : fallback);
+
 export default function DashboardScreen({ navigation }: any) {
   const theme = useTheme();
   const { profile } = useAuth();
@@ -202,6 +208,7 @@ export default function DashboardScreen({ navigation }: any) {
     : Object.values(expensesByCategory))
     .sort((a: any, b: any) => b.amount - a.amount)
     .slice(0, 4) as any[];
+  const categoryTotal = topExpenseCategories.reduce((sum: number, c: any) => sum + Number(c.amount), 0);
 
   const showBalanceInfo = () => {
     Alert.alert(
@@ -433,251 +440,158 @@ export default function DashboardScreen({ navigation }: any) {
         </Card.Content>
       </Card>
 
-      {/* Expense Cards Section */}
+      {/* Spending by category: one card, each row shows the category's share of the total */}
       {topExpenseCategories.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Expense Cards</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Top Categories</Text>
+            <Button mode="text" compact onPress={() => navigation.navigate("Expenses")}>View All</Button>
           </View>
-          <View style={styles.expenseCardsGrid}>
+          <Card mode="contained" style={[styles.listCard, { backgroundColor: theme.colors.elevation.level1 }]}>
             {topExpenseCategories.map((category, index) => {
-              // Use solid theme colors
-              const cardColors = [
-                theme.colors.primary,
-                theme.colors.secondary,
-                theme.colors.tertiary || theme.colors.primaryContainer,
-                theme.colors.primaryContainer,
-              ];
-              const cardColor = cardColors[index % cardColors.length];
-              
+              const color = category.color || theme.colors.primary;
+              const share = categoryTotal > 0 ? category.amount / categoryTotal : 0;
               return (
-                <TouchableOpacity
-                  key={category.name}
-                  activeOpacity={0.9}
-                  onPress={() => navigation.navigate("Expenses", { categoryFilter: category.name })}
-                  style={[
-                    styles.expenseCardItem,
-                    index === 0 && styles.expenseCardLarge,
-                    { backgroundColor: cardColor },
-                  ]}
-                >
-                  <View style={styles.expenseCardContent}>
-                    <CategoryIcon icon={category.icon} style={styles.expenseCardIcon} />
-                    <Text style={styles.expenseCardName} numberOfLines={1}>
-                      {category.name}
-                    </Text>
-                    <Text style={styles.expenseCardAmount}>
-                      PKR {category.amount.toFixed(0)}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                <React.Fragment key={category.name}>
+                  {index > 0 && <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />}
+                  <TouchableOpacity activeOpacity={0.7} style={styles.listRow}
+                    onPress={() => navigation.navigate("Expenses", { categoryFilter: category.name })}>
+                    <View style={[styles.iconBubble, { backgroundColor: tint(color, theme.colors.primaryContainer) }]}>
+                      <CategoryIcon icon={category.icon} color={color} size={20} />
+                    </View>
+                    <View style={styles.listRowBody}>
+                      <View style={styles.listRowTop}>
+                        <Text style={[styles.listRowTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>{category.name}</Text>
+                        <Text style={[styles.listRowAmount, { color: theme.colors.onSurface }]}>₹{money(category.amount)}</Text>
+                      </View>
+                      <View style={styles.listRowTop}>
+                        <View style={[styles.shareTrack, { backgroundColor: theme.colors.surfaceVariant }]}>
+                          <View style={[styles.shareFill, { width: `${Math.max(share * 100, 2)}%`, backgroundColor: color }]} />
+                        </View>
+                        <Text style={[styles.shareLabel, { color: theme.colors.onSurfaceVariant }]}>{Math.round(share * 100)}%</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </React.Fragment>
               );
             })}
-          </View>
+          </Card>
         </View>
       )}
 
-      {/* My Groups Section */}
+      {/* Groups: horizontal row of tiles */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Groups</Text>
-          <Button
-            mode="text"
-            onPress={() => navigation.navigate("Groups")}
-            compact
-          >
-            View All
-          </Button>
+          <Button mode="text" onPress={() => navigation.navigate("Groups")} compact>View All</Button>
         </View>
 
         {groups.length === 0 ? (
-          <Card style={styles.emptyCard}>
+          <Card mode="contained" style={[styles.listCard, { backgroundColor: theme.colors.elevation.level1 }]}>
             <Card.Content style={styles.emptyContent}>
-              <IconButton icon="account-group" size={48} iconColor="#999" />
+              <IconButton icon="account-group" size={40} iconColor={theme.colors.onSurfaceVariant} />
               <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No groups yet</Text>
-              <Button
-                mode="contained"
-                onPress={() => navigation.navigate("Groups")}
-                style={styles.emptyButton}
-              >
+              <Button mode="contained" onPress={() => navigation.navigate("Groups")} style={styles.emptyButton}>
                 Create Your First Group
               </Button>
             </Card.Content>
           </Card>
         ) : (
-          <View style={styles.groupsCircleContainer}>
-            {groups.slice(0, 3).map((group) => {
-              // Get first member's avatar or use group initial
-              const firstMember = group.members?.[0];
-              const avatarUrl = firstMember?.user?.avatar_url;
-              const groupInitials = group.name.substring(0, 2).toUpperCase();
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupTiles}>
+            {groups.slice(0, 8).map((group) => {
+              const avatarUrl = group.members?.[0]?.user?.avatar_url;
               const memberCount = group.members?.length || 0;
-
-              // Gradient colors for circle backgrounds
-              const circleGradients = [
-                [theme.colors.primary, theme.colors.secondary],
-                [theme.colors.tertiary || theme.colors.primary, theme.colors.primaryContainer],
-                [theme.colors.secondary, theme.colors.tertiary || theme.colors.secondaryContainer],
-              ];
-              const gradient = circleGradients[groups.indexOf(group) % circleGradients.length] as [string, string];
-
               return (
-                <TouchableOpacity
-                  key={group.id}
-                  style={styles.groupCircleItem}
-                  onPress={() => navigation.navigate("GroupDetails", { groupId: group.id })}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={gradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.groupCircle}
-                  >
-                    {avatarUrl ? (
-                      <Avatar.Image
-                        size={60}
-                        source={{ uri: avatarUrl }}
-                        style={styles.groupCircleAvatar}
-                      />
-                    ) : (
-                      <Avatar.Text
-                        size={60}
-                        label={groupInitials}
-                        style={styles.groupCircleAvatar}
-                        labelStyle={styles.groupCircleAvatarLabel}
-                      />
-                    )}
-                  </LinearGradient>
-                  <Text style={[styles.groupCircleName, { color: theme.colors.onSurface }]} numberOfLines={1}>
-                    {group.name}
-                  </Text>
-                  <Text style={[styles.groupCircleMembers, { color: theme.colors.onSurfaceVariant }]}>
+                <TouchableOpacity key={group.id} activeOpacity={0.7}
+                  style={[styles.groupTile, { backgroundColor: theme.colors.elevation.level1 }]}
+                  onPress={() => navigation.navigate("GroupDetails", { groupId: group.id })}>
+                  {avatarUrl ? (
+                    <Avatar.Image size={48} source={{ uri: avatarUrl }} />
+                  ) : (
+                    <Avatar.Text size={48} label={group.name.substring(0, 2).toUpperCase()}
+                      style={{ backgroundColor: theme.colors.primaryContainer }}
+                      labelStyle={{ color: theme.colors.onPrimaryContainer, fontSize: 18, fontWeight: '700' }} />
+                  )}
+                  <Text style={[styles.groupTileName, { color: theme.colors.onSurface }]} numberOfLines={1}>{group.name}</Text>
+                  <Text style={[styles.groupTileMeta, { color: theme.colors.onSurfaceVariant }]}>
                     {memberCount} {memberCount === 1 ? 'member' : 'members'}
                   </Text>
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
         )}
       </View>
 
-      {/* Recent Personal Transactions */}
+      {/* Recent Personal Transactions: one card, rows split by dividers */}
       {recentPersonalTransactions.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-              Recent Transactions
-            </Text>
-            <Button
-              mode="text"
-              onPress={() => navigation.navigate("PersonalFinance")}
-              compact
-            >
-              View All
-            </Button>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Recent Transactions</Text>
+            <Button mode="text" onPress={() => navigation.navigate("PersonalFinance")} compact>View All</Button>
           </View>
-
-          {recentPersonalTransactions.map((transaction) => (
-            <Card
-              key={transaction.id}
-              style={styles.transactionCard}
-              onPress={() => navigation.navigate("PersonalTransactionDetails", { transactionId: transaction.id })}
-            >
-              <Card.Content style={styles.transactionContent}>
-                <View style={styles.transactionLeft}>
-                  {/* Changed to Avatar.Icon to match Group Card height (size 40) */}
-                  <Avatar.Icon
-                    size={25}
-                    icon={transaction.type === 'income' ? 'arrow-down' : 'arrow-up'}
-                    color="#fff"
-                    style={{
-                      backgroundColor: transaction.type === 'income' ? '#4CAF50' : '#F44336',
-                      marginRight: 12, // Matches Group spacing
-                    }}
-                  />
-                  <View style={styles.transactionInfo}>
-                    <Text
-                      style={[styles.transactionDescription, { color: theme.colors.onSurface }]}
-                      numberOfLines={1}
-                    >
-                      {transaction.description}
-                    </Text>
-                    <Text style={[styles.transactionDate, { color: theme.colors.onSurfaceVariant }]}>
-                      {format(new Date(transaction.date), "MMM dd")} • {transaction.category}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Amount on the right */}
-                <Text
-                  style={[
-                    styles.transactionAmount,
-                    transaction.type === 'income' ? styles.incomeText : styles.expenseText,
-                  ]}
-                >
-                  {transaction.type === 'income' ? '+' : '-'}₹{transaction.amount}
-                </Text>
-              </Card.Content>
-            </Card>
-          ))}
+          <Card mode="contained" style={[styles.listCard, { backgroundColor: theme.colors.elevation.level1 }]}>
+            {recentPersonalTransactions.map((transaction, index) => {
+              const income = transaction.type === 'income';
+              const color = income ? INCOME : EXPENSE;
+              return (
+                <React.Fragment key={transaction.id}>
+                  {index > 0 && <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />}
+                  <TouchableOpacity activeOpacity={0.7} style={styles.listRow}
+                    onPress={() => navigation.navigate("PersonalTransactionDetails", { transactionId: transaction.id })}>
+                    <View style={[styles.iconBubble, { backgroundColor: tint(color, theme.colors.surfaceVariant) }]}>
+                      <IconButton icon={income ? 'arrow-bottom-left' : 'arrow-top-right'} size={20} iconColor={color} style={{ margin: 0 }} />
+                    </View>
+                    <View style={styles.listRowBody}>
+                      <View style={styles.listRowTop}>
+                        <Text style={[styles.listRowTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>{transaction.description}</Text>
+                        <Text style={[styles.listRowAmount, { color }]}>{income ? '+' : '−'}₹{money(Number(transaction.amount))}</Text>
+                      </View>
+                      <Text style={[styles.listRowSub, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
+                        {format(new Date(transaction.date), "MMM dd")} · {transaction.category}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
+          </Card>
         </View>
       )}
-      {/* Recent Group Expenses */}
+
+      {/* Recent Group Expenses: same list style */}
       {groups.length > 0 && recentExpenses.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-              Recent Group Expenses
-            </Text>
-            <Button
-              mode="text"
-              onPress={() => navigation.navigate("Expenses")}
-              compact
-            >
-              View All
-            </Button>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Recent Group Expenses</Text>
+            <Button mode="text" onPress={() => navigation.navigate("Expenses")} compact>View All</Button>
           </View>
-
-          {recentExpenses.map((expense) => (
-            <Card
-              key={expense.id}
-              style={styles.expenseCard}
-              onPress={() => {
-                navigation.navigate("ExpenseDetails", {
-                  expenseId: expense.id,
-                });
-              }}
-            >
-              <Card.Content style={styles.expenseContent}>
-                <View style={styles.expenseLeft}>
-                  {/* Category icon inside a 40px Circle (Matches Avatar size) */}
-                  <View style={styles.categoryAvatar}>
-                    <CategoryIcon icon={expense.category?.icon} color={expense.category?.color} size={20} />
-                  </View>
-
-                  <View style={styles.expenseInfo}>
-                    <Text
-                      style={[styles.expenseDescription, { color: theme.colors.onSurface }]}
-                      numberOfLines={1}
-                    >
-                      {expense.description}
-                    </Text>
-                    <Text style={[styles.expenseSubtext, { color: theme.colors.onSurfaceVariant }]}>
-                      {format(new Date(expense.date), "MMM dd")} • {expense.paid_by === profile?.id ? "You paid" : "Someone paid"}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Amount on the Right */}
-                <View style={styles.expenseRight}>
-                  <Text style={[styles.expenseAmount, { color: theme.colors.onSurface }]}>
-                    ₹{expense.amount}
-                  </Text>
-                </View>
-              </Card.Content>
-            </Card>
-          ))}
+          <Card mode="contained" style={[styles.listCard, { backgroundColor: theme.colors.elevation.level1 }]}>
+            {recentExpenses.map((expense, index) => {
+              const color = expense.category?.color || theme.colors.primary;
+              const payer = expense.paid_by === profile?.id ? 'You paid' : `${expense.paid_by_user?.full_name || 'Someone'} paid`;
+              return (
+                <React.Fragment key={expense.id}>
+                  {index > 0 && <Divider style={{ backgroundColor: theme.colors.outlineVariant }} />}
+                  <TouchableOpacity activeOpacity={0.7} style={styles.listRow}
+                    onPress={() => navigation.navigate("ExpenseDetails", { expenseId: expense.id })}>
+                    <View style={[styles.iconBubble, { backgroundColor: tint(color, theme.colors.primaryContainer) }]}>
+                      <CategoryIcon icon={expense.category?.icon} color={color} size={20} />
+                    </View>
+                    <View style={styles.listRowBody}>
+                      <View style={styles.listRowTop}>
+                        <Text style={[styles.listRowTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>{expense.description}</Text>
+                        <Text style={[styles.listRowAmount, { color: theme.colors.onSurface }]}>₹{money(Number(expense.amount))}</Text>
+                      </View>
+                      <Text style={[styles.listRowSub, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
+                        {format(new Date(expense.date), "MMM dd")} · {payer}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
+          </Card>
         </View>
       )}
       {/* Quick Actions */}
@@ -881,16 +795,6 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
   },
-  balanceLabel: {
-    fontSize: 14,
-    color: "#fff",
-    opacity: 0.8,
-  },
-  balanceAmount: {
-    fontSize: 36,
-    fontWeight: "bold",
-    marginVertical: 8,
-  },
   positiveBalance: {
     color: "#4CAF50",
   },
@@ -899,11 +803,6 @@ const styles = StyleSheet.create({
   },
   neutralBalance: {
     color: "#fff",
-  },
-  balanceDescription: {
-    fontSize: 12,
-    color: "#fff",
-    opacity: 0.8,
   },
   summaryCard: {
     marginBottom: 16,
@@ -981,8 +880,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 18,
   },
-  emptyCard: {
-  },
   emptyContent: {
     alignItems: "center",
     padding: 24,
@@ -995,159 +892,80 @@ const styles = StyleSheet.create({
   emptyButton: {
     marginTop: 8,
   },
-  groupsCircleContainer: {
+  listCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  listRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    paddingVertical: 8,
-  },
-  groupCircleItem: {
     alignItems: 'center',
-    width: '30%',
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
   },
-  groupCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  groupCircleAvatar: {
-    backgroundColor: 'transparent',
-  },
-  groupCircleAvatarLabel: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  groupCircleName: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  groupCircleMembers: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  groupCard: {
-    marginBottom: 8,
-  },
-  groupContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-  },
-  groupInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  groupText: {
-    marginLeft: 12,
-  },
-  groupName: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  groupMembers: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  transactionCard: {
-    marginBottom: 8,
-  },
-  transactionContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8, // This is the key to matching Group Card height
-  },
-
-  transactionLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    marginRight: 8, // Add spacing so long text doesn't hit the amount
-  },
-
-  transactionInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-
-  transactionDescription: {
-    fontSize: 16,
-    fontWeight: "600", // Matches groupName weight
-  },
-
-  transactionDate: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-
-  transactionAmount: {
-    fontSize: 16, // Matches groupName size for consistency
-    fontWeight: "bold",
-  },
-  expenseCard: {
-    marginBottom: 8,
-  },
-  // Matches Group Content Padding (Vertical 8 is key)
-  expenseContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  expenseLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    marginRight: 8,
-  },
-  // New style to mimic Avatar.Image size 40
-  categoryAvatar: {
+  iconBubble: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f2f5', // Light gray background for emoji
-    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12, // Standard spacing
+    justifyContent: 'center',
   },
-  expenseInfo: {
+  listRowBody: {
     flex: 1,
-    justifyContent: 'center',
+    gap: 4,
   },
-  expenseDescription: {
-    fontSize: 16,
-    fontWeight: "600",
+  listRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  expenseSubtext: {
+  listRowTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  listRowAmount: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  listRowSub: {
     fontSize: 12,
-    marginTop: 2,
   },
-  expenseRight: {
-    alignItems: "flex-end",
-    justifyContent: 'center',
+  shareTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
   },
-  expenseAmount: {
-    fontSize: 16,
-    fontWeight: "bold",
+  shareFill: {
+    height: 6,
+    borderRadius: 3,
   },
-  expensePaidBy: {
-    fontSize: 11,  // Reduced from 12
-    marginTop: 2,
+  shareLabel: {
+    fontSize: 12,
+    width: 36,
+    textAlign: 'right',
+  },
+  groupTiles: {
+    gap: 12,
+    paddingRight: 4,
+  },
+  groupTile: {
+    width: 120,
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    gap: 4,
+  },
+  groupTileName: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    maxWidth: '100%',
+  },
+  groupTileMeta: {
+    fontSize: 12,
   },
   quickActions: {
     flexDirection: "row",
@@ -1181,44 +999,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 4,
     textAlign: 'center',
-  },
-  expenseCardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  expenseCardItem: {
-    width: '47%',
-    borderRadius: 16,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  expenseCardLarge: {
-    width: '100%',
-    marginBottom: 0,
-  },
-  expenseCardContent: {
-    padding: 16,
-    minHeight: 120,
-    justifyContent: 'space-between',
-  },
-  expenseCardIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  expenseCardName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  expenseCardAmount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
 });
