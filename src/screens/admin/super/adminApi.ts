@@ -32,6 +32,7 @@ export const adminApi = {
   get: <T = any>(path: string, params: Record<string, unknown> = {}) => request<T>('GET', path + qs(params)),
   post: <T = any>(path: string, body: unknown = {}) => request<T>('POST', path, body),
   patch: <T = any>(path: string, body: unknown = {}) => request<T>('PATCH', path, body),
+  put: <T = any>(path: string, body: unknown = {}) => request<T>('PUT', path, body),
   del: <T = any>(path: string) => request<T>('DELETE', path),
   login: (email: string, password: string) => request('POST', '/admin/login', { email, password }),
   verify: async (email: string, code: string) => {

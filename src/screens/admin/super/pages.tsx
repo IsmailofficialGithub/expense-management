@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Image, ScrollView, View } from 'react-native';
-import { Button, Card, Chip, HelperText, IconButton, Text, TextInput } from 'react-native-paper';
+import { Button, Card, Chip, HelperText, IconButton, Switch, Text, TextInput } from 'react-native-paper';
 import AdminTable from './AdminTable';
 import { adminApi } from './adminApi';
 
@@ -193,6 +193,31 @@ export const Logs = () => (
     renderExpanded={(r) => <Text selectable style={mono}>{json(r)}</Text>} />
 );
 
+// Global switches for notification emails / WhatsApps (expenses, invites, reports). Login codes always go out.
+function NotificationChannels({ onMessage }: { onMessage: (m: string) => void }) {
+  const [ch, setCh] = useState<{ email: boolean; whatsapp: boolean } | null>(null);
+  useEffect(() => { adminApi.get('/admin/notification-channels').then(setCh).catch((e) => onMessage(e.message)); }, []);
+  const toggle = async (key: 'email' | 'whatsapp', value: boolean) => {
+    try { setCh(await adminApi.put('/admin/notification-channels', { [key]: value })); } catch (e: any) { onMessage(e.message); }
+  };
+  const row = (key: 'email' | 'whatsapp', label: string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}>
+      <Text>{label}</Text>
+      <Switch value={!!ch?.[key]} disabled={!ch} onValueChange={(v) => toggle(key, v)} />
+    </View>
+  );
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <Card.Title title="Notifications" subtitle="Expense, advance, invitation and report messages to users" />
+      <Card.Content>
+        {row('email', 'Email notifications')}
+        {row('whatsapp', 'WhatsApp (phone) notifications')}
+        <Text variant="bodySmall" style={{ opacity: 0.7 }}>Login codes and account emails are always sent.</Text>
+      </Card.Content>
+    </Card>
+  );
+}
+
 export function Settings() {
   const [wa, setWa] = useState<{ status: string; qr?: string; me?: string } | null>(null);
   const [msg, setMsg] = useState('');
@@ -205,6 +230,7 @@ export function Settings() {
   };
   return (
     <ScrollView>
+      <NotificationChannels onMessage={setMsg} />
       <Card><Card.Title title="WhatsApp" subtitle={wa ? `${wa.status}${wa.me ? ` · ${wa.me}` : ''}` : 'loading…'} />
         <Card.Content>
           {wa?.status === 'qr' && wa.qr && <Image source={{ uri: wa.qr }} style={{ width: 260, height: 260 }} />}

@@ -44,10 +44,29 @@ async function enqueue(channel: 'email' | 'whatsapp', to: string, d: Delivery, b
   await redis.rpush(QUEUE, String(r.id));
 }
 
+export type NotificationChannels = { email: boolean; whatsapp: boolean };
+const DEFAULT_CHANNELS: NotificationChannels = { email: true, whatsapp: true };
+
+// Admin switches (Settings page) for notification emails/WhatsApps. OTP and account emails ignore them.
+export async function getNotificationChannels(): Promise<NotificationChannels> {
+  const { rows } = await db.query(`select value from system_settings where key = 'notification_channels'`);
+  return { ...DEFAULT_CHANNELS, ...(rows[0]?.value ?? {}) };
+}
+
+export async function setNotificationChannels(patch: Partial<NotificationChannels>): Promise<NotificationChannels> {
+  const next = { ...(await getNotificationChannels()), ...patch };
+  await db.query(`insert into system_settings (key, value) values ('notification_channels', $1)
+                  on conflict (key) do update set value = excluded.value, updated_at = now()`, [JSON.stringify(next)]);
+  return next;
+}
+
 // Queue an email, plus a WhatsApp copy when the kind allows it and the user has a usable, opted-in number.
+// Notification kinds skip a channel the admin switched off.
 export async function deliver(d: Delivery): Promise<void> {
-  await enqueue('email', d.email, d, d.html);
-  if (!WA_KINDS.has(d.kind) || getStatus().status !== 'connected') return;
+  const notification = WA_KINDS.has(d.kind);
+  const channels = notification ? await getNotificationChannels() : DEFAULT_CHANNELS;
+  if (channels.email) await enqueue('email', d.email, d, d.html);
+  if (!notification || !channels.whatsapp || getStatus().status !== 'connected') return;
   const { rows: [p] } = await db.query(
     `select id, phone_e164, phone_needs_country, whatsapp_opt_in from profiles where ${d.userId ? 'id = $1' : 'email = $1'}`,
     [d.userId ?? d.email]);

@@ -11,7 +11,7 @@ import { HttpError } from '../access.js';
 import { publish } from '../realtime.js';
 import { deleteAccount, defaultAvatar } from './auth.js';
 import { tx, insertSplits, assertExpenseValid } from './money.js';
-import { resendOutbound } from '../messaging.js';
+import { getNotificationChannels, resendOutbound, setNotificationChannels } from '../messaging.js';
 import { getStatus, connect, disconnect, isOnWhatsApp, sendWhatsApp } from '../whatsapp.js';
 import { runReports } from '../reports.js';
 
@@ -415,6 +415,10 @@ export async function adminRoutes(app: FastifyInstance) {
     await resendOutbound(id);
     return { ok: true };
   });
+
+  app.get('/admin/notification-channels', sa, async () => getNotificationChannels());
+  app.put('/admin/notification-channels', sa, async (req) =>
+    setNotificationChannels(z.object({ email: z.boolean(), whatsapp: z.boolean() }).partial().strict().parse(req.body)));
 
   app.get('/admin/whatsapp/status', sa, async () => getStatus());
   app.post('/admin/whatsapp/connect', sa, async () => { await connect(); return getStatus(); });

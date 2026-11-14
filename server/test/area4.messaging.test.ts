@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { auth, covers, createGroup, createUser, db, getApp, tokenFor, redis, sentMails, sentWhatsApps } from './helpers.js';
 import { sendMail } from '../src/mail.js';
 import { isOnWhatsApp } from '../src/whatsapp.js';
-import { deliver, drainQueue, htmlToPlainText } from '../src/messaging.js';
+import { deliver, drainQueue, htmlToPlainText, setNotificationChannels } from '../src/messaging.js';
 import { reportTick, runReports } from '../src/reports.js';
 
 covers('POST /admin/outbound/:id/resend', 'GET /admin/whatsapp/status', 'POST /admin/whatsapp/connect',
-  'POST /admin/whatsapp/disconnect', 'POST /admin/reports/run');
+  'POST /admin/whatsapp/disconnect', 'POST /admin/reports/run', 'GET /admin/notification-channels', 'PUT /admin/notification-channels');
 
 // Controllable WhatsApp state; no real Baileys socket in tests.
 const wa = vi.hoisted(() => ({ status: 'disconnected' as 'connected' | 'disconnected' }));
@@ -27,6 +27,7 @@ const outbound = async (userId: string) =>
 
 beforeEach(async () => {
   wa.status = 'connected';
+  await db.query(`delete from system_settings where key = 'notification_channels'`);
   await redis.del('outbound:queue', 'outbound:retry');
   sentMails.length = 0;
   sentWhatsApps.length = 0;
@@ -57,6 +58,18 @@ describe('deliver', () => {
     await drainQueue();
     expect(sentWhatsApps).toEqual([]);
     for (const u of [legacy, optOut, otp, off]) expect((await outbound(u.id)).map((m) => m.channel)).toEqual(['email']);
+  });
+
+  test('admin channel switches stop notification email / WhatsApp, never OTP email', async () => {
+    const u = await createUser({ phone_e164: '+923006666666' });
+    await setNotificationChannels({ email: false });
+    await deliver({ userId: u.id, email: u.email, kind: 'expense', subject: 's', html: 'h' });
+    await deliver({ userId: u.id, email: u.email, kind: 'otp', subject: 's', html: 'h' });
+    expect((await outbound(u.id)).map((m) => [m.channel, m.kind])).toEqual([['whatsapp', 'expense'], ['email', 'otp']]);
+    await db.query('delete from outbound_messages where user_id = $1', [u.id]);
+    await setNotificationChannels({ email: true, whatsapp: false });
+    await deliver({ userId: u.id, email: u.email, kind: 'expense', subject: 's', html: 'h' });
+    expect((await outbound(u.id)).map((m) => m.channel)).toEqual(['email']);
   });
 
   test('number not on WhatsApp is marked failed without retry', async () => {
@@ -198,7 +211,8 @@ describe('admin routes', () => {
     const app = await getApp();
     const u = await createUser();
     for (const [method, url] of [['POST', '/admin/outbound/1/resend'], ['GET', '/admin/whatsapp/status'], ['POST', '/admin/whatsapp/connect'],
-      ['POST', '/admin/whatsapp/disconnect'], ['POST', '/admin/reports/run?type=daily']] as const) {
+      ['POST', '/admin/whatsapp/disconnect'], ['POST', '/admin/reports/run?type=daily'],
+      ['GET', '/admin/notification-channels'], ['PUT', '/admin/notification-channels']] as const) {
       expect((await app.inject({ method, url })).statusCode).toBe(401);
       expect([401, 403]).toContain((await app.inject({ method, url, headers: auth(u) })).statusCode);
     }
@@ -211,6 +225,16 @@ describe('admin routes', () => {
     expect((await app.inject({ method: 'GET', url: '/admin/whatsapp/status', headers: auth(admin) })).json()).toEqual({ status: 'disconnected' });
     expect((await app.inject({ method: 'POST', url: '/admin/whatsapp/connect', headers: auth(admin) })).json()).toEqual({ status: 'connected' });
     expect((await app.inject({ method: 'POST', url: '/admin/whatsapp/disconnect', headers: auth(admin) })).json()).toEqual({ status: 'disconnected' });
+  });
+
+  test('notification channels get / put', async () => {
+    const app = await getApp();
+    const admin = await getAdmin();
+    const url = '/admin/notification-channels';
+    expect((await app.inject({ method: 'GET', url, headers: auth(admin) })).json()).toEqual({ email: true, whatsapp: true });
+    expect((await app.inject({ method: 'PUT', url, headers: auth(admin), payload: { email: 'no' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PUT', url, headers: auth(admin), payload: { email: false } })).json()).toEqual({ email: false, whatsapp: true });
+    expect((await app.inject({ method: 'GET', url, headers: auth(admin) })).json()).toEqual({ email: false, whatsapp: true });
   });
 
   test('resend requeues a failed message', async () => {
