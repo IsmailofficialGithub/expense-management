@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Image, ScrollView, View } from 'react-native';
-import { Button, Card, Chip, HelperText, IconButton, Switch, Text, TextInput } from 'react-native-paper';
+import { Avatar, Button, Card, Chip, Divider, HelperText, IconButton, Switch, Text, TextInput } from 'react-native-paper';
 import AdminTable from './AdminTable';
 import { adminApi } from './adminApi';
 
@@ -193,26 +193,43 @@ export const Logs = () => (
     renderExpanded={(r) => <Text selectable style={mono}>{json(r)}</Text>} />
 );
 
+// Settings cards sit side by side on wide screens and stack on phones; equal height per row.
+const card = { flexGrow: 1, flexBasis: 320, maxWidth: 560 } as const;
+const muted = { opacity: 0.7 } as const;
+
+function SwitchRow({ label, hint, value, disabled, onChange }: { label: string; hint: string; value: boolean; disabled: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}>
+      <View style={{ flex: 1 }}>
+        <Text variant="bodyLarge">{label}</Text>
+        <Text variant="bodySmall" style={muted}>{hint}</Text>
+      </View>
+      <Switch value={value} disabled={disabled} onValueChange={onChange} />
+    </View>
+  );
+}
+
 // Global switches for notification emails / WhatsApps (expenses, invites, reports). Login codes always go out.
 function NotificationChannels({ onMessage }: { onMessage: (m: string) => void }) {
   const [ch, setCh] = useState<{ email: boolean; whatsapp: boolean } | null>(null);
   useEffect(() => { adminApi.get('/admin/notification-channels').then(setCh).catch((e) => onMessage(e.message)); }, []);
   const toggle = async (key: 'email' | 'whatsapp', value: boolean) => {
-    try { setCh(await adminApi.put('/admin/notification-channels', { [key]: value })); } catch (e: any) { onMessage(e.message); }
+    setCh((c) => (c ? { ...c, [key]: value } : c));
+    try { setCh(await adminApi.put('/admin/notification-channels', { [key]: value })); } catch (e: any) {
+      setCh((c) => (c ? { ...c, [key]: !value } : c));
+      onMessage(e.message);
+    }
   };
-  const row = (key: 'email' | 'whatsapp', label: string) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}>
-      <Text>{label}</Text>
-      <Switch value={!!ch?.[key]} disabled={!ch} onValueChange={(v) => toggle(key, v)} />
-    </View>
-  );
   return (
-    <Card style={{ marginBottom: 12 }}>
-      <Card.Title title="Notifications" subtitle="Expense, advance, invitation and report messages to users" />
+    <Card style={card}>
+      <Card.Title title="Notifications" titleVariant="titleMedium" left={(p) => <Avatar.Icon {...p} icon="bell-outline" />} />
       <Card.Content>
-        {row('email', 'Email notifications')}
-        {row('whatsapp', 'WhatsApp (phone) notifications')}
-        <Text variant="bodySmall" style={{ opacity: 0.7 }}>Login codes and account emails are always sent.</Text>
+        <SwitchRow label="Email" hint="Expense, advance, invite and report emails" value={!!ch?.email} disabled={!ch}
+          onChange={(v) => toggle('email', v)} />
+        <Divider />
+        <SwitchRow label="WhatsApp" hint="Same messages to users' phones" value={!!ch?.whatsapp} disabled={!ch}
+          onChange={(v) => toggle('whatsapp', v)} />
+        <Text variant="labelSmall" style={[muted, { marginTop: 8 }]}>Login codes and account emails are always sent.</Text>
       </Card.Content>
     </Card>
   );
@@ -228,33 +245,55 @@ export function Settings() {
     setMsg(`${label}…`);
     try { const r = await fn(); setMsg(`${label}: ${r ? JSON.stringify(r) : 'ok'}`); poll(); } catch (e: any) { setMsg(`${label} failed: ${e.message}`); }
   };
+  const connected = wa?.status === 'connected';
+  const statusLabel = !wa ? 'loading…' : connected ? `Connected${wa.me ? ` · +${wa.me}` : ''}` : wa.status === 'qr' ? 'Waiting for scan' : 'Disconnected';
   return (
-    <ScrollView>
-      <NotificationChannels onMessage={setMsg} />
-      <Card><Card.Title title="WhatsApp" subtitle={wa ? `${wa.status}${wa.me ? ` · ${wa.me}` : ''}` : 'loading…'} />
-        <Card.Content>
-          {wa?.status === 'qr' && wa.qr && <Image source={{ uri: wa.qr }} style={{ width: 260, height: 260 }} />}
-          {wa?.status === 'qr' && <Text>Scan with WhatsApp → Linked devices.</Text>}
-        </Card.Content>
-        <Card.Actions>
-          <Button onPress={act('Connect', () => adminApi.post('/admin/whatsapp/connect'))} disabled={wa?.status === 'connected'}>Connect</Button>
-          <Button onPress={act('Disconnect', () => adminApi.post('/admin/whatsapp/disconnect'))} disabled={wa?.status === 'disconnected'}>Disconnect</Button>
-        </Card.Actions>
-        <Card.Content style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <TextInput dense mode="outlined" label="Test number (+country code)" value={testPhone} onChangeText={setTestPhone}
-            keyboardType="phone-pad" style={{ flexGrow: 1, minWidth: 200 }} />
-          <Button mode="contained" disabled={wa?.status !== 'connected'}
-            onPress={act('Test WhatsApp', () => adminApi.post('/admin/whatsapp/test', { phone: testPhone.replace(/[\s-]/g, '') }))}>Send test</Button>
-        </Card.Content>
-      </Card>
-      <Card style={{ marginTop: 12 }}><Card.Title title="Reports" />
-        <Card.Actions>
-          <Button onPress={act('Daily report', () => adminApi.post('/admin/reports/run?type=daily'))}>Run daily report</Button>
-          <Button onPress={act('Weekly report', () => adminApi.post('/admin/reports/run?type=weekly'))}>Run weekly report</Button>
-        </Card.Actions>
-      </Card>
+    <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <NotificationChannels onMessage={setMsg} />
+
+        <Card style={card}>
+          <Card.Title title="WhatsApp" titleVariant="titleMedium" left={(p) => <Avatar.Icon {...p} icon="whatsapp" />}
+            right={() => (
+              <Chip compact icon={connected ? 'check-circle' : 'close-circle-outline'} style={{ marginRight: 16 }}
+                selectedColor={connected ? '#2e7d32' : undefined}>{statusLabel}</Chip>
+            )} />
+          <Card.Content style={{ gap: 12 }}>
+            {wa?.status === 'qr' && wa.qr && (
+              <View style={{ alignItems: 'center', gap: 4 }}>
+                <Image source={{ uri: wa.qr }} style={{ width: 220, height: 220 }} />
+                <Text variant="bodySmall" style={muted}>Scan with WhatsApp → Linked devices</Text>
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {connected
+                ? <Button mode="outlined" icon="link-off" onPress={act('Disconnect', () => adminApi.post('/admin/whatsapp/disconnect'))}>Disconnect</Button>
+                : <Button mode="contained" icon="link" onPress={act('Connect', () => adminApi.post('/admin/whatsapp/connect'))} disabled={wa?.status === 'qr'}>Connect</Button>}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput dense mode="outlined" label="Test number" placeholder="+923001234567" value={testPhone} onChangeText={setTestPhone}
+                keyboardType="phone-pad" style={{ flex: 1 }} />
+              <Button mode="contained-tonal" icon="send" disabled={!connected}
+                onPress={act('Test WhatsApp', () => adminApi.post('/admin/whatsapp/test', { phone: testPhone.replace(/[\s-]/g, '') }))}>Test</Button>
+            </View>
+          </Card.Content>
+        </Card>
+
+        <Card style={card}>
+          <Card.Title title="Reports" titleVariant="titleMedium" left={(p) => <Avatar.Icon {...p} icon="file-chart-outline" />} />
+          <Card.Content style={{ gap: 12 }}>
+            <Text variant="bodySmall" style={muted}>
+              Sent automatically to users who have them turned on. Run one now to send it to everyone straight away.
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <Button mode="contained-tonal" icon="calendar-today" onPress={act('Daily report', () => adminApi.post('/admin/reports/run?type=daily'))}>Daily report</Button>
+              <Button mode="contained-tonal" icon="calendar-week" onPress={act('Weekly report', () => adminApi.post('/admin/reports/run?type=weekly'))}>Weekly report</Button>
+            </View>
+          </Card.Content>
+        </Card>
+      </View>
       {!!msg && <HelperText type="info">{msg}</HelperText>}
-      <Text variant="titleMedium" style={{ marginVertical: 12 }}>Outbound messages</Text>
+      <Text variant="titleMedium" style={{ marginTop: 24, marginBottom: 4 }}>Outbound messages</Text>
       <Text variant="bodySmall" style={{ marginBottom: 8, opacity: 0.7 }}>
         ↻ resends that exact old message on its own channel. To send a fresh report to someone, use Users → Daily report.
       </Text>
