@@ -22,6 +22,7 @@ import ExpensesScreen from '../screens/main/ExpensesScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import GroupDetailsScreen from '../screens/details/GroupDetailsScreen';
 import GroupMemberDetailsScreen from '../screens/details/GroupMemberDetailsScreen';
+import GroupDebtsScreen from '../screens/details/GroupDebtsScreen';
 import SingleGroupDetailsScreen from '../screens/details/SingleGroupDetailsScreen';
 import SingleGroupExpenseDetailsScreen from '../screens/details/SingleGroupExpenseDetailsScreen';
 import ExpenseDetailsScreen from '../screens/details/ExpenseDetailsScreen';
@@ -194,6 +195,7 @@ function UserAppNavigator() {
 
           <RootStack.Group screenOptions={detailScreenOptions}>
             <RootStack.Screen name="GroupDetails" component={GroupDetailsScreen} options={{ title: 'Group Details' }} />
+            <RootStack.Screen name="GroupDebts" component={GroupDebtsScreen} options={{ title: 'Who Owes Whom' }} />
             <RootStack.Screen name="GroupMemberDetails" component={GroupMemberDetailsScreen} options={{ title: 'Member Details' }} />
             <RootStack.Screen name="SingleGroupDetails" component={SingleGroupDetailsScreen} options={{ title: 'Group Expenses' }} />
             <RootStack.Screen name="SingleGroupExpenseDetails" component={SingleGroupExpenseDetailsScreen} options={{ title: 'Expense Details' }} />

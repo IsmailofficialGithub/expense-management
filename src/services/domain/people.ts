@@ -1,5 +1,6 @@
 // src/services/domain/people.ts
 import { api, qs, uploadImage, ApiError } from '../api';
+import type { GroupDebts } from '../../components/DebtsView';
 import {
   Profile,
   Group,
@@ -124,6 +125,7 @@ export const groupService = {
     await api.del(`/groups/${groupId}/members/${userId}`);
   },
   getGroupBalances: (groupId: string): Promise<UserGroupBalance[]> => api.get(`/groups/${groupId}/balances`),
+  getGroupDebts: (groupId: string): Promise<GroupDebts> => api.get(`/groups/${groupId}/debts`),
 };
 
 // ============================================

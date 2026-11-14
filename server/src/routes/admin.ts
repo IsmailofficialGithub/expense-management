@@ -11,6 +11,7 @@ import { HttpError } from '../access.js';
 import { publish } from '../realtime.js';
 import { deleteAccount, defaultAvatar } from './auth.js';
 import { tx, insertSplits, assertExpenseValid } from './money.js';
+import { groupDebts } from '../debts.js';
 import { getNotificationChannels, resendOutbound, setNotificationChannels } from '../messaging.js';
 import { getStatus, connect, disconnect, isOnWhatsApp, sendWhatsApp } from '../whatsapp.js';
 import { runReports } from '../reports.js';
@@ -416,6 +417,25 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!rowCount) throw new HttpError(404, 'Not found');
     await resendOutbound(id);
     return { ok: true };
+  });
+
+  // Without group_id: groups with money still owed. With group_id: who owes whom in that group.
+  app.get('/admin/debts', sa, async (req) => {
+    const { group_id } = z.object({ group_id: uuid.optional() }).parse(req.query);
+    if (group_id) {
+      const { rows: [g] } = await db.query('select id, name from groups where id = $1', [group_id]);
+      if (!g) throw new HttpError(404, 'Not found');
+      return { group: g, ...(await groupDebts(group_id)) };
+    }
+    const { rows: groups } = await db.query(
+      `select g.id, g.name from groups g where exists (select 1 from expenses e where e.group_id = g.id)
+          or exists (select 1 from settlements s where s.group_id = g.id) order by g.name`);
+    const out = [];
+    for (const g of groups) {
+      const { debts, members } = await groupDebts(g.id);
+      out.push({ ...g, members: members.length, open_debts: debts.length, outstanding: debts.reduce((t, d) => t + d.amount, 0) });
+    }
+    return out.sort((a, b) => b.outstanding - a.outstanding || a.name.localeCompare(b.name));
   });
 
   app.get('/admin/notification-channels', sa, async () => getNotificationChannels());

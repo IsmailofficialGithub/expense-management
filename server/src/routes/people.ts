@@ -9,6 +9,7 @@ import { deleteUpload } from '../uploads.js';
 import { deliver } from '../messaging.js';
 import { insertNotifications } from './notify.js';
 import { defaultAvatar } from './auth.js';
+import { groupDebts } from '../debts.js';
 
 const id = z.string().uuid();
 const idParam = z.object({ id });
@@ -510,6 +511,13 @@ export async function peopleRoutes(app: FastifyInstance) {
     await assertGroupMember(groupId, req.user.sub);
     return cachedForGroup('balances', groupId, async () =>
       (await db.query('select * from user_group_balances where group_id = $1', [groupId])).rows);
+  });
+
+  // Who owes whom, pair by pair, with the expenses and repayments behind each debt.
+  app.get('/groups/:id/debts', async (req) => {
+    const { id: groupId } = idParam.parse(req.params);
+    await assertGroupMember(groupId, req.user.sub);
+    return cachedForGroup('debts', groupId, () => groupDebts(groupId));
   });
 
   // ---------- categories ----------

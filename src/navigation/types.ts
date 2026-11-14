@@ -9,6 +9,7 @@ export type RootStackParamList = {
     Main: undefined;
     NewPassword: undefined;
     GroupDetails: { groupId: string };
+    GroupDebts: { groupId: string };
     GroupMemberDetails: { groupId: string; userId: string; userName?: string };
     SingleGroupDetails: { groupId: string };
     SingleGroupExpenseDetails: { expenseId: string; groupId?: string };

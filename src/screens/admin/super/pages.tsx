@@ -3,6 +3,7 @@ import { Image, ScrollView, View } from 'react-native';
 import { Avatar, Button, Card, Chip, Divider, HelperText, IconButton, Switch, Text, TextInput } from 'react-native-paper';
 import AdminTable from './AdminTable';
 import { adminApi } from './adminApi';
+import DebtsView, { type GroupDebts } from '../../../components/DebtsView';
 
 const json = (v: unknown) => JSON.stringify(v, null, 2);
 const mono = { fontFamily: 'monospace', fontSize: 12 } as const;
@@ -183,6 +184,38 @@ export function Chats() {
     <AdminTable resource="chats" onRowPress={setOpen}
       columns={[{ key: 'title', label: 'chat' }, { key: 'type' }, { key: 'message_count', label: 'messages' },
         { key: 'last_message_text', label: 'last message' }, { key: 'last_message_at', label: 'last active', render: (r) => day(r.last_message_at) }]} />
+  );
+}
+
+// Who owes whom, one group at a time. Groups with the most money outstanding come first.
+export function Balances() {
+  const [groups, setGroups] = useState<any[] | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [data, setData] = useState<(GroupDebts & { group: { name: string } }) | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    adminApi.get('/admin/debts').then((g) => { setGroups(g); setGroupId((id) => id ?? g[0]?.id ?? null); }).catch((e) => setError(e.message));
+  }, []);
+  useEffect(() => {
+    if (!groupId) return;
+    setData(null);
+    adminApi.get('/admin/debts', { group_id: groupId }).then(setData).catch((e) => setError(e.message));
+  }, [groupId]);
+  if (error) return <HelperText type="error">{error}</HelperText>;
+  if (!groups) return <Text>Loading…</Text>;
+  if (!groups.length) return <Text>No group has any expenses yet.</Text>;
+  return (
+    <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+        {groups.map((g) => (
+          <Chip key={g.id} selected={g.id === groupId} showSelectedCheck={false} onPress={() => setGroupId(g.id)}
+            icon={g.open_debts ? 'account-arrow-right' : 'check-circle-outline'}>
+            {g.name} · {g.open_debts ? `${money(g.outstanding)} open` : 'settled'}
+          </Chip>
+        ))}
+      </ScrollView>
+      {data ? <DebtsView data={data} /> : <Text>Loading…</Text>}
+    </ScrollView>
   );
 }
 

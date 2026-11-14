@@ -531,6 +531,14 @@ export default function GroupDetailsScreen({ navigation, route }: Props) {
                 Settle Up
               </Button>
             )}
+            <Button
+              mode="outlined"
+              icon="account-arrow-right"
+              onPress={() => navigation.navigate('GroupDebts', { groupId })}
+              style={{ marginTop: 12 }}
+            >
+              Who owes whom
+            </Button>
           </Card.Content>
         </Card>
 

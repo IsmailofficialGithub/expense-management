@@ -4,11 +4,11 @@ import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { Appbar, Button, Card, Drawer, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import { adminApi, adminLogout, hasAdminToken, setOnAdminLogout } from './adminApi';
 import { openNormalApp } from '../../../utils/adminPortal';
-import { Chats, Dashboard, Expenses, Groups, Logs, Notifications, Settings, Settlements, Users } from './pages';
+import { Balances, Chats, Dashboard, Expenses, Groups, Logs, Notifications, Settings, Settlements, Users } from './pages';
 
-const PAGES = { Dashboard, Users, Groups, Expenses, Settlements, Chats, Notifications, Logs, Settings };
+const PAGES = { Dashboard, Users, Groups, Expenses, Balances, Settlements, Chats, Notifications, Logs, Settings };
 const ICONS: Record<keyof typeof PAGES, string> = {
-  Dashboard: 'view-dashboard', Users: 'account-multiple', Groups: 'account-group', Expenses: 'cash', Settlements: 'swap-horizontal',
+  Dashboard: 'view-dashboard', Users: 'account-multiple', Groups: 'account-group', Expenses: 'cash', Balances: 'scale-balance', Settlements: 'swap-horizontal',
   Chats: 'chat', Notifications: 'bell', Logs: 'text-box-search', Settings: 'cog',
 };
 type PageName = keyof typeof PAGES;
