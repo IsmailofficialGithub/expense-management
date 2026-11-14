@@ -40,6 +40,9 @@ import {
 } from '../../types/database.types';
 
 export const authService = {
+  // True when the logged-in email is a super admin (used to show the Admin portal link).
+  isSuperAdmin: async () => (await api.get<{ is_super_admin?: boolean }>('/auth/me')).is_super_admin === true,
+
   signUp: async (email: string, password: string, fullName: string, _invitationToken?: string) => {
     // Server emails a confirmation link; the user logs in after confirming.
     return api.post<{ user: AuthUser }>('/auth/signup', { email, password, full_name: fullName });

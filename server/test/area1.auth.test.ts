@@ -78,6 +78,10 @@ describe('tokens', () => {
     const r = await app.inject({ method: 'GET', url: '/auth/me', headers: auth(u) });
     expect(r.statusCode).toBe(200);
     expect(r.json().profile.id).toBe(u.id);
+    expect(r.json().is_super_admin).toBe(false);
+    const admin = await createUser({ email: `admin-${Date.now()}@test.local` });
+    process.env.SUPER_ADMIN_EMAILS = `${process.env.SUPER_ADMIN_EMAILS ?? ''},${admin.email}`;
+    expect((await app.inject({ method: 'GET', url: '/auth/me', headers: auth(admin) })).json().is_super_admin).toBe(true);
   });
 });
 

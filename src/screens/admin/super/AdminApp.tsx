@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { Appbar, Button, Card, Drawer, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import { adminApi, adminLogout, hasAdminToken, setOnAdminLogout } from './adminApi';
+import { openNormalApp } from '../../../utils/adminPortal';
 import { Chats, Dashboard, Expenses, Groups, Logs, Notifications, Settings, Settlements, Users } from './pages';
 
 const PAGES = { Dashboard, Users, Groups, Expenses, Settlements, Chats, Notifications, Logs, Settings };
@@ -44,6 +45,7 @@ function Login({ onDone }: { onDone: () => void }) {
           {!!error && <HelperText type="error">{error}</HelperText>}
         </Card.Content>
         <Card.Actions>
+          {step === 'password' && <Button icon="arrow-left" onPress={openNormalApp}>Back to app</Button>}
           {step === 'otp' && <Button onPress={() => setStep('password')}>Back</Button>}
           <Button mode="contained" loading={busy} disabled={busy} onPress={submit}>{step === 'password' ? 'Continue' : 'Verify'}</Button>
         </Card.Actions>
@@ -71,6 +73,7 @@ export default function AdminApp() {
       {(Object.keys(PAGES) as PageName[]).map((k) => (
         <Drawer.Item key={k} label={k} icon={ICONS[k]} active={page === k} onPress={() => { setPage(k); setMenuOpen(false); }} />
       ))}
+      <Drawer.Item label="Back to app" icon="arrow-left-circle" onPress={openNormalApp} />
       <Drawer.Item label="Log out" icon="logout" onPress={adminLogout} />
     </>
   );

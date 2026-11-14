@@ -47,6 +47,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from 'react-native-paper';
 import { updatesService } from '../../services/updates.service';
 import { CommonActions } from '@react-navigation/native';
+import { authService } from '../../services/domain/auth';
+import { openAdminPortal } from '../../utils/adminPortal';
 
 export default function ProfileScreen({ navigation }: any) {
   const { profile, user, loading } = useAuth();
@@ -56,6 +58,10 @@ export default function ProfileScreen({ navigation }: any) {
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const { isOnline } = useNetworkCheck();
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  useEffect(() => {
+    if (isOnline) authService.isSuperAdmin().then(setIsSuperAdmin).catch(() => {});
+  }, [isOnline, user?.id]);
 
   // Construct display profile from profile or user fallback
   const displayProfile = profile || {
@@ -523,6 +529,20 @@ export default function ProfileScreen({ navigation }: any) {
       </Card>
 
       {/* Account Information */}
+      {isSuperAdmin && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Super Admin</Text>
+          <Card style={styles.card}>
+            <List.Item
+              title="Admin Portal"
+              description="Manage users, groups, messages and settings"
+              left={(props) => <List.Icon {...props} icon="shield-account" />}
+              right={(props) => <List.Icon {...props} icon="open-in-new" />}
+              onPress={openAdminPortal}
+            />
+          </Card>
+        </View>
+      )}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>Account Information</Text>
         <Card style={styles.card}>

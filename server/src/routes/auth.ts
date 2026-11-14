@@ -1,3 +1,4 @@
+import { isSuperAdminEmail } from '../admin.js';
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { randomBytes, randomInt } from 'node:crypto';
@@ -271,7 +272,8 @@ document.getElementById('leave').onclick = async () => {
   app.get('/me', { preHandler: requireUser }, async (req, reply) => {
     const { rows } = await db.query('select * from profiles where id = $1', [req.user.sub]);
     if (!rows.length) return reply.code(404).send({ error: 'User not found' });
-    return { user: { id: req.user.sub, email: req.user.email }, profile: rows[0] };
+    // is_super_admin only shows the "Admin portal" link; the portal itself still needs password + email code.
+    return { user: { id: req.user.sub, email: req.user.email }, profile: rows[0], is_super_admin: isSuperAdminEmail(req.user.email) };
   });
 
   // Account deletion step 1: email a 6-digit code to the logged-in user.
