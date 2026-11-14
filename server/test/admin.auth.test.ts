@@ -20,7 +20,9 @@ describe('admin login', () => {
     const ok = await app.inject({ method: 'POST', url: '/admin/verify', payload: { email: admin.email, code: lastCode(admin.email) } });
     expect(ok.statusCode).toBe(200);
     const { accessToken } = ok.json();
-    expect(app.jwt.decode<{ adm?: boolean }>(accessToken)?.adm).toBe(true);
+    const claims = app.jwt.decode<{ adm?: boolean; iat: number; exp: number }>(accessToken)!;
+    expect(claims.adm).toBe(true);
+    expect(claims.exp - claims.iat).toBe(24 * 60 * 60); // one email code per day, not every 15 minutes
 
     await flushAuditLogs();
     const { rows } = await db.query(`select * from audit_logs where route = '/admin/verify' and status = 200 and actor_email = 'admin@test.local' order by created_at desc limit 1`);

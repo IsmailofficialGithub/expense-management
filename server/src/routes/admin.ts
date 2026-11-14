@@ -257,6 +257,7 @@ const expenseFields = z.object({
   payment_method_id: uuid.nullish(), payment_method_type: opt(50), hotel_id: uuid.nullish(),
 });
 
+const ADMIN_SESSION_TTL = '1d';
 const strict = { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } };
 
 // Paths start with /admin; register without a prefix. Other admin routes use { preHandler: requireSuperAdmin }.
@@ -275,7 +276,8 @@ export async function adminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Step 2: correct code issues a token with the adm claim.
+  // Step 2: correct code issues a token with the adm claim, valid for a day so the emailed code is needed
+  // once per day, not every 15 minutes. Removing an email from SUPER_ADMIN_EMAILS still locks it out at once.
   app.post('/admin/verify', strict, async (req, reply) => {
     const body = z.object({ email, code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
     const key = `adminOtp:${body.email}`;
@@ -286,7 +288,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!isSuperAdminEmail(body.email)) return reply.code(403).send({ error: 'Forbidden' });
     const { rows: [user] } = await db.query('select id, email from users where email = $1', [body.email]);
     if (!user) return reply.code(401).send({ error: 'Invalid login credentials' });
-    return issueTokens(reply, user, { adm: true });
+    return issueTokens(reply, user, { adm: true }, ADMIN_SESSION_TTL);
   });
 
   const sa = { preHandler: requireSuperAdmin };

@@ -21,8 +21,9 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply) {
 }
 
 // claims: extra access-token claims (adm for super admins). Not stored with the refresh token, so a refresh drops them.
-export async function issueTokens(reply: FastifyReply, user: { id: string; email: string }, claims: { adm?: boolean } = {}) {
-  const accessToken = await reply.jwtSign({ ...claims, sub: user.id, email: user.email }, { expiresIn: '15m' });
+// accessTtl: access-token lifetime (default 15m; the admin panel uses a longer one since it can't refresh).
+export async function issueTokens(reply: FastifyReply, user: { id: string; email: string }, claims: { adm?: boolean } = {}, accessTtl = '15m') {
+  const accessToken = await reply.jwtSign({ ...claims, sub: user.id, email: user.email }, { expiresIn: accessTtl });
   const refreshToken = randomBytes(32).toString('hex');
   await redis.set(`refresh:${refreshToken}`, JSON.stringify(user), 'EX', REFRESH_TTL);
   // Index per user so a password change can revoke every session.
